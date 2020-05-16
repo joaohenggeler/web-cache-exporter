@@ -1,5 +1,5 @@
 #include "web_cache_exporter.h"
-#include "file_io.h"
+#include "memory_and_file_io.h"
 #include "internet_explorer.h"
 
 /*
@@ -19,7 +19,7 @@
 */
 
 static const size_t SIGNATURE_SIZE = 28;
-static const size_t CACHE_DIRECTORY_NAME_CHARS = 8;
+static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
 static const size_t MAX_NUM_CACHE_DIRECTORIES = 32;
 static const size_t HEADER_DATA_LENGTH = 32;
 static const size_t BLOCK_SIZE = 128;
@@ -65,7 +65,7 @@ struct Internet_Explorer_Index_Header
 	struct
 	{
 		u32 num_files;
-		s8 name[CACHE_DIRECTORY_NAME_CHARS]; // Without null terminator.
+		s8 name[NUM_CACHE_DIRECTORY_NAME_CHARS]; // Without null terminator.
 	} cache_directories[MAX_NUM_CACHE_DIRECTORIES];
 
 	u32 header_data[HEADER_DATA_LENGTH];
@@ -78,13 +78,7 @@ struct Internet_Explorer_Index_Block
 	u8 data[BLOCK_SIZE];
 };
 
-struct Internet_Explorer_Index_File_Map_Entry
-{
-	u32 signature;
-	u32 num_allocated_blocks;
-};
-
-struct Internet_Explorer_Index_Url_Entry : Internet_Explorer_Index_File_Map_Entry
+struct Internet_Explorer_Index_Url_Entry
 {
 	FILETIME last_modified_time;
 	FILETIME last_access_time;
@@ -125,19 +119,47 @@ struct Internet_Explorer_Index_Url_Entry : Internet_Explorer_Index_File_Map_Entr
 	u32 _reserved_5;
 };
 
+struct Internet_Explorer_Index_File_Map_Entry
+{
+	u32 signature;
+	u32 num_allocated_blocks;
+
+	union
+	{
+		Internet_Explorer_Index_Url_Entry url_entry;
+	};
+};
+
 #pragma pack(pop)
 
-static bool format_date_time(Dos_Date_Time* date_time, char* formatted_string)
+// ----------------------------------------------------------------------------------------------------
+
+const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
+
+static bool format_filetime_date_time(FILETIME date_time, char* formatted_string)
 {
-	if(date_time->date == 0 && date_time->time == 0)
+	if(date_time.dwLowDateTime == 0 && date_time.dwHighDateTime == 0)
+	{
+		*formatted_string = '\0';
+		return true;
+	}
+
+	SYSTEMTIME dt;
+	if(!FileTimeToSystemTime(&date_time, &dt)) return false;
+	return SUCCEEDED(StringCchPrintfA(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, "%4d-%02d-%02d %02d:%02d:%02d", dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+}
+
+static bool format_dos_date_time(Dos_Date_Time date_time, char* formatted_string)
+{
+	if(date_time.date == 0 && date_time.time == 0)
 	{
 		*formatted_string = '\0';
 		return true;
 	}
 
 	FILETIME filetime;
-	DosDateTimeToFileTime(date_time->date, date_time->time, &filetime);
-	return format_date_time(&filetime, formatted_string);
+	DosDateTimeToFileTime(date_time.date, date_time.time, &filetime);
+	return format_filetime_date_time(filetime, formatted_string);
 }
 
 // log_print("Internet Explorer: Error %d while querying the registry for the browser's version.\n", GetLastError());
@@ -147,17 +169,17 @@ bool find_internet_explorer_version(char* ie_version)
 		|| query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ie_version);
 }
 
-void read_internet_explorer_cache(Arena* arena, char* cache_path)
+void export_internet_explorer_cache(Arena* arena, char* index_path)
 {
+	char* base_export_path = "ExportedCache\\InternetExplorer";
+
 	// @TODO: Handle "Content.IE5" and other known locations by default to make it so we can just pass the normal Temporary Internet Files path.
-	void* index_file = memory_map_entire_file(cache_path);
+	void* index_file = memory_map_entire_file(index_path);
 
 	if(index_file != NULL)
 	{
 		_ASSERT(sizeof(Internet_Explorer_Index_Header) == 0x0250);
 		_ASSERT(sizeof(Internet_Explorer_Index_Block) == BLOCK_SIZE);
-		_ASSERT(sizeof(Internet_Explorer_Index_File_Map_Entry) == sizeof(u64));
-		_ASSERT(sizeof(Internet_Explorer_Index_Url_Entry) == 0x68);
 		_ASSERT(sizeof(FILETIME) == sizeof(u64));
 		_ASSERT(sizeof(Dos_Date_Time) == sizeof(u32));
 
@@ -170,12 +192,15 @@ void read_internet_explorer_cache(Arena* arena, char* cache_path)
 		_ASSERT(header->_reserved_4 == 0);
 		_ASSERT(header->_reserved_5 == 0);
 		
-		u8* allocation_bitmap = (u8*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
-		Internet_Explorer_Index_Block* blocks = (Internet_Explorer_Index_Block*) advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
+		unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
+		void* blocks = advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
 		
-		const char* CSV_HEADER = "Filename,URL,File Extension,File Size,Creation Time,Last Modified Time,Last Access Time,Expiry Time,Server Response,Content-Type,Content-Length,Content-Encoding,Hits,Location On Cache,Missing File,Leak Entry\n";
-		const char* CSV_FORMAT = "%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%d,%s,%d,TODO,TODO,TODO\n";
-		log_print(CSV_HEADER);
+		// TODO: hh, h, I32, I64
+		//const char* CSV_FORMAT = "%s,%s,%s,%I32u,%s,%s,%s,%s,%s,%s,%s,%s,%I32u,%s,%s,TODO\n";
+		const char* CSV_HEADER = "Filename,URL,File Extension,File Size,Creation Time,Last Modified Time,Last Access Time,Expiry Time,Server Response,Content-Type,Content-Length,Content-Encoding,Hits,Location On Cache,Missing File,Leak Entry\r\n";
+		const size_t CSV_NUM_COLUMNS = 15;
+		HANDLE csv_file = create_csv_file("ExportedCache\\InternetExplorer.csv");
+		csv_print_header(csv_file, CSV_HEADER);
 
 		for(size_t i = 0; i < header->num_blocks; ++i)
 		{
@@ -186,25 +211,29 @@ void read_internet_explorer_cache(Arena* arena, char* cache_path)
 
 			if(is_block_allocated)
 			{
-				Internet_Explorer_Index_File_Map_Entry* entry = (Internet_Explorer_Index_File_Map_Entry*) &blocks[i];
+				void* current_block = advance_bytes(blocks, i * BLOCK_SIZE);
+				Internet_Explorer_Index_File_Map_Entry* entry = (Internet_Explorer_Index_File_Map_Entry*) current_block;
 
 				switch(entry->signature)
 				{
 					case(ENTRY_URL):
 					{
-						Internet_Explorer_Index_Url_Entry* url_entry = (Internet_Explorer_Index_Url_Entry*) entry;
+						Internet_Explorer_Index_Url_Entry* url_entry = &(entry->url_entry);
+						//bool is_leak = (entry->signature == ENTRY_LEAK);
 
-						const char* filename_in_mmf = (char*) advance_bytes(url_entry, url_entry->entry_offset_to_filename);
-						char* filename = push_and_copy_to_arena(arena, filename_in_mmf, string_size(filename_in_mmf), char);
+						const char* filename_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_filename);
+						char* filename = push_and_copy_to_arena(arena, string_size(filename_in_mmf), char, filename_in_mmf, string_size(filename_in_mmf));
 						PathUndecorateA(filename);
-						char* file_extension = skip_to_file_extension(filename);
 
-						const char* url_in_mmf = (char*) advance_bytes(url_entry, url_entry->entry_offset_to_url);
+						char* file_extension_start = skip_to_file_extension(filename);
+						char* file_extension = push_and_copy_to_arena(arena, string_size(file_extension_start), char, file_extension_start, string_size(file_extension_start));
+
+						const char* url_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_url);
 						char* url = push_arena(arena, string_size(url_in_mmf), char);
 						if(!decode_url(url_in_mmf, url)) url = NULL;
 
-						const char* headers_in_mmf = (char*) advance_bytes(url_entry, url_entry->entry_offset_to_headers);
-						char* headers = push_and_copy_to_arena(arena, headers_in_mmf, url_entry->headers_size, char);
+						const char* headers_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_headers);
+						char* headers = push_and_copy_to_arena(arena, url_entry->headers_size, char, headers_in_mmf, url_entry->headers_size);
 						
 						const char* line_delimiters = "\r\n";
 						char* next_headers_token = NULL;
@@ -219,14 +248,11 @@ void read_internet_explorer_cache(Arena* arena, char* cache_path)
 						// Parse these specific HTTP headers.
 						while(line != NULL)
 						{
-							//debug_log_print("Field: '%s'\n", line);
-
 							// Keep the first line intact since it's the server's response (e.g. "HTTP/1.1 200 OK"),
 							// and not a key-value pair.
 							if(is_first_line)
 							{
 								is_first_line = false;
-								//server_response = (char*) push_and_copy_to_arena(arena, line, string_size(line));
 								server_response = line;
 							}
 							// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
@@ -242,15 +268,15 @@ void read_internet_explorer_cache(Arena* arena, char* cache_path)
 								{
 									if(lstrcmpiA(key, "content-type") == 0)
 									{
-										content_type = value;
+										content_type = push_and_copy_to_arena(arena, string_size(value), char, value, string_size(value));
 									}
 									else if(lstrcmpiA(key, "content-length") == 0)
 									{
-										content_length = value;
+										content_length = push_and_copy_to_arena(arena, string_size(value), char, value, string_size(value));
 									}
 									else if(lstrcmpiA(key, "content-encoding") == 0)
 									{
-										content_encoding = value;
+										content_encoding = push_and_copy_to_arena(arena, string_size(value), char, value, string_size(value));
 									}
 								}
 								else
@@ -272,21 +298,59 @@ void read_internet_explorer_cache(Arena* arena, char* cache_path)
 						content_encoding = (content_encoding != NULL) ? (content_encoding) : ("");
 
 						char creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_date_time(&(url_entry->creation_time), creation_time);
+						format_dos_date_time(url_entry->creation_time, creation_time);
 
 						char last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_date_time(&(url_entry->last_modified_time), last_modified_time);
+						format_filetime_date_time(url_entry->last_modified_time, last_modified_time);
 						
 						char last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_date_time(&(url_entry->last_access_time), last_access_time);
+						format_filetime_date_time(url_entry->last_access_time, last_access_time);
 
 						char expiry_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_date_time(&(url_entry->expiry_time), expiry_time);
+						format_dos_date_time(url_entry->expiry_time, expiry_time);
 
-						log_print(CSV_FORMAT, filename, url, file_extension, url_entry->cached_file_size,
-											  creation_time, last_modified_time, last_access_time, expiry_time,
-											  server_response, content_type, content_length, content_encoding,
-											  url_entry->num_entry_locks);
+						char short_file_path[MAX_PATH_CHARS] = "";
+						//char* short_file_path = push_arena(arena, max_string_chars_for_csv(MAX_PATH_CHARS) * sizeof(char), char);
+						bool file_exists = true;
+						if(url_entry->cache_directory_index < MAX_NUM_CACHE_DIRECTORIES)
+						{
+							// Build the short file path by using the cached file's directory and its filename.
+							// E.g. "ABCDEFGH\image[1].gif".
+							const char* cache_directory_name_in_mmf = header->cache_directories[url_entry->cache_directory_index].name;
+							CopyMemory(short_file_path, cache_directory_name_in_mmf, NUM_CACHE_DIRECTORY_NAME_CHARS);
+							short_file_path[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
+							PathAppendA(short_file_path, filename_in_mmf);
+
+							// Build the absolute file path to the cache file. The cache directories are next to the index file.
+							char full_file_path[MAX_PATH_CHARS] = "";
+							CopyMemory(full_file_path, index_path, string_size(index_path));
+							PathAppendA(full_file_path, "..");
+							PathAppendA(full_file_path, short_file_path);
+							GetFullPathNameA(full_file_path, MAX_PATH_CHARS, full_file_path, NULL);
+
+							file_exists = PathFileExistsA(full_file_path) == TRUE;
+
+							// Build the absolute file path to the destination file. The directory structure will be the same as
+							// the path on the original website.
+							if(file_exists)
+							{
+								copy_file_using_url_directory_structure(arena, full_file_path, base_export_path, url, filename);
+							}
+						}
+
+						// _ui64toa						
+						char cached_file_size[MAX_UINT32_CHARS];
+						_ultoa_s(url_entry->cached_file_size, cached_file_size, MAX_UINT32_CHARS, INT_FORMAT_RADIX);
+						char num_hits[MAX_UINT32_CHARS];
+						_ultoa_s(url_entry->num_entry_locks, num_hits, MAX_UINT32_CHARS, INT_FORMAT_RADIX);
+						char* is_file_missing = (file_exists) ? ("No") : ("Yes");
+
+						char* csv_row[CSV_NUM_COLUMNS] = {filename, url, file_extension, cached_file_size,
+														  creation_time, last_modified_time, last_access_time, expiry_time,
+														  server_response, content_type, content_length, content_encoding,
+														  num_hits, short_file_path, is_file_missing};
+
+						csv_print_row(arena, csv_file, csv_row, CSV_NUM_COLUMNS);
 
 						clear_arena(arena);
 					} // Intentional fallthrough.
@@ -300,26 +364,27 @@ void read_internet_explorer_cache(Arena* arena, char* cache_path)
 						i += entry->num_allocated_blocks - 1;
 					} break;
 
-					#ifdef DEBUG
 					default:
 					{
 						char signature_string[5];
 						CopyMemory(signature_string, &(entry->signature), 4);
 						signature_string[4] = '\0';
-						debug_log_print("Found unknown entry signature at (%d, %d): 0x%08X (%s) with %d blocks allocated.\n", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
+						debug_log_print("Found unknown entry signature at (%u, %u): 0x%08X (%s) with %u blocks allocated.\n", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
 					} break;
-					#endif
 
 				}
 
 			}
 		}
 
+		if(csv_file != INVALID_HANDLE_VALUE) CloseHandle(csv_file);
+		csv_file = NULL;
+
 		UnmapViewOfFile(index_file);
 		index_file = NULL;
 	}
 	else
 	{
-		log_print("Internet Explorer: Error while trying to create the file mapping for '%s'.\n", cache_path);
+		log_print("Internet Explorer: Error while trying to create the file mapping for '%s'.\n", index_path);
 	}	
 }

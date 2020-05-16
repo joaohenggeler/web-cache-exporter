@@ -5,6 +5,8 @@ REM xxx
 SETLOCAL
 PUSHD "%~dp0"
 
+	RMDIR /S /Q "ExportedCache"
+	
 	SET "CLEAN_BUILD=Yes"
 	REM Debug or Release
 	SET "BUILD_MODE=Debug"
@@ -30,7 +32,7 @@ PUSHD "%~dp0"
 	SET "RELEASE_ONLY_LINKER_OPTIONS="
 	SET "DEBUG_ONLY_LINKER_OPTIONS="
 
-	SET "LIBRARIES=Kernel32.lib User32.lib Advapi32.lib Shlwapi.lib"
+	SET "LIBRARIES=Kernel32.lib User32.lib Advapi32.lib Shlwapi.lib Shell32.lib"
 	SET "RELEASE_ONLY_LIBRARIES=LIBCMT.lib"
 	SET "DEBUG_ONLY_LIBRARIES=LIBCMTD.lib"
 
@@ -104,11 +106,18 @@ PUSHD "%~dp0"
 		EXIT /B 1
 	)
 
+	SET "COMMAND_LINE_COMPILER_OPTIONS=%*"
+	IF "%COMMAND_LINE_COMPILER_OPTIONS%" NEQ "" (
+		ECHO [%~nx0] Passing extra compiler options from the command line: "%COMMAND_LINE_COMPILER_OPTIONS%"...
+		ECHO.
+		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMMAND_LINE_COMPILER_OPTIONS%"
+	)
+
 	REM ---------------------------------------------------------------------------
 	REM ------------------------- Windows NT 32-bit Build -------------------------
 	REM ---------------------------------------------------------------------------
 
-	ECHO [%~nx0] Window NT 32-bit %BUILD_MODE% Build
+	ECHO [%~nx0] Windows NT 32-bit %BUILD_MODE% Build
 	ECHO.
 
 	IF NOT EXIST "%BUILD_DIR_32%" (
@@ -138,7 +147,7 @@ PUSHD "%~dp0"
 	REM ------------------------- Windows NT 64-bit Build -------------------------
 	REM ---------------------------------------------------------------------------
 
-	ECHO [%~nx0] Window NT 64-bit %BUILD_MODE% Build
+	ECHO [%~nx0] Windows NT 64-bit %BUILD_MODE% Build
 	ECHO.
 
 	IF NOT EXIST "%BUILD_DIR_64%" (
@@ -168,7 +177,7 @@ PUSHD "%~dp0"
 	REM ------------------------- Windows 9x 32-bit Build -------------------------
 	REM ---------------------------------------------------------------------------
 
-	ECHO [%~nx0] Window 9X 32-bit %BUILD_MODE% Build
+	ECHO [%~nx0] Windows 9X 32-bit %BUILD_MODE% Build
 	ECHO.
 
 	IF NOT EXIST "%BUILD_DIR_9X_32%" (

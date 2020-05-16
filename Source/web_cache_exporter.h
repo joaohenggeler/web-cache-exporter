@@ -47,6 +47,7 @@
 #pragma warning(disable : 4995)
 	#include <shlwapi.h>
 #pragma warning(pop)
+#include <shlobj.h>
 
 #include <crtdbg.h>
 

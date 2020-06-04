@@ -32,17 +32,15 @@ enum Internet_Explorer_Index_Entry_Signature
 	ENTRY_LEAK = 0x4B41454C, // "LEAK"
 	ENTRY_HASH = 0x48534148, // "HASH"
 
+	// @Investigate
+	ENTRY_DELETED = 0x204C4544, // "DEL "
+	ENTRY_UPDATED = 0x20445055, // "UPD "
+
 	ENTRY_NEWLY_ALLOCATED = 0xDEADBEEF,
 	ENTRY_DEALLOCATED = 0x0BADF00D
 };
 
 #pragma pack(push, 1)
-
-struct Dos_Date_Time
-{
-	u16 date;
-	u16 time;
-};
 
 struct Internet_Explorer_Index_Header
 {
@@ -73,9 +71,10 @@ struct Internet_Explorer_Index_Header
 	u32 _reserved_5;
 };
 
-struct Internet_Explorer_Index_Block
+struct Internet_Explorer_Index_File_Map_Entry
 {
-	u8 data[BLOCK_SIZE];
+	u32 signature;
+	u32 num_allocated_blocks;
 };
 
 struct Internet_Explorer_Index_Url_Entry
@@ -119,55 +118,22 @@ struct Internet_Explorer_Index_Url_Entry
 	u32 _reserved_5;
 };
 
-struct Internet_Explorer_Index_File_Map_Entry
-{
-	u32 signature;
-	u32 num_allocated_blocks;
-
-	union
-	{
-		Internet_Explorer_Index_Url_Entry url_entry;
-	};
-};
-
 #pragma pack(pop)
+
+_STATIC_ASSERT(sizeof(Internet_Explorer_Index_Header) == 0x0250);
+_STATIC_ASSERT(sizeof(Internet_Explorer_Index_File_Map_Entry) == 0x08);
+_STATIC_ASSERT(sizeof(FILETIME) == sizeof(u64));
+_STATIC_ASSERT(sizeof(Dos_Date_Time) == sizeof(u32));
+_STATIC_ASSERT(sizeof(Internet_Explorer_Index_Url_Entry) == 0x60);
 
 // ----------------------------------------------------------------------------------------------------
 
-const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
-
-static bool format_filetime_date_time(FILETIME date_time, char* formatted_string)
-{
-	if(date_time.dwLowDateTime == 0 && date_time.dwHighDateTime == 0)
-	{
-		*formatted_string = '\0';
-		return true;
-	}
-
-	SYSTEMTIME dt;
-	if(!FileTimeToSystemTime(&date_time, &dt)) return false;
-	return SUCCEEDED(StringCchPrintfA(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, "%4d-%02d-%02d %02d:%02d:%02d", dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
-}
-
-static bool format_dos_date_time(Dos_Date_Time date_time, char* formatted_string)
-{
-	if(date_time.date == 0 && date_time.time == 0)
-	{
-		*formatted_string = '\0';
-		return true;
-	}
-
-	FILETIME filetime;
-	DosDateTimeToFileTime(date_time.date, date_time.time, &filetime);
-	return format_filetime_date_time(filetime, formatted_string);
-}
-
-// log_print("Internet Explorer: Error %d while querying the registry for the browser's version.\n", GetLastError());
-bool find_internet_explorer_version(char* ie_version)
+// log_print(LOG_INFO, "Internet Explorer: Error %d while querying the registry for the browser's version.\n", GetLastError());
+/*bool find_internet_explorer_version(char* ie_version)
 {
 	return query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "svcVersion", ie_version)
 		|| query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ie_version);
-}
+}*/
 
 void export_internet_explorer_cache(Arena* arena, char* index_path)
 {
@@ -178,11 +144,6 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 
 	if(index_file != NULL)
 	{
-		_ASSERT(sizeof(Internet_Explorer_Index_Header) == 0x0250);
-		_ASSERT(sizeof(Internet_Explorer_Index_Block) == BLOCK_SIZE);
-		_ASSERT(sizeof(FILETIME) == sizeof(u64));
-		_ASSERT(sizeof(Dos_Date_Time) == sizeof(u32));
-
 		Internet_Explorer_Index_Header* header = (Internet_Explorer_Index_Header*) index_file;
 
 		_ASSERT(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) == 0);
@@ -195,14 +156,12 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 		unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
 		void* blocks = advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
 		
-		// TODO: hh, h, I32, I64
-		//const char* CSV_FORMAT = "%s,%s,%s,%I32u,%s,%s,%s,%s,%s,%s,%s,%s,%I32u,%s,%s,TODO\n";
-		const char* CSV_HEADER = "Filename,URL,File Extension,File Size,Creation Time,Last Modified Time,Last Access Time,Expiry Time,Server Response,Content-Type,Content-Length,Content-Encoding,Hits,Location On Cache,Missing File,Leak Entry\r\n";
-		const size_t CSV_NUM_COLUMNS = 15;
+		const char* CSV_HEADER = "Filename,URL,File Extension,File Size,Last Modified Time,Last Access Time,Creation Time,Expiry Time,Server Response,Content-Type,Content-Length,Content-Encoding,Hits,Location On Cache,Missing File,Leak Entry\r\n";
+		const size_t CSV_NUM_COLUMNS = 16;
 		HANDLE csv_file = create_csv_file("ExportedCache\\InternetExplorer.csv");
 		csv_print_header(csv_file, CSV_HEADER);
 
-		for(size_t i = 0; i < header->num_blocks; ++i)
+		for(u32 i = 0; i < header->num_blocks; ++i)
 		{
 			size_t byte_index = i / CHAR_BIT;
 			size_t block_index_in_byte = i % CHAR_BIT;
@@ -217,9 +176,10 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 				switch(entry->signature)
 				{
 					case(ENTRY_URL):
+					case(ENTRY_LEAK):
 					{
-						Internet_Explorer_Index_Url_Entry* url_entry = &(entry->url_entry);
-						//bool is_leak = (entry->signature == ENTRY_LEAK);
+						Internet_Explorer_Index_Url_Entry* url_entry = (Internet_Explorer_Index_Url_Entry*) advance_bytes(entry, sizeof(Internet_Explorer_Index_File_Map_Entry));
+						bool is_leak = (entry->signature == ENTRY_LEAK);
 
 						const char* filename_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_filename);
 						char* filename = push_and_copy_to_arena(arena, string_size(filename_in_mmf), char, filename_in_mmf, string_size(filename_in_mmf));
@@ -344,11 +304,12 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 						char num_hits[MAX_UINT32_CHARS];
 						_ultoa_s(url_entry->num_entry_locks, num_hits, MAX_UINT32_CHARS, INT_FORMAT_RADIX);
 						char* is_file_missing = (file_exists) ? ("No") : ("Yes");
+						char* is_leak_entry = (is_leak) ? ("Yes") : ("No");
 
 						char* csv_row[CSV_NUM_COLUMNS] = {filename, url, file_extension, cached_file_size,
-														  creation_time, last_modified_time, last_access_time, expiry_time,
+														  last_modified_time, last_access_time, creation_time, expiry_time,
 														  server_response, content_type, content_length, content_encoding,
-														  num_hits, short_file_path, is_file_missing};
+														  num_hits, short_file_path, is_file_missing, is_leak_entry};
 
 						csv_print_row(arena, csv_file, csv_row, CSV_NUM_COLUMNS);
 
@@ -356,8 +317,9 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 					} // Intentional fallthrough.
 
 					case(ENTRY_REDIRECT):
-					case(ENTRY_LEAK):
 					case(ENTRY_HASH):
+					case(ENTRY_DELETED):
+					case(ENTRY_UPDATED):
 					case(ENTRY_NEWLY_ALLOCATED):
 					{
 						// Skip to the last allocated block so we move to a new entry on the next iteration.
@@ -369,7 +331,7 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 						char signature_string[5];
 						CopyMemory(signature_string, &(entry->signature), 4);
 						signature_string[4] = '\0';
-						debug_log_print("Found unknown entry signature at (%u, %u): 0x%08X (%s) with %u blocks allocated.\n", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
+						log_print(LOG_INFO, "Internet Explorer: Found unknown entry signature at (%u, %u): 0x%08X (%s) with %u blocks allocated.\n", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
 					} break;
 
 				}
@@ -385,6 +347,6 @@ void export_internet_explorer_cache(Arena* arena, char* index_path)
 	}
 	else
 	{
-		log_print("Internet Explorer: Error while trying to create the file mapping for '%s'.\n", index_path);
+		log_print(LOG_INFO, "Internet Explorer: Error while trying to create the file mapping for '%s'.\n", index_path);
 	}	
 }

@@ -1,6 +1,14 @@
 #ifndef WEB_CACHE_EXPORTER_H
 #define WEB_CACHE_EXPORTER_H
 
+#ifndef BUILD_VERSION
+	#ifdef DEBUG
+		#define BUILD_VERSION "UNKNOWN-debug"
+	#else
+		#define BUILD_VERSION "UNKNOWN-release"
+	#endif
+#endif
+
 #ifdef BUILD_9X
 	// Target Windows 98 and ME (9x, ANSI).
 	// Minimum Windows Version: Windows 98 (release version 4.10 -> 0x0410).
@@ -42,9 +50,10 @@
 #include <tchar.h>
 #include <strsafe.h>
 #include <stdarg.h>
+#include <direct.h>
 
 #pragma warning(push)
-#pragma warning(disable : 4995)
+#pragma warning(disable : 4995) // For the deprecation warnings of StrNCatA, StrNCatW, StrCatW, and StrCpyW.
 	#include <shlwapi.h>
 #pragma warning(pop)
 #include <shlobj.h>
@@ -63,5 +72,29 @@ typedef unsigned __int64 u64;
 
 typedef float float32;
 typedef double float64;
+
+enum Exporter_Cache_Type
+{
+	CACHE_UNKNOWN = 0,
+	CACHE_INTERNET_EXPLORER = 1,
+	CACHE_SHOCKWAVE_PLUGIN = 2,
+	CACHE_JAVA_PLUGIN = 3,
+	NUM_CACHE_TYPES = 4
+};
+const char* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] = {"Unknown", "Internet Explorer", "Shockwave Plugin", "Java Plugin"};
+
+#include "memory_and_file_io.h"
+struct Exporter
+{
+	bool should_copy_files;
+	bool should_create_csv;
+	bool should_add_csv_header;
+
+	Exporter_Cache_Type cache_type;
+	char cache_path[MAX_PATH_CHARS];
+	char output_path[MAX_PATH_CHARS];
+
+	Arena arena;
+};
 
 #endif

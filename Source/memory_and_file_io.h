@@ -16,31 +16,62 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 void clear_arena(Arena* arena);
 bool destroy_arena(Arena* arena);
 
+#pragma pack(push, 1)
+struct Dos_Date_Time
+{
+	u16 date;
+	u16 time;
+};
+#pragma pack(pop)
+
+const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
+bool format_filetime_date_time(FILETIME date_time, char* formatted_string);
+bool format_dos_date_time(Dos_Date_Time date_time, char* formatted_string);
+
 char* skip_leading_whitespace(char* str);
 char* skip_to_file_extension(char* str);
 
 bool decode_url(const char* url, char* decoded_url);
+void create_directories(const char* path_to_create);
 bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file_path, const char* base_export_path, const char* url, const char* filename);
 
 const size_t MAX_UINT32_CHARS = 33;
 const size_t MAX_UINT64_CHARS = 65;
 const size_t INT_FORMAT_RADIX = 10;
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
-const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(char); // @TODO: wide version
+const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(char); // @TODO: wide version?
 
+u64 combine_high_and_low_u32s(u32 high, u32 low);
+bool get_file_size(HANDLE file_handle, u64* file_size_result);
 void* memory_map_entire_file(char* path);
-bool query_registry(HKEY base_key, const char* key_name, const char* value_name, char* value_data);
+bool read_first_file_bytes(char* path, void* file_buffer, DWORD num_bytes_to_read);
+//bool query_registry(HKEY base_key, const char* key_name, const char* value_name, char* value_data);
+
+enum Log_Type
+{
+	LOG_NONE = 0,
+	LOG_INFO = 1,
+	LOG_WARNING = 2,
+	LOG_ERROR = 3,
+	LOG_DEBUG = 4,
+	NUM_LOG_TYPES = 5
+};
+const char* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {"", "[INFO] ", "[WARNING] ", "[ERROR] ", "[DEBUG] "};
 
 bool create_log_file(const char* filename);
 void close_log_file(void);
-void log_print(const char* string_format, ...);
+void log_print(Log_Type log_type, const char* string_format, ...);
+void log_print(Log_Type log_type, const wchar_t* string_format, ...);
 #ifdef DEBUG
-	#define debug_log_print(string_format, ...) log_print(string_format, __VA_ARGS__)
+	#define debug_log_print(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
 #else
 	#define debug_log_print(...)
 #endif
 
+#define console_print(string_format, ...) printf(string_format, __VA_ARGS__)
+
 HANDLE create_csv_file(const char* file_path);
+void close_csv_file(HANDLE csv_file);
 void csv_print_header(HANDLE csv_file, const char* header);
 void csv_print_row(Arena* arena, HANDLE csv_file, char* rows[], size_t num_columns);
 
@@ -59,9 +90,24 @@ inline ptrdiff_t pointer_difference(void* a, void* b)
 	return ((char*) a) - ((char*) b);
 }
 
+inline size_t kilobytes_to_bytes(size_t kilobytes)
+{
+	return kilobytes * 1024;
+}
+
+inline size_t megabytes_to_bytes(size_t megabytes)
+{
+	return megabytes * 1024 * 1024;
+}
+
 inline size_t string_size(const char* str)
 {
 	return (strlen(str) + 1) * sizeof(char);
+}
+
+inline bool is_string_empty(const char* str)
+{
+	return str[0] == '\0';
 }
 
 #endif

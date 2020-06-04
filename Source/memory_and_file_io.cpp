@@ -71,6 +71,32 @@ bool destroy_arena(Arena* arena)
 	return success == TRUE;
 }
 
+bool format_filetime_date_time(FILETIME date_time, char* formatted_string)
+{
+	if(date_time.dwLowDateTime == 0 && date_time.dwHighDateTime == 0)
+	{
+		*formatted_string = '\0';
+		return true;
+	}
+
+	SYSTEMTIME dt;
+	bool success = FileTimeToSystemTime(&date_time, &dt) != 0;
+	return success && SUCCEEDED(StringCchPrintfA(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, "%4d-%02d-%02d %02d:%02d:%02d", dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+}
+
+bool format_dos_date_time(Dos_Date_Time date_time, char* formatted_string)
+{
+	if(date_time.date == 0 && date_time.time == 0)
+	{
+		*formatted_string = '\0';
+		return true;
+	}
+
+	FILETIME filetime;
+	bool success = DosDateTimeToFileTime(date_time.date, date_time.time, &filetime) != 0;
+	return success && format_filetime_date_time(filetime, formatted_string);
+}
+
 char* skip_leading_whitespace(char* str)
 {
 	if(str != NULL)
@@ -220,7 +246,7 @@ static void url_to_path(char* url)
 		++url;
 	}
 
-	if(*last_path_separator != NULL)
+	if(last_path_separator != NULL)
 	{
 		*last_path_separator = '\0';
 	}
@@ -245,16 +271,48 @@ bool create_empty_file(const char* file_path)
 	return success;
 }
 
-bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file_path, const char* base_export_path, const char* url, const char* filename)
+void create_directories(const char* path_to_create)
 {
-	char* url_path = push_and_copy_to_arena(arena, string_size(url), char, url, string_size(url));
-	url_to_path(url_path);
+	const size_t MAX_CREATE_DIRECTORY_PATH_CHARS = 248;
+	char path[MAX_CREATE_DIRECTORY_PATH_CHARS];
+	// @TODO: replace with GetFullPathNameA(path_to_create, MAX_CREATE_DIRECTORY_PATH_CHARS, path, NULL);
+	// _STATIC_ASSERT(MAX_CREATE_DIRECTORY_PATH_CHARS <= MAX_PATH_CHARS);
+	StringCchCopyA(path, MAX_CREATE_DIRECTORY_PATH_CHARS, path_to_create);
+
+	for(size_t i = 0; i < MAX_CREATE_DIRECTORY_PATH_CHARS; ++i)
+	{
+		if(path[i] == '\0')
+		{
+			CreateDirectoryA(path, NULL);
+			break;
+		}
+		else if(path[i] == '\\')
+		{
+			path[i] = '\0';
+			CreateDirectoryA(path, NULL);
+			path[i] = '\\';
+		}
+	}
+}
+
+bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file_path, const char* base_destination_path, const char* url, const char* filename)
+{
+	char* url_path;
+	if(url != NULL)
+	{
+		url_path = push_and_copy_to_arena(arena, string_size(url), char, url, string_size(url));
+		url_to_path(url_path);
+	}
+	else
+	{
+		url_path = NULL;
+	}
 
 	char full_copy_target_path[MAX_PATH_CHARS];
-	GetFullPathNameA(base_export_path, MAX_PATH_CHARS, full_copy_target_path, NULL);
-	PathAppendA(full_copy_target_path, url_path);
+	GetFullPathNameA(base_destination_path, MAX_PATH_CHARS, full_copy_target_path, NULL);
+	if(url_path != NULL) PathAppendA(full_copy_target_path, url_path);
 	
-	SHCreateDirectoryExA(NULL, full_copy_target_path, NULL);
+	create_directories(full_copy_target_path);
 	PathAppendA(full_copy_target_path, filename);
 
 	bool copy_success;
@@ -284,6 +342,27 @@ bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file
 	return copy_success;
 }
 
+u64 combine_high_and_low_u32s(u32 high, u32 low)
+{
+	return (high << sizeof(u32)) | low;
+}
+
+bool get_file_size(HANDLE file_handle, u64* file_size_result)
+{
+	#ifdef BUILD_9X
+		DWORD file_size_high;
+		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
+		bool success = (file_size_low == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR);
+		if(success) *file_size_result = combine_high_and_low_u32s(file_size_high, file_size_low);
+		return success;
+	#else
+		LARGE_INTEGER file_size;
+		bool success = GetFileSizeEx(file_handle, &file_size) == TRUE;
+		if(success) *file_size_result = file_size.QuadPart;
+		return success;
+	#endif
+}
+
 void* memory_map_entire_file(char* path)
 {
 	void* mapped_memory = NULL;
@@ -298,12 +377,12 @@ void* memory_map_entire_file(char* path)
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
-		// TODO: GetFileSize vs GetFileSizeEx for Windows 98 and ME
+		// @TODO: GetFileSize vs GetFileSizeEx for Windows 98 and ME
 		// Reject empty files.
-		LARGE_INTEGER file_size;
-		if(GetFileSizeEx(file_handle, &file_size))
+		u64 file_size;
+		if(get_file_size(file_handle, &file_size))
 		{
-			if(((u32) file_size.QuadPart) > 0)
+			if(file_size > 0)
 			{
 				HANDLE mapping_handle = CreateFileMappingA(file_handle, NULL, PAGE_READONLY, 0, 0, NULL);
 
@@ -318,30 +397,57 @@ void* memory_map_entire_file(char* path)
 				}
 				else
 				{
-					log_print("Error %d while trying to create the file mapping for '%s'.\n", GetLastError(), path);
+					log_print(LOG_ERROR, "Error %d while trying to create the file mapping for '%s'.", GetLastError(), path);
 				}
 
 				CloseHandle(mapping_handle); // @Note: According to MSDN, CloseHandle() and UnmapViewOfFile() can be called in any order.
 			}
 			else
 			{
-				log_print("Skipping file mapping for empty file '%s'.\n", path);
+				log_print(LOG_WARNING, "Skipping file mapping for empty file '%s'.", path);
 			}
 
 		}
 		else
 		{
-			log_print("Error %d while trying to get the file size for '%s'.\n", GetLastError(), path);
+			log_print(LOG_ERROR, "Error %d while trying to get the file size for '%s'.", GetLastError(), path);
 		}
 
 		CloseHandle(file_handle); // @Note: "Files for which the last view has not yet been unmapped are held open with no sharing restrictions."
 	}
 	else
 	{
-		log_print("Error %d while trying to get the file handle for '%s'.\n", GetLastError(), path);
+		log_print(LOG_ERROR, "Error %d while trying to get the file handle for '%s'.", GetLastError(), path);
 	}
 
 	return mapped_memory;
+}
+
+bool read_first_file_bytes(char* path, void* file_buffer, DWORD num_bytes_to_read)
+{
+	bool success = true;
+	HANDLE file_handle = CreateFileA(path,
+								     GENERIC_READ,
+								     FILE_SHARE_READ,
+								     NULL,
+								     OPEN_EXISTING,
+								     0,
+								     NULL);
+
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		DWORD num_bytes_read;
+		success = (ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, NULL) == TRUE)
+					&& (num_bytes_read == num_bytes_to_read);
+		CloseHandle(file_handle);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Error %d while trying to get the file handle for '%s'.", GetLastError(), path);
+		success = false;
+	}
+
+	return success;
 }
 
 /*
@@ -357,7 +463,7 @@ void copy_byte_range(void* source, void* destination, /*size_t destination_size,
 	//memcpy_s(destination, destination_size, source, num_bytes_to_copy);
 }
 
-bool query_registry(HKEY base_key, const char* key_name, const char* value_name, char* value_data)
+/*bool query_registry(HKEY base_key, const char* key_name, const char* value_name, char* value_data)
 {
 	DWORD value_data_type, value_data_size;
 	LONG error_code = RegGetValueA(base_key,
@@ -372,24 +478,30 @@ bool query_registry(HKEY base_key, const char* key_name, const char* value_name,
 	// We'll do it ourselves for consistent error handling when calling this function.
 	SetLastError(error_code);
 	return error_code == ERROR_SUCCESS;
-}
+}*/
 
 static HANDLE LOG_FILE_HANDLE = NULL;
-bool create_log_file(const char* filename)
+bool create_log_file(const char* file_path)
 {
-	if(filename == NULL)
+	if(file_path == NULL)
 	{
 		_ASSERT(false);
 		return false;
 	}
 
-	LOG_FILE_HANDLE = CreateFileA(filename,
-								FILE_APPEND_DATA,
+	char full_log_path[MAX_PATH_CHARS];
+	GetFullPathNameA(file_path, MAX_PATH_CHARS, full_log_path, NULL);
+	PathAppendA(full_log_path, "..");
+	create_directories(full_log_path);
+
+	LOG_FILE_HANDLE = CreateFileA(file_path,
+								GENERIC_WRITE,
 								FILE_SHARE_READ,
 								NULL,
 								CREATE_ALWAYS,
 								FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
 								NULL);
+	console_print("Error: %d\n", GetLastError());
 
 	return LOG_FILE_HANDLE != INVALID_HANDLE_VALUE;
 }
@@ -407,9 +519,11 @@ void close_log_file(void)
 	}
 }
 
-const size_t MAX_CHARS_PER_LOG_WRITE = 4096;
+const size_t MAX_CHARS_PER_LOG_TYPE = 16;
+const size_t MAX_CHARS_PER_LOG_MESSAGE = 4096;
+const size_t MAX_CHARS_PER_LOG_WRITE = MAX_CHARS_PER_LOG_TYPE + MAX_CHARS_PER_LOG_MESSAGE + 2;
 // @TODO: Would the log_printW idea work with WideCharToMultibyte?
-void log_print(const char* string_format, ...)
+void log_print(Log_Type log_type, const char* string_format, ...)
 {
 	if(LOG_FILE_HANDLE == NULL || LOG_FILE_HANDLE == INVALID_HANDLE_VALUE)
 	{
@@ -419,16 +533,41 @@ void log_print(const char* string_format, ...)
 
 	char log_buffer[MAX_CHARS_PER_LOG_WRITE];
 
-	va_list args;
-	va_start(args, string_format);
-	StringCchVPrintfA(log_buffer, MAX_CHARS_PER_LOG_WRITE, string_format, args);
-	va_end(args);
+	StringCchCopyA(log_buffer, MAX_CHARS_PER_LOG_TYPE, LOG_TYPE_TO_STRING[log_type]);
+	size_t num_log_type_chars;
+	StringCchLengthA(log_buffer, MAX_CHARS_PER_LOG_TYPE, &num_log_type_chars);
+
+	va_list arguments;
+	va_start(arguments, string_format);
+	StringCchVPrintfA(&log_buffer[num_log_type_chars], MAX_CHARS_PER_LOG_MESSAGE, string_format, arguments);
+	va_end(arguments);
+
+	StringCchCatA(log_buffer, MAX_CHARS_PER_LOG_WRITE, "\r\n");
 
 	size_t num_chars_to_write;
 	StringCchLengthA(log_buffer, MAX_CHARS_PER_LOG_WRITE, &num_chars_to_write);
 
 	DWORD num_bytes_written;
 	WriteFile(LOG_FILE_HANDLE, log_buffer, (DWORD) (num_chars_to_write * sizeof(char)), &num_bytes_written, NULL);
+}
+
+void log_print(Log_Type log_type, const wchar_t* string_format, ...)
+{
+	char utf_8_string_format[MAX_CHARS_PER_LOG_WRITE];
+	int utf_8_string_format_size = MAX_CHARS_PER_LOG_WRITE * sizeof(char);
+	//StringCbLengthW(utf_8_string_format, MAX_CHARS_PER_LOG_WRITE * sizeof(char), &utf_8_string_format_size);
+	WideCharToMultiByte(CP_UTF8, 0, string_format, -1, utf_8_string_format, utf_8_string_format_size, NULL, NULL);
+
+	size_t num_chars_to_write;
+	StringCchLengthA(utf_8_string_format, MAX_CHARS_PER_LOG_WRITE, &num_chars_to_write);
+
+	log_type;
+	DWORD num_bytes_written;
+	WriteFile(LOG_FILE_HANDLE, utf_8_string_format, (DWORD) (num_chars_to_write * sizeof(char)), &num_bytes_written, NULL);
+	//va_list arguments;
+	//va_start(arguments, string_format);
+	//log_print(log_type, utf_8_string_format, arguments);
+	//va_end(arguments);
 }
 
 static bool does_csv_string_require_escaping(const char* str, size_t* size_required)
@@ -517,7 +656,7 @@ HANDLE create_csv_file(const char* file_path)
 	char full_csv_path[MAX_PATH_CHARS];
 	GetFullPathNameA(file_path, MAX_PATH_CHARS, full_csv_path, NULL);
 	PathAppendA(full_csv_path, "..");
-	SHCreateDirectoryExA(NULL, full_csv_path, NULL);
+	create_directories(full_csv_path);
 
 	return CreateFileA(file_path,
 					GENERIC_WRITE,
@@ -528,11 +667,22 @@ HANDLE create_csv_file(const char* file_path)
 					NULL);
 }
 
+void close_csv_file(HANDLE csv_file)
+{
+	if(csv_file != NULL && csv_file != INVALID_HANDLE_VALUE)
+	{
+		CloseHandle(csv_file);
+	}
+	else
+	{
+		_ASSERT(false);
+	}
+}
+
 void csv_print_header(HANDLE csv_file, const char* header)
 {
 	if(csv_file == NULL || csv_file == INVALID_HANDLE_VALUE)
 	{
-		_ASSERT(false);
 		return;
 	}
 
@@ -544,7 +694,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file, char* rows[], size_t num_colum
 {
 	if(csv_file == NULL || csv_file == INVALID_HANDLE_VALUE)
 	{
-		_ASSERT(false);
 		return;
 	}
 

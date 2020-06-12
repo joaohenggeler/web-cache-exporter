@@ -100,7 +100,6 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 		csv_print_header(csv_file, CSV_HEADER);
 	}
 
-
 	char search_cache_path[MAX_PATH_CHARS];
 	StringCchCopyA(search_cache_path, MAX_PATH_CHARS, cache_path);
 	PathAppendA(search_cache_path, "mp*");

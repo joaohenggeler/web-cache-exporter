@@ -46,17 +46,24 @@
 	#define NTDDI_VERSION 0x05000000 // NTDDI_WIN2K
 #endif
 
-#include <windows.h>
+// To avoid preprocessor redefinition warnings when including both windows.h and ntstatus.h.
+#define WIN32_NO_STATUS
+	#include <windows.h>
+#undef WIN32_NO_STATUS
+
+#include <ntstatus.h>
+#include <winternl.h>
+#include <stierr.h>
+
 #include <tchar.h>
 #include <strsafe.h>
 #include <stdarg.h>
-#include <direct.h>
 
+#include <shlobj.h>
 #pragma warning(push)
-#pragma warning(disable : 4995) // For the deprecation warnings of StrNCatA, StrNCatW, StrCatW, and StrCpyW.
+#pragma warning(disable : 4995) // To disable the deprecation warnings of StrNCatA, StrNCatW, StrCatW, and StrCpyW.
 	#include <shlwapi.h>
 #pragma warning(pop)
-#include <shlobj.h>
 
 #include <crtdbg.h>
 

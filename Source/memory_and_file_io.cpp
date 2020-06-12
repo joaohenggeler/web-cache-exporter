@@ -21,6 +21,12 @@ bool create_arena(Arena* arena, size_t total_size)
 
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 {
+	if(arena->available_memory == NULL)
+	{
+		_ASSERT(false);
+		return NULL;
+	}
+
 	void* misaligned_address = arena->available_memory;
 	void* aligned_address = misaligned_address;
 	if(alignment_size > 1)
@@ -53,6 +59,12 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 
 void clear_arena(Arena* arena)
 {
+	if(arena->available_memory == NULL)
+	{
+		_ASSERT(false);
+		return;
+	}
+
 	arena->available_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	#ifdef DEBUG
 	SecureZeroMemory(arena->available_memory, arena->used_size);
@@ -62,11 +74,14 @@ void clear_arena(Arena* arena)
 
 bool destroy_arena(Arena* arena)
 {
+	if(arena->available_memory == NULL)
+	{
+		return true;
+	}
+
 	void* base_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	BOOL success = VirtualFree(base_memory, 0, MEM_RELEASE);
-	arena->available_memory = NULL;
-	arena->used_size = 0;
-	arena->total_size = 0;
+	*arena = NULL_ARENA;
 
 	return success == TRUE;
 }
@@ -377,7 +392,6 @@ void* memory_map_entire_file(char* path)
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
-		// @TODO: GetFileSize vs GetFileSizeEx for Windows 98 and ME
 		// Reject empty files.
 		u64 file_size;
 		if(get_file_size(file_handle, &file_size))
@@ -463,22 +477,49 @@ void copy_byte_range(void* source, void* destination, /*size_t destination_size,
 	//memcpy_s(destination, destination_size, source, num_bytes_to_copy);
 }
 
-/*bool query_registry(HKEY base_key, const char* key_name, const char* value_name, char* value_data)
+bool query_registry(HKEY hkey, const char* key_name, const char* value_name, char* value_data, DWORD value_data_size)
 {
-	DWORD value_data_type, value_data_size;
-	LONG error_code = RegGetValueA(base_key,
-									key_name,
-									value_name,
-									RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
-									&value_data_type,
-									value_data,
-									&value_data_size);
+	LONG error_code;
+	bool success;
 
-	// RegGetValue() only returns this value, it doesn't set the last error code.
-	// We'll do it ourselves for consistent error handling when calling this function.
+	HKEY opened_key;
+	error_code = RegOpenKeyExA(hkey, key_name, 0, KEY_QUERY_VALUE, &opened_key);
+	success = (error_code == ERROR_SUCCESS);
+
+	if(!success)
+	{
+		log_print(LOG_ERROR, "Error %ld while trying to open registry key '%s'.", error_code, key_name);
+		// These registry functions only return this value, they don't set the last error code.
+		// We'll do it ourselves for consistent error handling when calling our function.
+		SetLastError(error_code);
+		return success;
+	}
+
+	DWORD value_data_type;
+	// If RegQueryValueExA succeeds, value_data_size is set to the actual value's size instead of the buffer's size.
+	error_code = RegQueryValueExA(opened_key, value_name, NULL, &value_data_type, (unsigned char*) value_data, &value_data_size);
+	success = (error_code == ERROR_SUCCESS);
+	RegCloseKey(opened_key);
+
+	// For now, we'll only handle simple string. Strings with expandable environment variables are skipped (REG_EXPAND_SZ).
+	if(success && (value_data_type != REG_SZ))
+	{
+		log_print(LOG_ERROR, "Unsupported data type %lu in registry value '%s\\%s'.", value_data_type, key_name, value_name);
+		error_code = ERROR_NOT_SUPPORTED;
+		success = false;
+	}
+
+	// According to MSDN, we need to ensure that the string we read is null terminated. For strings that are already null
+	// terminated, this just adds an extra one. Whoever calls this function should always guarantee that the buffer is able
+	// to hold the string value plus a null terminator.
+	if(success)
+	{
+		value_data[value_data_size] = '\0';
+	}
+
 	SetLastError(error_code);
-	return error_code == ERROR_SUCCESS;
-}*/
+	return success;
+}
 
 static HANDLE LOG_FILE_HANDLE = NULL;
 bool create_log_file(const char* file_path)
@@ -501,7 +542,6 @@ bool create_log_file(const char* file_path)
 								CREATE_ALWAYS,
 								FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
 								NULL);
-	console_print("Error: %d\n", GetLastError());
 
 	return LOG_FILE_HANDLE != INVALID_HANDLE_VALUE;
 }
@@ -731,3 +771,215 @@ void csv_print_row(Arena* arena, HANDLE csv_file, char* rows[], size_t num_colum
 	DWORD num_bytes_written;
 	WriteFile(csv_file, csv_row, (DWORD) csv_row_size, &num_bytes_written, NULL);
 }
+
+
+
+
+
+
+
+
+#ifndef BUILD_9X
+
+	struct SYSTEM_HANDLE_TABLE_ENTRY_INFO
+	{
+		USHORT UniqueProcessId;
+		USHORT CreatorBackTraceIndex;
+		UCHAR ObjectTypeIndex;
+		UCHAR HandleAttributes;
+		USHORT HandleValue;
+		PVOID Object;
+		ULONG GrantedAccess;
+	};
+
+	#ifdef BUILD_32_BIT
+		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO) == 0x10);
+	#else
+		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO) == 0x18);
+	#endif
+
+	struct SYSTEM_HANDLE_INFORMATION
+	{
+		ULONG NumberOfHandles;
+		SYSTEM_HANDLE_TABLE_ENTRY_INFO Handles[ANYSIZE_ARRAY];
+	};
+
+	#ifdef BUILD_32_BIT
+		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_INFORMATION) == 0x14);
+	#else
+		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_INFORMATION) == 0x20);
+	#endif
+
+	const SYSTEM_INFORMATION_CLASS SystemHandleInformation = (SYSTEM_INFORMATION_CLASS) 0x10;
+
+	enum OBJECT_INFORMATION_CLASS
+	{
+    	ObjectBasicInformation = 0,
+		ObjectNameInformation = 1,
+		ObjectTypeInformation = 2,
+		ObjectAllTypesInformation = 3,
+		ObjectHandleInformation = 4
+	};
+
+	struct OBJECT_NAME_INFORMATION
+	{
+		UNICODE_STRING Name;
+		WCHAR NameBuffer[ANYSIZE_ARRAY];
+	};
+
+	struct OBJECT_TYPE_INFORMATION
+	{
+		UNICODE_STRING TypeName;
+		ULONG Reserved[22]; // reserved for internal use
+	};
+
+	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
+	#pragma warning(push)
+	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
+	NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
+	{
+		log_print(LOG_WARNING, "Calling the stub version of NtQuerySystemInformation.");
+		_ASSERT(false);
+		return STATUS_NOT_IMPLEMENTED;
+	}
+	#pragma warning(pop)
+	typedef NT_QUERY_SYSTEM_INFORMATION(Nt_Query_System_Information);
+	Nt_Query_System_Information* dll_nt_query_system_information = stub_nt_query_system_information;
+	#define NtQuerySystemInformation dll_nt_query_system_information
+
+	#define NT_QUERY_OBJECT(function_name) NTSTATUS function_name(HANDLE Handle, OBJECT_INFORMATION_CLASS ObjectInformationClass, PVOID ObjectInformation, ULONG ObjectInformationLength, PULONG ReturnLength)
+	#pragma warning(push)
+	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
+	NT_QUERY_OBJECT(stub_nt_query_object)
+	{
+		log_print(LOG_WARNING, "Calling the stub version of NtQueryObject.");
+		_ASSERT(false);
+		return STATUS_NOT_IMPLEMENTED;
+	}
+	#pragma warning(pop)
+	typedef NT_QUERY_OBJECT(Nt_Query_Object);
+	Nt_Query_Object* dll_nt_query_object = stub_nt_query_object;
+	#define NtQueryObject dll_nt_query_object
+
+	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path)
+	{
+		HANDLE file_handle_result = INVALID_HANDLE_VALUE;
+
+		HMODULE ntdll_library = LoadLibraryA("Ntdll.dll");
+
+		if(ntdll_library == NULL)
+		{
+			log_print(LOG_ERROR, "Error %lu while loading library.", GetLastError());
+			return file_handle_result;
+		}
+
+		Nt_Query_System_Information* nt_query_system_information_address = (Nt_Query_System_Information*) GetProcAddress(ntdll_library, "NtQuerySystemInformation");
+
+		if(nt_query_system_information_address == NULL)
+		{
+			log_print(LOG_ERROR, "Error %lu while retrieving the function's address.", GetLastError());
+			return file_handle_result;
+		}
+		else
+		{
+			NtQuerySystemInformation = nt_query_system_information_address;
+		}
+
+		Nt_Query_Object* nt_query_object_function_address = (Nt_Query_Object*) GetProcAddress(ntdll_library, "NtQueryObject");
+
+		if(nt_query_object_function_address == NULL)
+		{
+			log_print(LOG_ERROR, "Error %lu while retrieving the function's address.", GetLastError());
+			return file_handle_result;
+		}
+		else
+		{
+			NtQueryObject = nt_query_object_function_address;
+		}
+
+		ULONG handle_info_size = (ULONG) (arena->total_size - arena->used_size) / 2;
+		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
+		ULONG actual_handle_info_size;
+		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+		
+		if(!NT_SUCCESS(error_code))
+		{
+			log_print(LOG_ERROR, "Error %ld while running NtQuerySystemInformation.", error_code);
+			return file_handle_result;
+		}
+
+		ULONG object_info_size = (ULONG) (arena->total_size - arena->used_size);
+		OBJECT_NAME_INFORMATION* object_info = push_arena(arena, object_info_size, OBJECT_NAME_INFORMATION);
+		object_info;
+
+		HANDLE current_process_handle = GetCurrentProcess();
+		wchar_t wide_file_path[MAX_PATH_CHARS];
+		MultiByteToWideChar(CP_ACP, 0, file_path, -1, wide_file_path, MAX_PATH_CHARS);
+
+		for(ULONG i = 0; i < handle_info->NumberOfHandles; ++i)
+		{
+			SYSTEM_HANDLE_TABLE_ENTRY_INFO handle_entry = handle_info->Handles[i];
+			bool foo = true;
+
+			if(foo)
+			{
+				HANDLE process_handle = OpenProcess(PROCESS_DUP_HANDLE, FALSE, handle_entry.UniqueProcessId);
+				HANDLE file_handle = (HANDLE) handle_entry.HandleValue;
+
+				HANDLE duplicated_file_handle;
+				if(	process_handle != NULL &&
+					DuplicateHandle(process_handle, file_handle,
+									current_process_handle, &duplicated_file_handle,
+									0, FALSE, DUPLICATE_SAME_ACCESS))
+				{
+					//DWORD bar = GetFileType(duplicated_file_handle); bar;
+
+					SecureZeroMemory(object_info, object_info_size);
+					ULONG actual_object_info_size;
+					NTSTATUS error_code_2 = NtQueryObject(duplicated_file_handle, ObjectNameInformation, object_info, object_info_size, &actual_object_info_size);
+					
+					if(NT_SUCCESS(error_code_2))
+					{
+						//OBJECT_NAME_INFORMATION local_object_info = *object_info; local_object_info;
+						UNICODE_STRING filename = object_info->Name;
+
+						/*log_print(LOG_INFO, "Process %hu has handle %hu of type %hhu with access rights 0x%08X. Name is '%S'.",
+						handle_entry.UniqueProcessId, handle_entry.HandleValue,
+						handle_entry.ObjectTypeIndex, handle_entry.GrantedAccess,
+						filename.Buffer);*/
+
+						_ASSERT(NT_SUCCESS(error_code_2));
+
+						size_t num_filename_chars = filename.Length / sizeof(wchar_t);
+						if(wcsncmp(wide_file_path, filename.Buffer, num_filename_chars) == 0)
+						{
+							file_handle_result = duplicated_file_handle;
+							break;
+						}
+					}
+					else
+					{
+						_ASSERT(!NT_SUCCESS(error_code_2));
+					}
+
+					//CloseHandle(duplicated_file_handle);
+					duplicated_file_handle = INVALID_HANDLE_VALUE;
+				}
+
+				if(process_handle != NULL)
+				{
+					//CloseHandle(process_handle);
+					process_handle = INVALID_HANDLE_VALUE;
+				}
+			}
+		}
+
+		file_path;
+
+		FreeLibrary(ntdll_library);
+		clear_arena(arena);
+
+		return file_handle_result;
+	}
+
+#endif

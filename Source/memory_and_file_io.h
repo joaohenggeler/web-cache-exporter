@@ -7,6 +7,7 @@ struct Arena
 	size_t total_size;
 	void* available_memory;
 };
+const Arena NULL_ARENA = {0, 0, NULL};
 
 bool create_arena(Arena* arena, size_t total_size);
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size);
@@ -23,6 +24,8 @@ struct Dos_Date_Time
 	u16 time;
 };
 #pragma pack(pop)
+_STATIC_ASSERT(sizeof(Dos_Date_Time) == sizeof(u32));
+_STATIC_ASSERT(sizeof(FILETIME) == sizeof(u64));
 
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, char* formatted_string);
@@ -39,13 +42,13 @@ const size_t MAX_UINT32_CHARS = 33;
 const size_t MAX_UINT64_CHARS = 65;
 const size_t INT_FORMAT_RADIX = 10;
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
-const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(char); // @TODO: wide version?
+//const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(char); // @TODO: wide version?
 
 u64 combine_high_and_low_u32s(u32 high, u32 low);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
 void* memory_map_entire_file(char* path);
 bool read_first_file_bytes(char* path, void* file_buffer, DWORD num_bytes_to_read);
-//bool query_registry(HKEY base_key, const char* key_name, const char* value_name, char* value_data);
+bool query_registry(HKEY hkey, const char* key_name, const char* value_name, char* value_data, DWORD value_data_size);
 
 enum Log_Type
 {
@@ -105,9 +108,24 @@ inline size_t string_size(const char* str)
 	return (strlen(str) + 1) * sizeof(char);
 }
 
+inline size_t string_size(const wchar_t* str)
+{
+	return (wcslen(str) + 1) * sizeof(wchar_t);
+}
+
 inline bool is_string_empty(const char* str)
 {
 	return str[0] == '\0';
 }
+
+inline bool is_string_empty(const wchar_t* str)
+{
+	return str[0] == L'\0';
+}
+
+HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path);
+#ifdef BUILD_9X
+	#define windows_nt_query_file_handle_from_file_path(...)
+#endif
 
 #endif

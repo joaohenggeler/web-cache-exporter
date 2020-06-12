@@ -1,6 +1,8 @@
 #ifndef INTERNET_EXPLORER_H
 #define INTERNET_EXPLORER_H
 
-void export_internet_explorer_cache(Arena* arena, char* index_path);
+bool find_internet_explorer_cache(char* cache_path);
+void export_specific_or_default_internet_explorer_cache(Exporter* exporter);
+void export_specific_internet_explorer_cache(Exporter* exporter);
 
 #endif

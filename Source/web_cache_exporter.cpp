@@ -32,13 +32,7 @@ static char* skip_to_suboption(char* str)
 static bool parse_exporter_arguments(int num_arguments, char* arguments[], Exporter* exporter)
 {
 	bool success = true;
-
-	exporter->should_copy_files = true;
-	exporter->should_create_csv = true;
-	exporter->should_add_csv_header = true;
-	exporter->cache_type = CACHE_UNKNOWN;
-	exporter->cache_path[0] = '\0';
-	exporter->output_path[0] = '\0';
+	bool seen_export_option = false;
 
 	for(int i = 1; i < num_arguments; ++i)
 	{
@@ -63,6 +57,7 @@ static bool parse_exporter_arguments(int num_arguments, char* arguments[], Expor
 			if(cache_type == NULL)
 			{
 				log_print(LOG_ERROR, "Missing web cache type in command line option '%s'", option);
+				console_print("Missing web cache type in command line option '%s'\n", option);
 				exporter->cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
@@ -81,46 +76,80 @@ static bool parse_exporter_arguments(int num_arguments, char* arguments[], Expor
 			else
 			{
 				log_print(LOG_ERROR, "Unknown web cache type '%s' in command line option '%s'", cache_type, option);
+				console_print("Unknown web cache type '%s' in command line option '%s'\n", cache_type, option);
 				exporter->cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
 
-			if(i+1 < num_arguments && strlen(arguments[i+1]) > 0)
+			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
 			{
 				StringCchCopyA(exporter->cache_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
 
-			if(i+2 < num_arguments && strlen(arguments[i+2]) > 0)
+			if(i+2 < num_arguments && !is_string_empty(arguments[i+2]))
 			{
 				StringCchCopyA(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
 			}
 			PathAppendA(exporter->output_path, "ExportedCache");
 			
+			seen_export_option = true;
 			break;
 		}
 		else
 		{
 			log_print(LOG_ERROR, "Unknown command line option '%s'", option);
+			console_print("Unknown command line option '%s'\n", option);
 			success = false;
 			break;
 		}
 	}
 
+	if(!seen_export_option)
+	{
+		log_print(LOG_ERROR, "Argument Parsing: The main -export option was not found.");
+		console_print("Missing the -export option.\n");
+		success = false;
+	}
+
 	if(!exporter->should_copy_files && !exporter->should_create_csv)
 	{
-		log_print(LOG_ERROR, "You can't use both -no-copy-files and -no-create-csv at the same time.");
+		log_print(LOG_ERROR, "Argument Parsing: -no-copy-files and -no-create-csv were used at the same time.");
+		console_print("The options -no-copy-files and -no-create-csv can't be used at the same time.\n");
 		success = false;
 	}
 
 	return success;
 }
 
+static void clean_up(Exporter* exporter)
+{
+	destroy_arena(&exporter->arena);
+	close_log_file();
+}
+
 int main(int argc, char* argv[])
 {
+	Exporter exporter;
+	exporter.should_copy_files = true;
+	exporter.should_create_csv = true;
+	exporter.should_add_csv_header = true;
+	exporter.cache_type = CACHE_UNKNOWN;
+	exporter.cache_path[0] = '\0';
+	exporter.output_path[0] = '\0';
+	exporter.arena = NULL_ARENA;
+
 	create_log_file("Web-Cache-Exporter.log");
 	log_print(LOG_INFO, "Web Cache Exporter version %s", BUILD_VERSION);
 
-	if(argc <= 1)
+	char* ansi_string = "ANSI";
+	wchar_t* wide_string = L"WIDE";
+	TCHAR* tchar_string = TEXT("TCHAR");
+
+	printf("Ansi: '%hs'. Wide: '%ls'. Tchar: '%S'.\n", ansi_string, wide_string, tchar_string);
+	wprintf(L"Ansi: '%hs'. Wide: '%ls'. Tchar: '%s'.\n", ansi_string, wide_string, tchar_string);
+	_tprintf(TEXT("Ansi: '%hs'. Wide: '%ls'. Tchar: '%s'.\n"), ansi_string, wide_string, tchar_string);
+
+	/*if(argc <= 1)
 	{
 		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and exit.");
 		console_print("-no-copy-files\n");
@@ -129,31 +158,41 @@ int main(int argc, char* argv[])
 		console_print("\t-ie\n");
 		console_print("\t-shockwave\n");
 		console_print("\t-java\n");
-		return 1;
-	}
 
-	Exporter exporter;
+		clean_up(&exporter);
+		return 1;
+	}*/
+
 	if(!parse_exporter_arguments(argc, argv, &exporter))
 	{
 		log_print(LOG_ERROR, "An error occured while parsing the command line arguments. The program will not run.");
+		clean_up(&exporter);
 		return 1;
 	}
 
-	if(!create_arena(&exporter.arena, megabytes_to_bytes(1)))
+	if(!create_arena(&exporter.arena, megabytes_to_bytes(4)))
 	{
 		log_print(LOG_ERROR, "Could not allocate enough memory to run the program.");
+		clean_up(&exporter);
 		return 1;
 	}
+
+	// @TODO: Remove this test
+	find_internet_explorer_cache(exporter.cache_path);
+	PathAppendA(exporter.cache_path, "..\\WebCache\\WebCacheV01.dat");
+	//windows_nt_query_file_handle_from_file_path(&exporter.arena, exporter.cache_path);
+	
 
 	char executable_path[MAX_PATH_CHARS] = "";
 	GetModuleFileNameA(NULL, executable_path, MAX_PATH_CHARS);
+	PathAppendA(executable_path, "..");
 	debug_log_print("Executable Directory: %s", executable_path);
 	
 	char working_path[MAX_PATH_CHARS] = "";
 	GetCurrentDirectoryA(MAX_PATH_CHARS, working_path);
 	debug_log_print("Working Directory: %s", working_path);
 
-	debug_log_print("Parsed Exporter Arguments:");
+	debug_log_print("Exporter Options:");
 	debug_log_print("- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
 	debug_log_print("- Should Copy Files: %s", (exporter.should_copy_files) ? ("true") : ("false"));
 	debug_log_print("- Should Create CSV: %s", (exporter.should_create_csv) ? ("true") : ("false"));
@@ -172,7 +211,7 @@ int main(int argc, char* argv[])
 	{
 		case(CACHE_INTERNET_EXPLORER):
 		{
-			//export_internet_explorer_cache(&arena, exporter.cache_path);
+			export_specific_or_default_internet_explorer_cache(&exporter);
 		} break;
 
 		case(CACHE_SHOCKWAVE_PLUGIN):
@@ -191,8 +230,7 @@ int main(int argc, char* argv[])
 		} break;
 	}
 
-	destroy_arena(&exporter.arena);
-	close_log_file();
+	clean_up(&exporter);
 
 	return 0;
 }

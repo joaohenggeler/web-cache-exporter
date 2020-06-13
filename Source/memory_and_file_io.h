@@ -28,26 +28,28 @@ _STATIC_ASSERT(sizeof(Dos_Date_Time) == sizeof(u32));
 _STATIC_ASSERT(sizeof(FILETIME) == sizeof(u64));
 
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
-bool format_filetime_date_time(FILETIME date_time, char* formatted_string);
-bool format_dos_date_time(Dos_Date_Time date_time, char* formatted_string);
-
-char* skip_leading_whitespace(char* str);
-char* skip_to_file_extension(char* str);
-
-bool decode_url(const char* url, char* decoded_url);
-void create_directories(const char* path_to_create);
-bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file_path, const char* base_export_path, const char* url, const char* filename);
+bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
+bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
 
 const size_t MAX_UINT32_CHARS = 33;
 const size_t MAX_UINT64_CHARS = 65;
-const size_t INT_FORMAT_RADIX = 10;
+bool convert_u32_to_string(u32 value, TCHAR* result_string);
+bool convert_u64_to_string(u64 value, TCHAR* result_string);
+
+char* skip_leading_whitespace(char* str);
+TCHAR* skip_to_file_extension(TCHAR* str);
+
+bool decode_url(const char* url, char* decoded_url);
+void create_directories(const TCHAR* path_to_create);
+bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
+
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 //const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(char); // @TODO: wide version?
 
 u64 combine_high_and_low_u32s(u32 high, u32 low);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
 void* memory_map_entire_file(char* path);
-bool read_first_file_bytes(char* path, void* file_buffer, DWORD num_bytes_to_read);
+bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
 bool query_registry(HKEY hkey, const char* key_name, const char* value_name, char* value_data, DWORD value_data_size);
 
 enum Log_Type
@@ -59,24 +61,51 @@ enum Log_Type
 	LOG_DEBUG = 4,
 	NUM_LOG_TYPES = 5
 };
-const char* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {"", "[INFO] ", "[WARNING] ", "[ERROR] ", "[DEBUG] "};
+const TCHAR* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {TEXT(""), TEXT("[INFO] "), TEXT("[WARNING] "), TEXT("[ERROR] "), TEXT("[DEBUG] ")};
 
-bool create_log_file(const char* filename);
+bool create_log_file(const TCHAR* filename);
 void close_log_file(void);
-void log_print(Log_Type log_type, const char* string_format, ...);
-void log_print(Log_Type log_type, const wchar_t* string_format, ...);
+void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
+#define log_print(log_type, string_format, ...) tchar_log_print(log_type, TEXT(string_format), __VA_ARGS__)
 #ifdef DEBUG
 	#define debug_log_print(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
 #else
 	#define debug_log_print(...)
 #endif
 
-#define console_print(string_format, ...) printf(string_format, __VA_ARGS__)
+#define console_print(string_format, ...) _tprintf(TEXT(string_format), __VA_ARGS__)
 
-HANDLE create_csv_file(const char* file_path);
+enum Csv_Type
+{
+	CSV_FILENAME = 0,
+	CSV_FILE_EXTENSION = 1,
+	CSV_FILE_SIZE = 2,
+
+	CSV_LAST_WRITE_TIME = 3,
+	CSV_LAST_ACCESS_TIME = 4,
+	CSV_CREATION_TIME = 5,
+
+	CSV_DIRECTOR_FILE_TYPE = 6,
+
+	NUM_CSV_TYPES = 7
+};
+const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
+{
+	"Filename", "File Extension", "File Size",
+	"Last Write Time", "Last Access Time", "Creation Time",
+	"Director File Type"
+};
+
+struct Csv_Entry
+{
+	TCHAR* value;
+	wchar_t* utf_16_value; // Helper variable to convert each value to UTF-8 in Windows 98 and ME.
+};
+
+HANDLE create_csv_file(const TCHAR* file_path);
 void close_csv_file(HANDLE csv_file);
-void csv_print_header(HANDLE csv_file, const char* header);
-void csv_print_row(Arena* arena, HANDLE csv_file, char* rows[], size_t num_columns);
+void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);
+void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Csv_Entry row[], size_t num_columns);
 
 inline void* advance_bytes(void* pointer, size_t num_bytes)
 {
@@ -123,9 +152,10 @@ inline bool is_string_empty(const wchar_t* str)
 	return str[0] == L'\0';
 }
 
-HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path);
-#ifdef BUILD_9X
-	#define windows_nt_query_file_handle_from_file_path(...)
+#ifndef BUILD_9X
+	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path);
+#else
+	#define windows_nt_query_file_handle_from_file_path(...) _STATIC_ASSERT(false)
 #endif
 
 #endif

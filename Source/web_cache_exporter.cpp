@@ -7,9 +7,9 @@
 // wce.exe -csv [Cache Type] [Cache Path] [CSV File Destination Path]
 // wce.exe [extra stuff] -export-ie
 
-static char* skip_to_suboption(char* str)
+static TCHAR* skip_to_suboption(TCHAR* str)
 {
-	char* suboption = NULL;
+	TCHAR* suboption = NULL;
 
 	if(str != NULL)
 	{
@@ -29,30 +29,30 @@ static char* skip_to_suboption(char* str)
 	return suboption;
 }
 
-static bool parse_exporter_arguments(int num_arguments, char* arguments[], Exporter* exporter)
+static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Exporter* exporter)
 {
 	bool success = true;
 	bool seen_export_option = false;
 
 	for(int i = 1; i < num_arguments; ++i)
 	{
-		char* option = arguments[i];
+		TCHAR* option = arguments[i];
 
-		if(lstrcmpiA(option, "-no-copy-files") == 0)
+		if(lstrcmpi(option, TEXT("-no-copy-files")) == 0)
 		{
 			exporter->should_copy_files = false;
 		}
-		else if(lstrcmpiA(option, "-no-create-csv") == 0)
+		else if(lstrcmpi(option, TEXT("-no-create-csv")) == 0)
 		{
 			exporter->should_create_csv = false;
 		}
-		else if(lstrcmpiA(option, "-no-csv-header") == 0)
+		else if(lstrcmpi(option, TEXT("-no-csv-header")) == 0)
 		{
 			exporter->should_add_csv_header = false;
 		}
-		else if(_strnicmp(option, "-export", 7) == 0)
+		else if(_tcsncicmp(option, TEXT("-export"), 7) == 0)
 		{
-			char* cache_type = skip_to_suboption(option);
+			TCHAR* cache_type = skip_to_suboption(option);
 			//char* cache_version = skip_to_suboption(cache_type);
 			if(cache_type == NULL)
 			{
@@ -61,15 +61,15 @@ static bool parse_exporter_arguments(int num_arguments, char* arguments[], Expor
 				exporter->cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
-			else if(lstrcmpiA(cache_type, "-ie") == 0)
+			else if(lstrcmpi(cache_type, TEXT("-ie")) == 0)
 			{
 				exporter->cache_type = CACHE_INTERNET_EXPLORER;
 			}
-			else if(lstrcmpiA(cache_type, "-shockwave") == 0)
+			else if(lstrcmpi(cache_type, TEXT("-shockwave")) == 0)
 			{
 				exporter->cache_type = CACHE_SHOCKWAVE_PLUGIN;
 			}
-			else if(lstrcmpiA(cache_type, "-java") == 0)
+			else if(lstrcmpi(cache_type, TEXT("-java")) == 0)
 			{
 				exporter->cache_type = CACHE_JAVA_PLUGIN;
 			}
@@ -83,14 +83,14 @@ static bool parse_exporter_arguments(int num_arguments, char* arguments[], Expor
 
 			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
 			{
-				StringCchCopyA(exporter->cache_path, MAX_PATH_CHARS, arguments[i+1]);
+				StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
 
 			if(i+2 < num_arguments && !is_string_empty(arguments[i+2]))
 			{
-				StringCchCopyA(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
+				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
 			}
-			PathAppendA(exporter->output_path, "ExportedCache");
+			PathAppend(exporter->output_path, TEXT("ExportedCache"));
 			
 			seen_export_option = true;
 			break;
@@ -127,27 +127,19 @@ static void clean_up(Exporter* exporter)
 	close_log_file();
 }
 
-int main(int argc, char* argv[])
+int _tmain(int argc, TCHAR* argv[])
 {
 	Exporter exporter;
 	exporter.should_copy_files = true;
 	exporter.should_create_csv = true;
 	exporter.should_add_csv_header = true;
 	exporter.cache_type = CACHE_UNKNOWN;
-	exporter.cache_path[0] = '\0';
-	exporter.output_path[0] = '\0';
+	exporter.cache_path[0] = TEXT('\0');
+	exporter.output_path[0] = TEXT('\0');
 	exporter.arena = NULL_ARENA;
 
-	create_log_file("Web-Cache-Exporter.log");
-	log_print(LOG_INFO, "Web Cache Exporter version %s", BUILD_VERSION);
-
-	char* ansi_string = "ANSI";
-	wchar_t* wide_string = L"WIDE";
-	TCHAR* tchar_string = TEXT("TCHAR");
-
-	printf("Ansi: '%hs'. Wide: '%ls'. Tchar: '%S'.\n", ansi_string, wide_string, tchar_string);
-	wprintf(L"Ansi: '%hs'. Wide: '%ls'. Tchar: '%s'.\n", ansi_string, wide_string, tchar_string);
-	_tprintf(TEXT("Ansi: '%hs'. Wide: '%ls'. Tchar: '%s'.\n"), ansi_string, wide_string, tchar_string);
+	create_log_file(TEXT("Web-Cache-Exporter.log"));
+	log_print(LOG_INFO, "Web Cache Exporter version %hs", BUILD_VERSION);
 
 	/*if(argc <= 1)
 	{
@@ -177,12 +169,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	// @TODO: Remove this test
-	find_internet_explorer_cache(exporter.cache_path);
-	PathAppendA(exporter.cache_path, "..\\WebCache\\WebCacheV01.dat");
-	//windows_nt_query_file_handle_from_file_path(&exporter.arena, exporter.cache_path);
-	
-
+	/*
 	char executable_path[MAX_PATH_CHARS] = "";
 	GetModuleFileNameA(NULL, executable_path, MAX_PATH_CHARS);
 	PathAppendA(executable_path, "..");
@@ -191,14 +178,15 @@ int main(int argc, char* argv[])
 	char working_path[MAX_PATH_CHARS] = "";
 	GetCurrentDirectoryA(MAX_PATH_CHARS, working_path);
 	debug_log_print("Working Directory: %s", working_path);
+	*/
 
 	debug_log_print("Exporter Options:");
 	debug_log_print("- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
-	debug_log_print("- Should Copy Files: %s", (exporter.should_copy_files) ? ("true") : ("false"));
-	debug_log_print("- Should Create CSV: %s", (exporter.should_create_csv) ? ("true") : ("false"));
-	debug_log_print("- Should Add CSV Header: %s", (exporter.should_add_csv_header) ? ("true") : ("false"));
-	debug_log_print("- Cache Path: '%s'", (exporter.cache_path != NULL) ? (exporter.cache_path) : ("-"));
-	debug_log_print("- Output Path: '%s'", (exporter.output_path != NULL) ? (exporter.output_path) : ("-"));
+	debug_log_print("- Should Copy Files: %hs", (exporter.should_copy_files) ? ("true") : ("false"));
+	debug_log_print("- Should Create CSV: %hs", (exporter.should_create_csv) ? ("true") : ("false"));
+	debug_log_print("- Should Add CSV Header: %hs", (exporter.should_add_csv_header) ? ("true") : ("false"));
+	debug_log_print("- Cache Path: '%s'", (exporter.cache_path != NULL) ? (exporter.cache_path) : (TEXT("-")));
+	debug_log_print("- Output Path: '%s'", (exporter.output_path != NULL) ? (exporter.output_path) : (TEXT("-")));
 
 	if(is_string_empty(exporter.cache_path))
 	{
@@ -211,7 +199,7 @@ int main(int argc, char* argv[])
 	{
 		case(CACHE_INTERNET_EXPLORER):
 		{
-			export_specific_or_default_internet_explorer_cache(&exporter);
+			//export_specific_or_default_internet_explorer_cache(&exporter);
 		} break;
 
 		case(CACHE_SHOCKWAVE_PLUGIN):

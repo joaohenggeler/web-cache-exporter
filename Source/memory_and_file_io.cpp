@@ -86,30 +86,40 @@ bool destroy_arena(Arena* arena)
 	return success == TRUE;
 }
 
-bool format_filetime_date_time(FILETIME date_time, char* formatted_string)
+bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
 {
 	if(date_time.dwLowDateTime == 0 && date_time.dwHighDateTime == 0)
 	{
-		*formatted_string = '\0';
+		*formatted_string = TEXT('\0');
 		return true;
 	}
 
 	SYSTEMTIME dt;
 	bool success = FileTimeToSystemTime(&date_time, &dt) != 0;
-	return success && SUCCEEDED(StringCchPrintfA(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, "%4d-%02d-%02d %02d:%02d:%02d", dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+	return success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%4d-%02d-%02d %02d:%02d:%02d"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
 }
 
-bool format_dos_date_time(Dos_Date_Time date_time, char* formatted_string)
+bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 {
 	if(date_time.date == 0 && date_time.time == 0)
 	{
-		*formatted_string = '\0';
+		*formatted_string = TEXT('\0');
 		return true;
 	}
 
 	FILETIME filetime;
 	bool success = DosDateTimeToFileTime(date_time.date, date_time.time, &filetime) != 0;
 	return success && format_filetime_date_time(filetime, formatted_string);
+}
+
+const size_t INT_FORMAT_RADIX = 10;
+bool convert_u32_to_string(u32 value, TCHAR* result_string)
+{
+	return _ultot_s(value, result_string, MAX_UINT32_CHARS, INT_FORMAT_RADIX) != 0;
+}
+bool convert_u64_to_string(u64 value, TCHAR* result_string)
+{
+	return _ui64tot_s(value, result_string, MAX_UINT64_CHARS, INT_FORMAT_RADIX) != 0;
 }
 
 char* skip_leading_whitespace(char* str)
@@ -130,18 +140,18 @@ char* skip_leading_whitespace(char* str)
 // filename = "a.gif.gz" -> gif.gz
 // filename = "abc." -> ""
 // filename = "abc" -> ""
-char* skip_to_file_extension(char* str)
+TCHAR* skip_to_file_extension(TCHAR* str)
 {
-	char* file_extension = NULL;
+	TCHAR* file_extension = NULL;
 
 	if(str != NULL)
 	{
-		while(*str != '\0' && *str != '.')
+		while(*str != TEXT('\0') && *str != TEXT('.'))
 		{
 			++str;
 		}
 
-		file_extension = (*str != '\0') ? (++str) : (str);
+		file_extension = (*str != TEXT('\0')) ? (++str) : (str);
 	}
 
 	return file_extension;
@@ -220,37 +230,37 @@ bool decode_url(const char* url, char* decoded_url)
 	return success;
 }
 
-static void url_to_path(char* url)
+static void convert_url_to_path(TCHAR* url)
 {
 	if(url == NULL) return;
 
-	char* url_start = url;
-	char* last_path_separator = NULL;
-	char* url_path_start = NULL;
-	while(*url != '\0')
+	TCHAR* url_start = url;
+	TCHAR* last_path_separator = NULL;
+	TCHAR* url_path_start = NULL;
+	while(*url != TEXT('\0'))
 	{
-		if(*url == '/')
+		if(*url == TEXT('/'))
 		{
-			*url = '\\';
+			*url = TEXT('\\');
 			last_path_separator = url;
 		}
-		else if(*url == '?' || *url == '#')
+		else if(*url == TEXT('?') || *url == TEXT('#'))
 		{
 			break;
 		}
-		else if(*url == ':')
+		else if(*url == TEXT(':'))
 		{
 			url_path_start = url + 1;
 
-			char* next_char_1 = url + 1;
-			if(*next_char_1 == '/')
+			TCHAR* next_char_1 = url + 1;
+			if(*next_char_1 == TEXT('/'))
 			{
 				url_path_start = next_char_1 + 1;
 				++url;
 			}
 
-			char* next_char_2 = next_char_1 + 1;
-			if(*next_char_1 == '/' && *next_char_2 == '/')
+			TCHAR* next_char_2 = next_char_1 + 1;
+			if(*next_char_1 == TEXT('/') && *next_char_2 == TEXT('/'))
 			{
 				url_path_start = next_char_2 + 1;
 				++url;
@@ -263,7 +273,7 @@ static void url_to_path(char* url)
 
 	if(last_path_separator != NULL)
 	{
-		*last_path_separator = '\0';
+		*last_path_separator = TEXT('\0');
 	}
 
 	if(url_path_start != NULL)
@@ -272,12 +282,12 @@ static void url_to_path(char* url)
 	}
 }
 
-bool create_empty_file(const char* file_path)
+bool create_empty_file(const TCHAR* file_path)
 {
 	DWORD error_code;
 	bool success;
 
-	HANDLE empty_file = CreateFileA(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE empty_file = CreateFile(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 	error_code = GetLastError();
 	success = empty_file != INVALID_HANDLE_VALUE;
 	CloseHandle(empty_file);
@@ -286,49 +296,49 @@ bool create_empty_file(const char* file_path)
 	return success;
 }
 
-void create_directories(const char* path_to_create)
+void create_directories(const TCHAR* path_to_create)
 {
 	const size_t MAX_CREATE_DIRECTORY_PATH_CHARS = 248;
-	char path[MAX_CREATE_DIRECTORY_PATH_CHARS];
+	TCHAR path[MAX_CREATE_DIRECTORY_PATH_CHARS];
 	// @TODO: replace with GetFullPathNameA(path_to_create, MAX_CREATE_DIRECTORY_PATH_CHARS, path, NULL);
 	// _STATIC_ASSERT(MAX_CREATE_DIRECTORY_PATH_CHARS <= MAX_PATH_CHARS);
-	StringCchCopyA(path, MAX_CREATE_DIRECTORY_PATH_CHARS, path_to_create);
+	StringCchCopy(path, MAX_CREATE_DIRECTORY_PATH_CHARS, path_to_create);
 
 	for(size_t i = 0; i < MAX_CREATE_DIRECTORY_PATH_CHARS; ++i)
 	{
-		if(path[i] == '\0')
+		if(path[i] == TEXT('\0'))
 		{
-			CreateDirectoryA(path, NULL);
+			CreateDirectory(path, NULL);
 			break;
 		}
-		else if(path[i] == '\\')
+		else if(path[i] == TEXT('\\'))
 		{
-			path[i] = '\0';
-			CreateDirectoryA(path, NULL);
-			path[i] = '\\';
+			path[i] = TEXT('\0');
+			CreateDirectory(path, NULL);
+			path[i] = TEXT('\\');
 		}
 	}
 }
 
-bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file_path, const char* base_destination_path, const char* url, const char* filename)
+bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename)
 {
-	char* url_path;
+	TCHAR* url_path;
 	if(url != NULL)
 	{
-		url_path = push_and_copy_to_arena(arena, string_size(url), char, url, string_size(url));
-		url_to_path(url_path);
+		url_path = push_and_copy_to_arena(arena, string_size(url), TCHAR, url, string_size(url));
+		convert_url_to_path(url_path);
 	}
 	else
 	{
 		url_path = NULL;
 	}
 
-	char full_copy_target_path[MAX_PATH_CHARS];
-	GetFullPathNameA(base_destination_path, MAX_PATH_CHARS, full_copy_target_path, NULL);
-	if(url_path != NULL) PathAppendA(full_copy_target_path, url_path);
+	TCHAR full_copy_target_path[MAX_PATH_CHARS];
+	GetFullPathName(base_destination_path, MAX_PATH_CHARS, full_copy_target_path, NULL);
+	if(url_path != NULL) PathAppend(full_copy_target_path, url_path);
 	
 	create_directories(full_copy_target_path);
-	PathAppendA(full_copy_target_path, filename);
+	PathAppend(full_copy_target_path, filename);
 
 	bool copy_success;
 
@@ -336,21 +346,21 @@ bool copy_file_using_url_directory_structure(Arena* arena, const char* full_file
 		copy_success = create_empty_file(full_copy_target_path);
 		full_file_path;
 	#else
-		copy_success = CopyFileA(full_file_path, full_copy_target_path, TRUE) != 0;
+		copy_success = CopyFile(full_file_path, full_copy_target_path, TRUE) != 0;
 	#endif
 
 	u32 num_naming_collisions = 0;
 	while(!copy_success && GetLastError() == ERROR_FILE_EXISTS)
 	{
 		++num_naming_collisions;
-		char full_unique_copy_target_path[MAX_PATH_CHARS];
-		StringCchPrintfA(full_unique_copy_target_path, MAX_PATH_CHARS, "%s.%I32u", full_copy_target_path, num_naming_collisions);
+		TCHAR full_unique_copy_target_path[MAX_PATH_CHARS];
+		StringCchPrintf(full_unique_copy_target_path, MAX_PATH_CHARS, TEXT("%s.%I32u"), full_copy_target_path, num_naming_collisions);
 		
 		#if defined(DEBUG) && defined(EXPORT_DUMMY_FILES)
 			copy_success = create_empty_file(full_unique_copy_target_path);
 			full_file_path;
 		#else
-			copy_success = CopyFileA(full_file_path, full_unique_copy_target_path, TRUE) != 0;
+			copy_success = CopyFile(full_file_path, full_unique_copy_target_path, TRUE) != 0;
 		#endif
 	}
 	
@@ -437,10 +447,10 @@ void* memory_map_entire_file(char* path)
 	return mapped_memory;
 }
 
-bool read_first_file_bytes(char* path, void* file_buffer, DWORD num_bytes_to_read)
+bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read)
 {
 	bool success = true;
-	HANDLE file_handle = CreateFileA(path,
+	HANDLE file_handle = CreateFile(path,
 								     GENERIC_READ,
 								     FILE_SHARE_READ,
 								     NULL,
@@ -457,7 +467,7 @@ bool read_first_file_bytes(char* path, void* file_buffer, DWORD num_bytes_to_rea
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Error %d while trying to get the file handle for '%s'.", GetLastError(), path);
+		log_print(LOG_ERROR, "Error %lu while trying to get the file handle for '%s'.", GetLastError(), path);
 		success = false;
 	}
 
@@ -522,7 +532,7 @@ bool query_registry(HKEY hkey, const char* key_name, const char* value_name, cha
 }
 
 static HANDLE LOG_FILE_HANDLE = NULL;
-bool create_log_file(const char* file_path)
+bool create_log_file(const TCHAR* file_path)
 {
 	if(file_path == NULL)
 	{
@@ -530,12 +540,12 @@ bool create_log_file(const char* file_path)
 		return false;
 	}
 
-	char full_log_path[MAX_PATH_CHARS];
-	GetFullPathNameA(file_path, MAX_PATH_CHARS, full_log_path, NULL);
-	PathAppendA(full_log_path, "..");
+	TCHAR full_log_path[MAX_PATH_CHARS];
+	GetFullPathName(file_path, MAX_PATH_CHARS, full_log_path, NULL);
+	PathAppend(full_log_path, TEXT(".."));
 	create_directories(full_log_path);
 
-	LOG_FILE_HANDLE = CreateFileA(file_path,
+	LOG_FILE_HANDLE = CreateFile(file_path,
 								GENERIC_WRITE,
 								FILE_SHARE_READ,
 								NULL,
@@ -563,7 +573,7 @@ const size_t MAX_CHARS_PER_LOG_TYPE = 16;
 const size_t MAX_CHARS_PER_LOG_MESSAGE = 4096;
 const size_t MAX_CHARS_PER_LOG_WRITE = MAX_CHARS_PER_LOG_TYPE + MAX_CHARS_PER_LOG_MESSAGE + 2;
 // @TODO: Would the log_printW idea work with WideCharToMultibyte?
-void log_print(Log_Type log_type, const char* string_format, ...)
+/*void log_print(Log_Type log_type, const char* string_format, ...)
 {
 	if(LOG_FILE_HANDLE == NULL || LOG_FILE_HANDLE == INVALID_HANDLE_VALUE)
 	{
@@ -589,28 +599,42 @@ void log_print(Log_Type log_type, const char* string_format, ...)
 
 	DWORD num_bytes_written;
 	WriteFile(LOG_FILE_HANDLE, log_buffer, (DWORD) (num_chars_to_write * sizeof(char)), &num_bytes_written, NULL);
-}
+}*/
 
-void log_print(Log_Type log_type, const wchar_t* string_format, ...)
+void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 {
-	char utf_8_string_format[MAX_CHARS_PER_LOG_WRITE];
-	int utf_8_string_format_size = MAX_CHARS_PER_LOG_WRITE * sizeof(char);
-	//StringCbLengthW(utf_8_string_format, MAX_CHARS_PER_LOG_WRITE * sizeof(char), &utf_8_string_format_size);
-	WideCharToMultiByte(CP_UTF8, 0, string_format, -1, utf_8_string_format, utf_8_string_format_size, NULL, NULL);
+	TCHAR log_buffer[MAX_CHARS_PER_LOG_WRITE];
+	
+	StringCchCopy(log_buffer, MAX_CHARS_PER_LOG_TYPE, LOG_TYPE_TO_STRING[log_type]);
+	size_t num_log_type_chars;
+	StringCchLength(log_buffer, MAX_CHARS_PER_LOG_TYPE, &num_log_type_chars);
 
-	size_t num_chars_to_write;
-	StringCchLengthA(utf_8_string_format, MAX_CHARS_PER_LOG_WRITE, &num_chars_to_write);
+	va_list arguments;
+	va_start(arguments, string_format);
+	StringCchVPrintf(&log_buffer[num_log_type_chars], MAX_CHARS_PER_LOG_MESSAGE, string_format, arguments);
+	va_end(arguments);
 
-	log_type;
+	StringCchCat(log_buffer, MAX_CHARS_PER_LOG_WRITE, TEXT("\r\n"));
+
+	#ifdef BUILD_9X
+		wchar_t utf_16_log_buffer[MAX_CHARS_PER_LOG_WRITE];
+		MultiByteToWideChar(CP_ACP, 0, log_buffer, -1, utf_16_log_buffer, MAX_CHARS_PER_LOG_WRITE);
+
+		char utf_8_log_buffer[MAX_CHARS_PER_LOG_WRITE];
+		WideCharToMultiByte(CP_UTF8, 0, utf_16_log_buffer, -1, utf_8_log_buffer, sizeof(utf_8_log_buffer), NULL, NULL);
+	#else
+		char utf_8_log_buffer[MAX_CHARS_PER_LOG_WRITE];
+		WideCharToMultiByte(CP_UTF8, 0, log_buffer, -1, utf_8_log_buffer, sizeof(utf_8_log_buffer), NULL, NULL);
+	#endif
+
+	size_t num_bytes_to_write;
+	StringCbLengthA(utf_8_log_buffer, sizeof(utf_8_log_buffer), &num_bytes_to_write);
+
 	DWORD num_bytes_written;
-	WriteFile(LOG_FILE_HANDLE, utf_8_string_format, (DWORD) (num_chars_to_write * sizeof(char)), &num_bytes_written, NULL);
-	//va_list arguments;
-	//va_start(arguments, string_format);
-	//log_print(log_type, utf_8_string_format, arguments);
-	//va_end(arguments);
+	WriteFile(LOG_FILE_HANDLE, utf_8_log_buffer, (DWORD) num_bytes_to_write, &num_bytes_written, NULL);
 }
 
-static bool does_csv_string_require_escaping(const char* str, size_t* size_required)
+static bool does_csv_string_require_escaping(const TCHAR* str, size_t* size_required)
 {
 	if(str == NULL)
 	{
@@ -621,13 +645,13 @@ static bool does_csv_string_require_escaping(const char* str, size_t* size_requi
 	bool needs_escaping = false;
 	size_t total_size = 0;
 
-	while(*str != '\0')
+	while(*str != TEXT('\0'))
 	{
-		if(*str == ',' || *str == '\n')
+		if(*str == TEXT(',') || *str == TEXT('\n'))
 		{
 			needs_escaping = true;
 		}
-		else if(*str == '\"')
+		else if(*str == TEXT('\"'))
 		{
 			needs_escaping = true;
 			++total_size; // Extra quotation mark.
@@ -648,27 +672,27 @@ static bool does_csv_string_require_escaping(const char* str, size_t* size_requi
 	return needs_escaping;
 }
 
-static void escape_csv_string(char* str)
+static void escape_csv_string(TCHAR* str)
 {
 	if(str == NULL) return;
 
-	char* string_start = str;
+	TCHAR* string_start = str;
 	bool needs_escaping = false;
 
-	while(*str != '\0')
+	while(*str != TEXT('\0'))
 	{
-		if(*str == ',' || *str == '\n')
+		if(*str == TEXT(',') || *str == TEXT('\n'))
 		{
 			needs_escaping = true;
 		}
-		else if(*str == '\"')
+		else if(*str == TEXT('\"'))
 		{
 			needs_escaping = true;
 
-			char* next_char_1 = str + 1;
-			char* next_char_2 = str + 2;
+			TCHAR* next_char_1 = str + 1;
+			TCHAR* next_char_2 = str + 2;
 			MoveMemory(next_char_2, next_char_1, string_size(next_char_1));
-			*next_char_1 = '\"';
+			*next_char_1 = TEXT('\"');
 			++str; // Skip this new quotation mark.
 		}
 
@@ -679,13 +703,13 @@ static void escape_csv_string(char* str)
 	{
 		size_t escaped_string_size = string_size(string_start);
 		MoveMemory(string_start + 1, string_start, escaped_string_size);
-		string_start[0] = '\"';
-		string_start[escaped_string_size] = '\"';
-		string_start[escaped_string_size+1] = '\0';
+		string_start[0] = TEXT('\"');
+		string_start[escaped_string_size] = TEXT('\"');
+		string_start[escaped_string_size+1] = TEXT('\0');
 	}
 }
 
-HANDLE create_csv_file(const char* file_path)
+HANDLE create_csv_file(const TCHAR* file_path)
 {
 	if(file_path == NULL)
 	{
@@ -693,12 +717,12 @@ HANDLE create_csv_file(const char* file_path)
 		return NULL;
 	}
 
-	char full_csv_path[MAX_PATH_CHARS];
-	GetFullPathNameA(file_path, MAX_PATH_CHARS, full_csv_path, NULL);
-	PathAppendA(full_csv_path, "..");
+	TCHAR full_csv_path[MAX_PATH_CHARS];
+	GetFullPathName(file_path, MAX_PATH_CHARS, full_csv_path, NULL);
+	PathAppend(full_csv_path, TEXT(".."));
 	create_directories(full_csv_path);
 
-	return CreateFileA(file_path,
+	return CreateFile(file_path,
 					GENERIC_WRITE,
 					0,
 					NULL,
@@ -719,57 +743,100 @@ void close_csv_file(HANDLE csv_file)
 	}
 }
 
-void csv_print_header(HANDLE csv_file, const char* header)
+void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns)
 {
 	if(csv_file == NULL || csv_file == INVALID_HANDLE_VALUE)
 	{
+		_ASSERT(false);
 		return;
 	}
 
-	DWORD num_bytes_written;
-	WriteFile(csv_file, header, (DWORD) (strlen(header) * sizeof(char)), &num_bytes_written, NULL);
-}
-
-void csv_print_row(Arena* arena, HANDLE csv_file, char* rows[], size_t num_columns)
-{
-	if(csv_file == NULL || csv_file == INVALID_HANDLE_VALUE)
-	{
-		return;
-	}
-
+	char* csv_header = push_arena(arena, 0, char);
 	for(size_t i = 0; i < num_columns; ++i)
 	{
-		char* value = rows[i];
-		size_t size_required; // String size or extra size to properly escape the CSV string.
-		if(does_csv_string_require_escaping(value, &size_required))
-		{
-			value = push_and_copy_to_arena(arena, size_required, char, value, string_size(value));
-			escape_csv_string(value);
-			rows[i] = value;
-		}
-	}
-	
-	char* csv_row = push_arena(arena, 0, char);
-	for(size_t i = 0; i < num_columns; ++i)
-	{
-		char* value = rows[i];
-		size_t value_size = string_size(value);
+		Csv_Type type = row_types[i];
+		const char* column_name = CSV_TYPE_TO_ASCII_STRING[type];
+		size_t column_name_size = string_size(column_name);
+
 		if(i == num_columns - 1)
 		{
-			char* csv_row_value = push_and_copy_to_arena(arena, value_size + 1, char, value, value_size);
-			csv_row_value[value_size - 1] = '\r';
-			csv_row_value[value_size] = '\n';
+			char* csv_column = push_and_copy_to_arena(arena, column_name_size + 1, char, column_name, column_name_size);
+			csv_column[column_name_size - 1] = '\r';
+			csv_column[column_name_size] = '\n';
 		}
 		else
 		{
-			char* csv_row_value = push_and_copy_to_arena(arena, value_size, char, value, value_size);
-			csv_row_value[value_size - 1] = ',';
+			char* csv_column = push_and_copy_to_arena(arena, column_name_size, char, column_name, column_name_size);
+			csv_column[column_name_size - 1] = ',';
 		}
 	}
 
-	size_t csv_row_size = pointer_difference(arena->available_memory, csv_row);
+	DWORD csv_header_size = (DWORD) pointer_difference(arena->available_memory, csv_header);
 	DWORD num_bytes_written;
-	WriteFile(csv_file, csv_row, (DWORD) csv_row_size, &num_bytes_written, NULL);
+	WriteFile(csv_file, csv_header, csv_header_size, &num_bytes_written, NULL);
+}
+
+void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Csv_Entry row[], size_t num_columns)
+{
+	row_types; // @TODO: Use this in the future for file filters/groups.
+
+	if(csv_file == NULL || csv_file == INVALID_HANDLE_VALUE)
+	{
+		_ASSERT(false);
+		return;
+	}
+
+	for(size_t i = 0; i < num_columns; ++i)
+	{
+		TCHAR* value = row[i].value;
+		size_t size_required_for_escaping; // String size or extra size to properly escape the CSV string.
+
+		if(does_csv_string_require_escaping(value, &size_required_for_escaping))
+		{
+			value = push_and_copy_to_arena(arena, size_required_for_escaping, TCHAR, value, string_size(value));
+			escape_csv_string(value);
+		}
+
+		#ifdef BUILD_9X
+			int num_chars_required_utf_16 = MultiByteToWideChar(CP_ACP, 0, value, -1, NULL, 0);
+			int size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
+			
+			wchar_t* utf_16_value = push_arena(arena, size_required_utf_16, wchar_t);
+			MultiByteToWideChar(CP_ACP, 0, value, -1, utf_16_value, num_chars_required_utf_16);
+
+			row[i].utf_16_value = utf_16_value;
+			row[i].value = NULL;
+		#else
+			row[i].utf_16_value = value;
+			row[i].value = NULL;
+		#endif
+	}
+
+	char* csv_row = push_arena(arena, 0, char);
+	for(size_t i = 0; i < num_columns; ++i)
+	{
+		wchar_t* value = row[i].utf_16_value;
+
+		int size_required_utf_8 = WideCharToMultiByte(CP_UTF8, 0, value, -1, NULL, 0, NULL, NULL);
+
+		if(i == num_columns - 1)
+		{
+			char* csv_row_value = push_arena(arena, size_required_utf_8 + 1, char);
+			WideCharToMultiByte(CP_UTF8, 0, value, -1, csv_row_value, size_required_utf_8, NULL, NULL);
+			csv_row_value[size_required_utf_8 - 1] = '\r';
+			csv_row_value[size_required_utf_8] = '\n';
+		}
+		else
+		{
+			char* csv_row_value = push_arena(arena, size_required_utf_8, char);
+			WideCharToMultiByte(CP_UTF8, 0, value, -1, csv_row_value, size_required_utf_8, NULL, NULL);
+			csv_row_value[size_required_utf_8 - 1] = ',';
+		}
+	}
+
+	DWORD csv_row_size = (DWORD) pointer_difference(arena->available_memory, csv_row);
+	DWORD num_bytes_written;
+	WriteFile(csv_file, csv_row, csv_row_size, &num_bytes_written, NULL);
 }
 
 

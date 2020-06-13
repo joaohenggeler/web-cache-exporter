@@ -88,7 +88,7 @@ enum Exporter_Cache_Type
 	CACHE_JAVA_PLUGIN = 3,
 	NUM_CACHE_TYPES = 4
 };
-const char* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] = {"Unknown", "Internet Explorer", "Shockwave Plugin", "Java Plugin"};
+const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] = {TEXT("Unknown"), TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")};
 
 #include "memory_and_file_io.h"
 struct Exporter
@@ -98,8 +98,8 @@ struct Exporter
 	bool should_add_csv_header;
 
 	Exporter_Cache_Type cache_type;
-	char cache_path[MAX_PATH_CHARS];
-	char output_path[MAX_PATH_CHARS];
+	TCHAR cache_path[MAX_PATH_CHARS];
+	TCHAR output_path[MAX_PATH_CHARS];
 
 	Arena arena;
 };

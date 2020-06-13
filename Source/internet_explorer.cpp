@@ -21,6 +21,7 @@
 	---> scheme:[//authority]path[?query][#fragment], where authority is [userinfo@]host[:port]
 */
 
+/*
 static const size_t SIGNATURE_SIZE = 28;
 static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
 static const size_t MAX_NUM_CACHE_DIRECTORIES = 32;
@@ -419,6 +420,8 @@ void export_specific_internet_explorer_cache(Exporter* exporter)
 		log_print(LOG_INFO, "Database error code: %ld", error_code);
 	}
 #endif
+
+*/
 
 /*
 https://www.microsoft.com/en-eg/download/details.aspx?id=1919

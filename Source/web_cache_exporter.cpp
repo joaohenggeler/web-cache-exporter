@@ -3,9 +3,33 @@
 #include "internet_explorer.h"
 #include "shockwave_plugin.h"
 
-// wce.exe -export [Cache Type] [Cache Path] [Export Folder Destination Path]
-// wce.exe -csv [Cache Type] [Cache Path] [CSV File Destination Path]
-// wce.exe [extra stuff] -export-ie
+/*
+	char* 					= %hs
+	wchar_t*  				= %ls
+	TCHAR* 					= %s
+	void* / HANDLE 			= %p
+	char 					= %hc / %hhd
+	unsigned char 			= %hhu
+	wchar_t 				= %lc
+	TCHAR 					= %c
+
+	short / s16				= %hd
+	unsigned short / u16 	= %hu
+	long / LONG				= %ld
+	unsigned long / ULONG	= %lu
+	long long 				= %lld
+	u32						= %I32u
+	s32						= %I32d
+	u64						= %I64u
+	s64						= %I64d
+	WORD 					= %hu
+	DWORD 					= %lu
+	QWORD 					= %I64u
+	size_t 					= %Iu
+	ptrdiff_t				= %Id
+
+	uint in hexadecimal		= 0x%08X
+*/
 
 static TCHAR* skip_to_suboption(TCHAR* str)
 {
@@ -49,6 +73,19 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		else if(lstrcmpi(option, TEXT("-no-csv-header")) == 0)
 		{
 			exporter->should_add_csv_header = false;
+		}
+		else if(lstrcmpi(option, TEXT("-find-and-export-all")) == 0)
+		{
+			exporter->cache_type = CACHE_ALL;
+
+			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
+			{
+				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+1]);
+			}
+			PathAppend(exporter->output_path, TEXT("ExportedCache"));
+
+			seen_export_option = true;
+			break;
 		}
 		else if(_tcsncicmp(option, TEXT("-export"), 7) == 0)
 		{
@@ -141,7 +178,7 @@ int _tmain(int argc, TCHAR* argv[])
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Web Cache Exporter version %hs", BUILD_VERSION);
 
-	/*if(argc <= 1)
+	if(argc <= 1)
 	{
 		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and exit.");
 		console_print("-no-copy-files\n");
@@ -153,7 +190,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 		clean_up(&exporter);
 		return 1;
-	}*/
+	}
 
 	if(!parse_exporter_arguments(argc, argv, &exporter))
 	{
@@ -162,7 +199,10 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
-	if(!create_arena(&exporter.arena, megabytes_to_bytes(4)))
+	size_t memory_to_use = megabytes_to_bytes(4) * sizeof(TCHAR);
+	debug_log_print("Allocating %Iu bytes for the main memory arena.", memory_to_use);
+
+	if(!create_arena(&exporter.arena, memory_to_use))
 	{
 		log_print(LOG_ERROR, "Could not allocate enough memory to run the program.");
 		clean_up(&exporter);
@@ -188,7 +228,7 @@ int _tmain(int argc, TCHAR* argv[])
 	debug_log_print("- Cache Path: '%s'", (exporter.cache_path != NULL) ? (exporter.cache_path) : (TEXT("-")));
 	debug_log_print("- Output Path: '%s'", (exporter.output_path != NULL) ? (exporter.output_path) : (TEXT("-")));
 
-	if(is_string_empty(exporter.cache_path))
+	if(is_string_empty(exporter.cache_path) && (exporter.cache_type != CACHE_ALL))
 	{
 		log_print(LOG_INFO, "No cache path specified. Exporting the cache from any existing default directories.");
 	}
@@ -199,7 +239,7 @@ int _tmain(int argc, TCHAR* argv[])
 	{
 		case(CACHE_INTERNET_EXPLORER):
 		{
-			//export_specific_or_default_internet_explorer_cache(&exporter);
+			export_specific_or_default_internet_explorer_cache(&exporter);
 		} break;
 
 		case(CACHE_SHOCKWAVE_PLUGIN):
@@ -209,7 +249,19 @@ int _tmain(int argc, TCHAR* argv[])
 
 		case(CACHE_JAVA_PLUGIN):
 		{
+			_ASSERT(false);
+		} break;
 
+		case(CACHE_ALL):
+		{
+			_ASSERT(is_string_empty(exporter.cache_path));
+
+			export_specific_or_default_internet_explorer_cache(&exporter);
+			exporter.cache_path[0] = TEXT('\0');
+			log_print(LOG_NONE, "");
+
+			export_specific_or_default_shockwave_plugin_cache(&exporter);
+			exporter.cache_path[0] = TEXT('\0');
 		} break;
 
 		default:

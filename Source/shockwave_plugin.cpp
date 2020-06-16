@@ -79,6 +79,8 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 
 void export_specific_shockwave_plugin_cache(Exporter* exporter)
 {
+	Arena* arena = &(exporter->arena);
+
 	TCHAR cache_path[MAX_PATH_CHARS];
 	GetFullPathName(exporter->cache_path, MAX_PATH_CHARS, cache_path, NULL);
 	log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", cache_path);
@@ -92,7 +94,7 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 	PathAppend(output_csv_path, TEXT("ShockwavePlugin.csv"));
 
 	const size_t CSV_NUM_COLUMNS = 7;
-	const Csv_Type CSV_HEADER[CSV_NUM_COLUMNS] =
+	const Csv_Type csv_header[CSV_NUM_COLUMNS] =
 	{
 		CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 		CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME, CSV_CREATION_TIME, 
@@ -103,8 +105,8 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 	if(exporter->should_create_csv)
 	{
 		csv_file = create_csv_file(output_csv_path);
-		csv_print_header(&exporter->arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
-		clear_arena(&exporter->arena);
+		csv_print_header(arena, csv_file, csv_header, CSV_NUM_COLUMNS);
+		clear_arena(arena);
 	}
 
 	TCHAR search_cache_path[MAX_PATH_CHARS];
@@ -124,6 +126,7 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 		}
 
 		TCHAR* filename = file_find_data.cFileName;
+		_ASSERT(filename != NULL);
 
 		TCHAR full_file_path[MAX_PATH_CHARS];
 		StringCchCopy(full_file_path, MAX_PATH_CHARS, cache_path);
@@ -155,18 +158,22 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 				{director_file_type}
 			};
 
-			csv_print_row(&exporter->arena, csv_file, CSV_HEADER, csv_row, CSV_NUM_COLUMNS);
+			csv_print_row(arena, csv_file, csv_header, csv_row, CSV_NUM_COLUMNS);
 		}
 
 		if(exporter->should_copy_files)
 		{
-			copy_file_using_url_directory_structure(&exporter->arena, full_file_path, output_copy_path, NULL, filename);
+			copy_file_using_url_directory_structure(arena, full_file_path, output_copy_path, NULL, filename);
 		}
 
-		clear_arena(&exporter->arena);
+		clear_arena(arena);
 
 		found_file = FindNextFile(search_handle, &file_find_data) == TRUE;
 	}
 
+	FindClose(search_handle);
+	search_handle = INVALID_HANDLE_VALUE;
+
 	close_csv_file(csv_file);
+	csv_file = INVALID_HANDLE_VALUE;
 }

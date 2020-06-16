@@ -83,12 +83,19 @@ typedef double float64;
 enum Exporter_Cache_Type
 {
 	CACHE_UNKNOWN = 0,
-	CACHE_INTERNET_EXPLORER = 1,
-	CACHE_SHOCKWAVE_PLUGIN = 2,
-	CACHE_JAVA_PLUGIN = 3,
-	NUM_CACHE_TYPES = 4
+	CACHE_ALL = 1,
+
+	CACHE_INTERNET_EXPLORER = 2,
+	CACHE_SHOCKWAVE_PLUGIN = 3,
+	CACHE_JAVA_PLUGIN = 4,
+	
+	NUM_CACHE_TYPES = 5
 };
-const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] = {TEXT("Unknown"), TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")};
+const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
+{
+	TEXT("Unknown"), TEXT("All"),
+	TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
+};
 
 #include "memory_and_file_io.h"
 struct Exporter

@@ -2,8 +2,13 @@
 #include "memory_and_file_io.h"
 
 #ifdef DEBUG
-	void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = (void*) 0x10000000;
-	void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = (void*) 0x50000000;
+	#ifdef BUILD_9X
+		void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = NULL;
+		void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = NULL;
+	#else
+		void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = (void*) 0x10000000;
+		void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = (void*) 0x50000000;
+	#endif
 #endif
 
 bool create_arena(Arena* arena, size_t total_size)
@@ -41,7 +46,7 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 	_ASSERT(arena->used_size + aligned_push_size <= arena->total_size);
 
 	#ifdef DEBUG
-	FillMemory(aligned_address, aligned_push_size, 0xFF);
+		FillMemory(aligned_address, aligned_push_size, 0xFF);
 	#endif
 
 	arena->available_memory = advance_bytes(arena->available_memory, aligned_push_size);
@@ -67,7 +72,7 @@ void clear_arena(Arena* arena)
 
 	arena->available_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	#ifdef DEBUG
-	SecureZeroMemory(arena->available_memory, arena->used_size);
+		SecureZeroMemory(arena->available_memory, arena->used_size);
 	#endif
 	arena->used_size = 0;
 }
@@ -96,7 +101,15 @@ bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
 
 	SYSTEMTIME dt;
 	bool success = FileTimeToSystemTime(&date_time, &dt) != 0;
-	return success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%4d-%02d-%02d %02d:%02d:%02d"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+	success = success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%4hu-%02hu-%02hu %02hu:%02hu:%02hu"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+
+	if(!success)
+	{
+		debug_log_print("Error %lu while trying to convert FILETIME datetime (high datetime = %lu, low datetime = %lu).", GetLastError(), date_time.dwHighDateTime, date_time.dwLowDateTime);
+		*formatted_string = TEXT('\0');
+	}
+
+	return success;
 }
 
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
@@ -109,7 +122,15 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 
 	FILETIME filetime;
 	bool success = DosDateTimeToFileTime(date_time.date, date_time.time, &filetime) != 0;
-	return success && format_filetime_date_time(filetime, formatted_string);
+	success = success && format_filetime_date_time(filetime, formatted_string);
+
+	if(!success)
+	{
+		debug_log_print("Error %lu while trying to convert DOS datetime (date = %I32u, time = %I32u).", GetLastError(), date_time.date, date_time.time);
+		*formatted_string = TEXT('\0');
+	}
+
+	return success;
 }
 
 const size_t INT_FORMAT_RADIX = 10;
@@ -122,11 +143,58 @@ bool convert_u64_to_string(u64 value, TCHAR* result_string)
 	return _ui64tot_s(value, result_string, MAX_UINT64_CHARS, INT_FORMAT_RADIX) != 0;
 }
 
+TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
+{
+	#ifdef BUILD_9X
+		return push_and_copy_to_arena(arena, string_size(ansi_string), char, ansi_string, string_size(ansi_string));
+	#else
+		int num_chars_required = MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, NULL, 0);
+		int size_required = num_chars_required * sizeof(wchar_t);
+			
+		wchar_t* wide_string = push_arena(arena, size_required, wchar_t);
+		MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, wide_string, num_chars_required);
+		return wide_string;
+	#endif
+	//size_t total_num_chars = string_size(ansi_string) / sizeof(char);
+	//return copy_ansi_string_to_tchar(arena, ansi_string, total_num_chars);
+}
+
+/*
+TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string, size_t num_chars)
+{
+	#ifdef BUILD_9X
+		size_t size_to_copy_ansi = num_chars * sizeof(char);
+		return push_and_copy_to_arena(arena, size_to_copy_ansi, char, ansi_string, size_to_copy_ansi);
+	#else
+		int size_to_copy_ansi = (int) (num_chars * sizeof(char));
+
+		int num_chars_required_utf_16 = MultiByteToWideChar(CP_ACP, 0, ansi_string, size_to_copy_ansi, NULL, 0);
+		size_t size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
+		wchar_t* wide_string = push_arena(arena, size_required_utf_16, wchar_t);
+
+		MultiByteToWideChar(CP_ACP, 0, ansi_string, size_to_copy_ansi, wide_string, num_chars_required_utf_16);
+		return wide_string;
+	#endif
+}*/
+
 char* skip_leading_whitespace(char* str)
 {
 	if(str != NULL)
 	{
 		while(*str == ' ' || *str == '\t')
+		{
+			++str;
+		}
+	}
+
+	return str;
+}
+
+wchar_t* skip_leading_whitespace(wchar_t* str)
+{
+	if(str != NULL)
+	{
+		while(*str == L' ' || *str == L'\t')
 		{
 			++str;
 		}
@@ -176,32 +244,32 @@ TCHAR* skip_to_file_extension(TCHAR* str)
 	return file_extension;*/
 }
 
-static s8 hexadecimal_char_to_numeric(char hex_char)
+static s8 hexadecimal_char_to_numeric(TCHAR hex_char)
 {
-	if('0' <= hex_char && hex_char <= '9') return hex_char - '0';
-	else if('a' <= hex_char && hex_char <= 'f') return hex_char - 'a' + 0x0A;
-	else if('A' <= hex_char && hex_char <= 'F') return hex_char - 'A' + 0x0A;
+	if(TEXT('0') <= hex_char && hex_char <= TEXT('9')) return (s8) (hex_char - TEXT('0'));
+	else if(TEXT('a') <= hex_char && hex_char <= TEXT('f')) return (s8) (hex_char - TEXT('a') + 0x0A);
+	else if(TEXT('A') <= hex_char && hex_char <= TEXT('F')) return (s8) (hex_char - TEXT('A') + 0x0A);
 	else return -1;
 }
 
-bool decode_url(const char* url, char* decoded_url)
+bool decode_url(const TCHAR* url, TCHAR* decoded_url)
 {
 	bool success = true;
 
 	if(url != NULL)
 	{
-		while(*url != '\0')
+		while(*url != TEXT('\0'))
 		{
-			if(*url == '%')
+			if(*url == TEXT('%'))
 			{
-				char next_char_1 = *(url+1);
-				char next_char_2 = (next_char_1 != '\0') ? (*(url+2)) : ('\0');
+				TCHAR next_char_1 = *(url+1);
+				TCHAR next_char_2 = (next_char_1 != TEXT('\0')) ? (*(url+2)) : (TEXT('\0'));
 				s8 next_value_1 = hexadecimal_char_to_numeric(next_char_1);
 				s8 next_value_2 = hexadecimal_char_to_numeric(next_char_2);
 
 				if(next_value_1 > -1 && next_value_2 > -1)
 				{
-					*decoded_url = (char) (next_value_1 * 16 + next_value_2);
+					*decoded_url = (TCHAR) (next_value_1 * 16 + next_value_2);
 					url += 3; // Skip "%xx".
 				}
 				else
@@ -210,9 +278,9 @@ bool decode_url(const char* url, char* decoded_url)
 					break;
 				}
 			}
-			else if(*url == '+')
+			else if(*url == TEXT('+'))
 			{
-				*decoded_url = ' ';
+				*decoded_url = TEXT(' ');
 				url += 1;
 			}
 			else
@@ -224,7 +292,7 @@ bool decode_url(const char* url, char* decoded_url)
 			++decoded_url;
 		}
 
-		*decoded_url = '\0';
+		*decoded_url = TEXT('\0');
 	}
 
 	return success;
@@ -237,6 +305,7 @@ static void convert_url_to_path(TCHAR* url)
 	TCHAR* url_start = url;
 	TCHAR* last_path_separator = NULL;
 	TCHAR* url_path_start = NULL;
+
 	while(*url != TEXT('\0'))
 	{
 		if(*url == TEXT('/'))
@@ -377,7 +446,7 @@ bool get_file_size(HANDLE file_handle, u64* file_size_result)
 	#ifdef BUILD_9X
 		DWORD file_size_high;
 		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
-		bool success = (file_size_low == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR);
+		bool success = GetLastError() == NO_ERROR;
 		if(success) *file_size_result = combine_high_and_low_u32s(file_size_high, file_size_low);
 		return success;
 	#else
@@ -388,11 +457,12 @@ bool get_file_size(HANDLE file_handle, u64* file_size_result)
 	#endif
 }
 
-void* memory_map_entire_file(char* path)
+void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result)
 {
 	void* mapped_memory = NULL;
+	*file_size_result = 0;
 
-	HANDLE file_handle = CreateFileA(path,
+	HANDLE file_handle = CreateFile(file_path,
 								     GENERIC_READ,
 								     FILE_SHARE_READ, // @Note: MSDN recommends exclusive access (though not required).
 								     NULL,
@@ -406,9 +476,10 @@ void* memory_map_entire_file(char* path)
 		u64 file_size;
 		if(get_file_size(file_handle, &file_size))
 		{
+			*file_size_result = file_size;
 			if(file_size > 0)
 			{
-				HANDLE mapping_handle = CreateFileMappingA(file_handle, NULL, PAGE_READONLY, 0, 0, NULL);
+				HANDLE mapping_handle = CreateFileMapping(file_handle, NULL, PAGE_READONLY, 0, 0, NULL);
 
 				if(mapping_handle != NULL)
 				{
@@ -417,34 +488,71 @@ void* memory_map_entire_file(char* path)
 					#else
 						mapped_memory = MapViewOfFile(mapping_handle, FILE_MAP_READ, 0, 0, 0);
 					#endif
-					_ASSERT(mapped_memory != NULL);
+
+					if(mapped_memory == NULL)
+					{
+						log_print(LOG_ERROR, "Error %lu while trying to map a view of the file '%s'.", GetLastError(), file_path);
+					}
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Error %d while trying to create the file mapping for '%s'.", GetLastError(), path);
+					log_print(LOG_ERROR, "Error %lu while trying to create the file mapping for '%s'.", GetLastError(), file_path);
 				}
 
 				CloseHandle(mapping_handle); // @Note: According to MSDN, CloseHandle() and UnmapViewOfFile() can be called in any order.
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Skipping file mapping for empty file '%s'.", path);
+				log_print(LOG_WARNING, "Skipping file mapping for empty file '%s'.", file_path);
 			}
 
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Error %d while trying to get the file size for '%s'.", GetLastError(), path);
+			log_print(LOG_ERROR, "Error %lu while trying to get the file size for '%s'.", GetLastError(), file_path);
 		}
 
 		CloseHandle(file_handle); // @Note: "Files for which the last view has not yet been unmapped are held open with no sharing restrictions."
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Error %d while trying to get the file handle for '%s'.", GetLastError(), path);
+		log_print(LOG_ERROR, "Error %lu while trying to get the file handle for '%s'.", GetLastError(), file_path);
 	}
 
 	return mapped_memory;
+}
+
+bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_file_path_result)
+{
+	bool success = false;
+
+	const size_t NUM_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
+	TCHAR temporary_path[NUM_TEMPORARY_PATH_CHARS];
+
+	if(GetTempPath(NUM_TEMPORARY_PATH_CHARS, temporary_path) != 0)
+	{
+		if(GetTempFileName(temporary_path, TEXT("WCE"), 0, full_temporary_file_path_result) != 0)
+		{
+			if(CopyFile(full_source_file_path, full_temporary_file_path_result, FALSE) == TRUE)
+			{
+				success = true;
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Error %lu while trying to copy to the temporary file '%s'.", GetLastError(), full_temporary_file_path_result);
+			}
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Error %lu while trying to get the temporary file path in '%s'.", GetLastError(), temporary_path);
+		}
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Error %lu while trying to get the temporary directory path.", GetLastError());
+	}
+
+	return success;
 }
 
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read)
@@ -474,26 +582,13 @@ bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_re
 	return success;
 }
 
-/*
-_byteswap_ushort
-_byteswap_ulong
-_byteswap_uint64
-*/
-
-void copy_byte_range(void* source, void* destination, /*size_t destination_size,*/ size_t offset, size_t num_bytes_to_copy)
-{
-	source = advance_bytes(source, offset);
-	CopyMemory(destination, source, num_bytes_to_copy);
-	//memcpy_s(destination, destination_size, source, num_bytes_to_copy);
-}
-
-bool query_registry(HKEY hkey, const char* key_name, const char* value_name, char* value_data, DWORD value_data_size)
+bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, DWORD value_data_size)
 {
 	LONG error_code;
 	bool success;
 
 	HKEY opened_key;
-	error_code = RegOpenKeyExA(hkey, key_name, 0, KEY_QUERY_VALUE, &opened_key);
+	error_code = RegOpenKeyEx(hkey, key_name, 0, KEY_QUERY_VALUE, &opened_key);
 	success = (error_code == ERROR_SUCCESS);
 
 	if(!success)
@@ -507,7 +602,7 @@ bool query_registry(HKEY hkey, const char* key_name, const char* value_name, cha
 
 	DWORD value_data_type;
 	// If RegQueryValueExA succeeds, value_data_size is set to the actual value's size instead of the buffer's size.
-	error_code = RegQueryValueExA(opened_key, value_name, NULL, &value_data_type, (unsigned char*) value_data, &value_data_size);
+	error_code = RegQueryValueEx(opened_key, value_name, NULL, &value_data_type, (unsigned char*) value_data, &value_data_size);
 	success = (error_code == ERROR_SUCCESS);
 	RegCloseKey(opened_key);
 
@@ -519,19 +614,19 @@ bool query_registry(HKEY hkey, const char* key_name, const char* value_name, cha
 		success = false;
 	}
 
-	// According to MSDN, we need to ensure that the string we read is null terminated. For strings that are already null
-	// terminated, this just adds an extra one. Whoever calls this function should always guarantee that the buffer is able
-	// to hold the string value plus a null terminator.
-	if(success)
+	// According to MSDN, we need to ensure that the string we read is null terminated. Whoever calls this function should
+	// always guarantee that the buffer is able to hold whatever the possible string values are plus a null terminator.
+	size_t num_value_data_chars = value_data_size / sizeof(TCHAR);
+	if(success && value_data[num_value_data_chars - 1] != TEXT('\0'))
 	{
-		value_data[value_data_size] = '\0';
+		value_data[num_value_data_chars] = TEXT('\0');
 	}
 
 	SetLastError(error_code);
 	return success;
 }
 
-static HANDLE LOG_FILE_HANDLE = NULL;
+static HANDLE LOG_FILE_HANDLE = INVALID_HANDLE_VALUE;
 bool create_log_file(const TCHAR* file_path)
 {
 	if(file_path == NULL)
@@ -561,7 +656,7 @@ void close_log_file(void)
 	if(LOG_FILE_HANDLE != NULL && LOG_FILE_HANDLE != INVALID_HANDLE_VALUE)
 	{
 		CloseHandle(LOG_FILE_HANDLE);
-		LOG_FILE_HANDLE = NULL;
+		LOG_FILE_HANDLE = INVALID_HANDLE_VALUE;
 	}
 	else
 	{
@@ -572,34 +667,6 @@ void close_log_file(void)
 const size_t MAX_CHARS_PER_LOG_TYPE = 16;
 const size_t MAX_CHARS_PER_LOG_MESSAGE = 4096;
 const size_t MAX_CHARS_PER_LOG_WRITE = MAX_CHARS_PER_LOG_TYPE + MAX_CHARS_PER_LOG_MESSAGE + 2;
-// @TODO: Would the log_printW idea work with WideCharToMultibyte?
-/*void log_print(Log_Type log_type, const char* string_format, ...)
-{
-	if(LOG_FILE_HANDLE == NULL || LOG_FILE_HANDLE == INVALID_HANDLE_VALUE)
-	{
-		_ASSERT(false);
-		return;
-	}
-
-	char log_buffer[MAX_CHARS_PER_LOG_WRITE];
-
-	StringCchCopyA(log_buffer, MAX_CHARS_PER_LOG_TYPE, LOG_TYPE_TO_STRING[log_type]);
-	size_t num_log_type_chars;
-	StringCchLengthA(log_buffer, MAX_CHARS_PER_LOG_TYPE, &num_log_type_chars);
-
-	va_list arguments;
-	va_start(arguments, string_format);
-	StringCchVPrintfA(&log_buffer[num_log_type_chars], MAX_CHARS_PER_LOG_MESSAGE, string_format, arguments);
-	va_end(arguments);
-
-	StringCchCatA(log_buffer, MAX_CHARS_PER_LOG_WRITE, "\r\n");
-
-	size_t num_chars_to_write;
-	StringCchLengthA(log_buffer, MAX_CHARS_PER_LOG_WRITE, &num_chars_to_write);
-
-	DWORD num_bytes_written;
-	WriteFile(LOG_FILE_HANDLE, log_buffer, (DWORD) (num_chars_to_write * sizeof(char)), &num_bytes_written, NULL);
-}*/
 
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 {
@@ -643,7 +710,7 @@ static bool does_csv_string_require_escaping(const TCHAR* str, size_t* size_requ
 	}
 
 	bool needs_escaping = false;
-	size_t total_size = 0;
+	size_t total_num_chars = 0;
 
 	while(*str != TEXT('\0'))
 	{
@@ -654,21 +721,21 @@ static bool does_csv_string_require_escaping(const TCHAR* str, size_t* size_requ
 		else if(*str == TEXT('\"'))
 		{
 			needs_escaping = true;
-			++total_size; // Extra quotation mark.
+			++total_num_chars; // Extra quotation mark.
 		}
 
-		++total_size;
+		++total_num_chars;
 		++str;
 	}
 
-	++total_size; // Null terminator.
+	++total_num_chars; // Null terminator.
 
 	if(needs_escaping)
 	{
-		total_size += 2; // Two quotation marks to wrap the value.
+		total_num_chars += 2; // Two quotation marks to wrap the value.
 	}
 
-	*size_required = total_size;
+	*size_required = total_num_chars * sizeof(TCHAR);
 	return needs_escaping;
 }
 
@@ -702,10 +769,11 @@ static void escape_csv_string(TCHAR* str)
 	if(needs_escaping)
 	{
 		size_t escaped_string_size = string_size(string_start);
+		size_t num_escaped_string_chars = escaped_string_size / sizeof(TCHAR);
 		MoveMemory(string_start + 1, string_start, escaped_string_size);
 		string_start[0] = TEXT('\"');
-		string_start[escaped_string_size] = TEXT('\"');
-		string_start[escaped_string_size+1] = TEXT('\0');
+		string_start[num_escaped_string_chars] = TEXT('\"');
+		string_start[num_escaped_string_chars+1] = TEXT('\0');
 	}
 }
 
@@ -789,6 +857,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	for(size_t i = 0; i < num_columns; ++i)
 	{
 		TCHAR* value = row[i].value;
+		if(value == NULL) value = TEXT(""); // An empty string never needs escaping.
 		size_t size_required_for_escaping; // String size or extra size to properly escape the CSV string.
 
 		if(does_csv_string_require_escaping(value, &size_required_for_escaping))

@@ -11,17 +11,8 @@
 	- https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20(index.dat)%20format.asciidoc
 	- https://github.com/csuft/QIECacheViewer/blob/master/README.md
 	- http://en.verysource.com/code/4134901_1/cachedef.h.html
-
-	@TODO:
-	- Escape CSV values
-	- Decode URLs
-	- Resolve paths
-	- Check if file exists in cache directory
-	- Copy file from cache directory to subdirectories structured like the original URL
-	---> scheme:[//authority]path[?query][#fragment], where authority is [userinfo@]host[:port]
 */
 
-/*
 static const size_t SIGNATURE_SIZE = 28;
 static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
 static const size_t MAX_NUM_CACHE_DIRECTORIES = 32;
@@ -130,19 +121,19 @@ _STATIC_ASSERT(sizeof(Internet_Explorer_Index_Url_Entry) == 0x60);
 
 // ----------------------------------------------------------------------------------------------------
 
-// log_print(LOG_INFO, "Internet Explorer: Error %d while querying the registry for the browser's version.\n", GetLastError());
-bool find_internet_explorer_version(char* ie_version, DWORD ie_version_size)
+bool find_internet_explorer_version(TCHAR* ie_version, DWORD ie_version_size)
 {
 	return query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "svcVersion", ie_version, ie_version_size)
 		|| query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ie_version, ie_version_size);
 }
 
-bool find_internet_explorer_cache(char* cache_path)
+
+bool find_internet_explorer_cache(TCHAR* cache_path)
 {
 	#ifdef BUILD_9X
-		return SHGetSpecialFolderPathA(NULL, cache_path, CSIDL_INTERNET_CACHE, FALSE) == TRUE;
+		return SHGetSpecialFolderPath(NULL, cache_path, CSIDL_INTERNET_CACHE, FALSE) == TRUE;
 	#else
-		return SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_INTERNET_CACHE, NULL, SHGFP_TYPE_CURRENT, cache_path));
+		return SUCCEEDED(SHGetFolderPath(NULL, CSIDL_INTERNET_CACHE, NULL, SHGFP_TYPE_CURRENT, cache_path));
 	#endif
 }
 
@@ -153,7 +144,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		if(find_internet_explorer_cache(exporter->cache_path))
 		{
 			const size_t ie_version_size = 32;
-			char ie_version[ie_version_size] = "";
+			TCHAR ie_version[ie_version_size] = TEXT("");
 			find_internet_explorer_version(ie_version, ie_version_size);
 			log_print(LOG_INFO, "Internet Explorer: Browser version in the current user is '%s'.", ie_version);
 			
@@ -171,242 +162,309 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	}
 }
 
-//void export_specific_internet_explorer_cache(Arena* &exporter->arena, char* index_path)
 void export_specific_internet_explorer_cache(Exporter* exporter)
 {
-	char cache_path[MAX_PATH_CHARS];
-	GetFullPathNameA(exporter->cache_path, MAX_PATH_CHARS, cache_path, NULL);
+	Arena* arena = &(exporter->arena);
+
+	TCHAR cache_path[MAX_PATH_CHARS];
+	GetFullPathName(exporter->cache_path, MAX_PATH_CHARS, cache_path, NULL);
 	log_print(LOG_INFO, "Internet Explorer: Exporting the cache from '%s'.", cache_path);
 
-	char index_path[MAX_PATH_CHARS];
-	StringCchCopyA(index_path, MAX_PATH_CHARS, cache_path);
-	PathAppendA(index_path, "Content.IE5\\index.dat");
+	TCHAR index_path[MAX_PATH_CHARS];
+	StringCchCopy(index_path, MAX_PATH_CHARS, cache_path);
+	PathAppend(index_path, TEXT("Content.IE5\\index.dat"));
 
-	char output_copy_path[MAX_PATH_CHARS];
-	GetFullPathNameA(exporter->output_path, MAX_PATH_CHARS, output_copy_path, NULL);
-	PathAppendA(output_copy_path, "InternetExplorer");
+	TCHAR output_copy_path[MAX_PATH_CHARS];
+	GetFullPathName(exporter->output_path, MAX_PATH_CHARS, output_copy_path, NULL);
+	PathAppend(output_copy_path, TEXT("InternetExplorer"));
 	
-	char output_csv_path[MAX_PATH_CHARS];
-	GetFullPathNameA(exporter->output_path, MAX_PATH_CHARS, output_csv_path, NULL);
-	PathAppendA(output_csv_path, "InternetExplorer.csv");
+	TCHAR output_csv_path[MAX_PATH_CHARS];
+	GetFullPathName(exporter->output_path, MAX_PATH_CHARS, output_csv_path, NULL);
+	PathAppend(output_csv_path, TEXT("InternetExplorer.csv"));
 
-	// @TODO: Handle "Content.IE5" and other known locations by default to make it so we can just pass the normal Temporary Internet Files path.
-	void* index_file = memory_map_entire_file(index_path);
+	u64 index_file_size;
+	void* index_file = memory_map_entire_file(index_path, &index_file_size);
+	bool was_index_copied_to_temporary_file = false;
+	TCHAR temporary_index_path[MAX_PATH_CHARS];
 
-	if(index_file != NULL)
+	if(index_file == NULL && GetLastError() == ERROR_SHARING_VIOLATION)
 	{
-		Internet_Explorer_Index_Header* header = (Internet_Explorer_Index_Header*) index_file;
-
-		_ASSERT(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) == 0);
-		_ASSERT(header->_reserved_1 == 0);
-		_ASSERT(header->_reserved_2 == 0);
-		_ASSERT(header->_reserved_3 == 0);
-		_ASSERT(header->_reserved_4 == 0);
-		_ASSERT(header->_reserved_5 == 0);
+		log_print(LOG_INFO, "Internet Explorer: Failed to open the index file since its being used by another process. Attempting to create a copy and opening that one...");
 		
-		unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
-		void* blocks = advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
-		
-		const char* CSV_HEADER = "Filename,URL,File Extension,File Size,Last Modified Time,Last Access Time,Creation Time,Expiry Time,Server Response,Content-Type,Content-Length,Content-Encoding,Hits,Location On Cache,Missing File,Leak Entry\r\n";
-		const size_t CSV_NUM_COLUMNS = 16;
-		HANDLE csv_file = INVALID_HANDLE_VALUE;
-		if(exporter->should_create_csv)
+		if(copy_to_temporary_file(index_path, temporary_index_path))
 		{
-			csv_file = create_csv_file(output_csv_path);
-			csv_print_header(csv_file, CSV_HEADER);
+			log_print(LOG_INFO, "Internet Explorer: Copied the index file to '%s'.", temporary_index_path);
+			was_index_copied_to_temporary_file = true;
+			index_file = memory_map_entire_file(temporary_index_path, &index_file_size);
 		}
-
-		for(u32 i = 0; i < header->num_blocks; ++i)
+		else
 		{
-			size_t byte_index = i / CHAR_BIT;
-			size_t block_index_in_byte = i % CHAR_BIT;
+			log_print(LOG_ERROR, "Internet Explorer: Failed to create a copy of the index file.");
+		}
+	}
 
-			bool is_block_allocated = ( allocation_bitmap[byte_index] & (1 << block_index_in_byte) ) != 0;
+	if(index_file == NULL)
+	{
+		log_print(LOG_ERROR, "Internet Explorer: Failed to open the index file correctly. No files will be exported from this cache.");
+		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		return;
+	}
 
-			if(is_block_allocated)
+	if(index_file_size < sizeof(Internet_Explorer_Index_Header))
+	{
+		log_print(LOG_ERROR, "Internet Explorer: The size of the opened index file is smaller than the file format's header. No files will be exported from this cache.");
+		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		_ASSERT(false);
+		return;
+	}
+
+	Internet_Explorer_Index_Header* header = (Internet_Explorer_Index_Header*) index_file;
+
+	if(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) != 0)
+	{
+		char signature_string[SIGNATURE_SIZE + 1];
+		CopyMemory(signature_string, header->signature, SIGNATURE_SIZE);
+		signature_string[SIGNATURE_SIZE] = '\0';
+
+		log_print(LOG_ERROR, "Internet Explorer: The index file starts with an invalid signature: '%hs'. No files will be exported from this cache.", signature_string);
+		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		_ASSERT(false);
+		return;
+	}
+
+	if(index_file_size != header->file_size)
+	{
+		log_print(LOG_ERROR, "Internet Explorer: The size of the opened index file is different than the size specified in its header. No files will be exported from this cache.");
+		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		_ASSERT(false);
+		return;
+	}
+
+	log_print(LOG_INFO, "Internet Explorer: The index file was opened successfully. Starting the export process.");
+
+	#ifdef DEBUG
+		debug_log_print("Internet Explorer: Header->Reserved_1: 0x%08X", header->_reserved_1);
+		debug_log_print("Internet Explorer: Header->Reserved_2: 0x%08X", header->_reserved_2);
+		debug_log_print("Internet Explorer: Header->Reserved_3: 0x%08X", header->_reserved_3);
+		debug_log_print("Internet Explorer: Header->Reserved_4: 0x%08X", header->_reserved_4);
+		debug_log_print("Internet Explorer: Header->Reserved_5: 0x%08X", header->_reserved_5);
+	#endif
+
+	const size_t CSV_NUM_COLUMNS = 16;
+	const Csv_Type csv_header[CSV_NUM_COLUMNS] =
+	{
+		CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
+		CSV_LAST_MODIFIED_TIME, CSV_LAST_ACCESS_TIME, CSV_CREATION_TIME, CSV_EXPIRY_TIME,
+		CSV_SERVER_RESPONSE, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
+		CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE, CSV_LEAK_ENTRY
+	};
+	
+	HANDLE csv_file = INVALID_HANDLE_VALUE;
+	if(exporter->should_create_csv)
+	{
+		csv_file = create_csv_file(output_csv_path);
+		csv_print_header(arena, csv_file, csv_header, CSV_NUM_COLUMNS);
+		clear_arena(arena);
+	}
+
+	unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
+	void* blocks = advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
+	
+	for(u32 i = 0; i < header->num_blocks; ++i)
+	{
+		size_t byte_index = i / CHAR_BIT;
+		size_t block_index_in_byte = i % CHAR_BIT;
+
+		bool is_block_allocated = ( allocation_bitmap[byte_index] & (1 << block_index_in_byte) ) != 0;
+
+		if(is_block_allocated)
+		{
+			void* current_block = advance_bytes(blocks, i * BLOCK_SIZE);
+			Internet_Explorer_Index_File_Map_Entry* entry = (Internet_Explorer_Index_File_Map_Entry*) current_block;
+
+			switch(entry->signature)
 			{
-				void* current_block = advance_bytes(blocks, i * BLOCK_SIZE);
-				Internet_Explorer_Index_File_Map_Entry* entry = (Internet_Explorer_Index_File_Map_Entry*) current_block;
-
-				switch(entry->signature)
+				case(ENTRY_URL):
+				case(ENTRY_LEAK):
 				{
-					case(ENTRY_URL):
-					case(ENTRY_LEAK):
+					Internet_Explorer_Index_Url_Entry* url_entry = (Internet_Explorer_Index_Url_Entry*) advance_bytes(entry, sizeof(Internet_Explorer_Index_File_Map_Entry));
+
+					const char* filename_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_filename);
+					TCHAR* decorated_filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
+					TCHAR* filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
+					PathUndecorate(filename);
+
+					TCHAR* file_extension_start = skip_to_file_extension(filename);
+					TCHAR* file_extension = push_and_copy_to_arena(arena, string_size(file_extension_start), TCHAR, file_extension_start, string_size(file_extension_start));
+
+					const char* url_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_url);
+					TCHAR* url = copy_ansi_string_to_tchar(arena, url_in_mmf);
+					// @TODO: Change decode_url() so it decodes the URL in-place.
+					TCHAR* url_copy = push_and_copy_to_arena(arena, string_size(url), TCHAR, url, string_size(url));
+					if(!decode_url(url_copy, url)) url = NULL;
+
+					const char* headers_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_headers);
+					char* headers = push_and_copy_to_arena(arena, url_entry->headers_size, char, headers_in_mmf, url_entry->headers_size);
+					
+					const char* line_delimiters = "\r\n";
+					char* next_headers_token = NULL;
+					char* line = strtok_s(headers, line_delimiters, &next_headers_token);
+					bool is_first_line = true;
+					
+					TCHAR* server_response = NULL;
+					TCHAR* content_type = NULL;
+					TCHAR* content_length = NULL;
+					TCHAR* content_encoding = NULL;
+
+					// Parse these specific HTTP headers.
+					while(line != NULL)
 					{
-						Internet_Explorer_Index_Url_Entry* url_entry = (Internet_Explorer_Index_Url_Entry*) advance_bytes(entry, sizeof(Internet_Explorer_Index_File_Map_Entry));
-						bool is_leak = (entry->signature == ENTRY_LEAK);
-
-						const char* filename_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_filename);
-						char* filename = push_and_copy_to_arena(&exporter->arena, string_size(filename_in_mmf), char, filename_in_mmf, string_size(filename_in_mmf));
-						PathUndecorateA(filename);
-
-						char* file_extension_start = skip_to_file_extension(filename);
-						char* file_extension = push_and_copy_to_arena(&exporter->arena, string_size(file_extension_start), char, file_extension_start, string_size(file_extension_start));
-
-						const char* url_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_url);
-						char* url = push_arena(&exporter->arena, string_size(url_in_mmf), char);
-						if(!decode_url(url_in_mmf, url)) url = NULL;
-
-						const char* headers_in_mmf = (char*) advance_bytes(entry, url_entry->entry_offset_to_headers);
-						char* headers = push_and_copy_to_arena(&exporter->arena, url_entry->headers_size, char, headers_in_mmf, url_entry->headers_size);
-						
-						const char* line_delimiters = "\r\n";
-						char* next_headers_token = NULL;
-						char* line = strtok_s(headers, line_delimiters, &next_headers_token);
-						bool is_first_line = true;
-						
-						char* server_response = NULL;
-						char* content_type = NULL;
-						char* content_length = NULL;
-						char* content_encoding = NULL;
-
-						// Parse these specific HTTP headers.
-						while(line != NULL)
+						// Keep the first line intact since it's the server's response (e.g. "HTTP/1.1 200 OK"),
+						// and not a key-value pair.
+						if(is_first_line)
 						{
-							// Keep the first line intact since it's the server's response (e.g. "HTTP/1.1 200 OK"),
-							// and not a key-value pair.
-							if(is_first_line)
+							is_first_line = false;
+							server_response = copy_ansi_string_to_tchar(arena, line);
+						}
+						// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
+						// where "Content-Type" is the key, and "text/html" the value).
+						else
+						{
+							char* next_field_token = NULL;
+							char* key = strtok_s(line, ":", &next_field_token);
+							char* value = skip_leading_whitespace(next_field_token);
+							
+							if(key != NULL && value != NULL)
 							{
-								is_first_line = false;
-								server_response = line;
+								if(lstrcmpiA(key, "content-type") == 0)
+								{
+									content_type = copy_ansi_string_to_tchar(arena, value);
+								}
+								else if(lstrcmpiA(key, "content-length") == 0)
+								{
+									content_length = copy_ansi_string_to_tchar(arena, value);
+								}
+								else if(lstrcmpiA(key, "content-encoding") == 0)
+								{
+									content_encoding = copy_ansi_string_to_tchar(arena, value);
+								}
 							}
-							// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
-							// where "Content-Type" is the key, and "text/html" the value).
 							else
 							{
-								char* next_field_token = NULL;
-								char* key = strtok_s(line, ":", &next_field_token);
-								char* value = skip_leading_whitespace(next_field_token);
-								//debug_log_print("Field: '%s: %s'\n", key, value);
-								
-								if(key != NULL && value != NULL)
-								{
-									if(lstrcmpiA(key, "content-type") == 0)
-									{
-										content_type = push_and_copy_to_arena(&exporter->arena, string_size(value), char, value, string_size(value));
-									}
-									else if(lstrcmpiA(key, "content-length") == 0)
-									{
-										content_length = push_and_copy_to_arena(&exporter->arena, string_size(value), char, value, string_size(value));
-									}
-									else if(lstrcmpiA(key, "content-encoding") == 0)
-									{
-										content_encoding = push_and_copy_to_arena(&exporter->arena, string_size(value), char, value, string_size(value));
-									}
-								}
-								else
-								{
-									_ASSERT(false);
-								}
-
+								_ASSERT(false);
 							}
 
-							line = strtok_s(NULL, line_delimiters, &next_headers_token);
 						}
 
-						filename = (filename != NULL) ? (filename) : ("");
-						url = (url != NULL) ? (url) : ("");
-						file_extension = (file_extension != NULL) ? (file_extension) : ("");
-						server_response = (server_response != NULL) ? (server_response) : ("");
-						content_type = (content_type != NULL) ? (content_type) : ("");
-						content_length = (content_length != NULL) ? (content_length) : ("");
-						content_encoding = (content_encoding != NULL) ? (content_encoding) : ("");
+						line = strtok_s(NULL, line_delimiters, &next_headers_token);
+					}
 
-						char creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_dos_date_time(url_entry->creation_time, creation_time);
+					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					format_filetime_date_time(url_entry->last_modified_time, last_modified_time);
+					
+					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					format_filetime_date_time(url_entry->last_access_time, last_access_time);
 
-						char last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_filetime_date_time(url_entry->last_modified_time, last_modified_time);
-						
-						char last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_filetime_date_time(url_entry->last_access_time, last_access_time);
+					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					format_dos_date_time(url_entry->creation_time, creation_time);
 
-						char expiry_time[MAX_FORMATTED_DATE_TIME_CHARS];
-						format_dos_date_time(url_entry->expiry_time, expiry_time);
+					TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					format_dos_date_time(url_entry->expiry_time, expiry_time);
 
-						char short_file_path[MAX_PATH_CHARS] = "";
-						//char* short_file_path = push_arena(&exporter->arena, max_string_chars_for_csv(MAX_PATH_CHARS) * sizeof(char), char);
-						bool file_exists = true;
-						if(url_entry->cache_directory_index < MAX_NUM_CACHE_DIRECTORIES)
-						{
-							// Build the short file path by using the cached file's directory and its filename.
-							// E.g. "ABCDEFGH\image[1].gif".
-							const char* cache_directory_name_in_mmf = header->cache_directories[url_entry->cache_directory_index].name;
-							CopyMemory(short_file_path, cache_directory_name_in_mmf, NUM_CACHE_DIRECTORY_NAME_CHARS);
-							short_file_path[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
-							PathAppendA(short_file_path, filename_in_mmf);
-
-							// Build the absolute file path to the cache file. The cache directories are next to the index file.
-							char full_file_path[MAX_PATH_CHARS] = "";
-							StringCchCopyA(full_file_path, MAX_PATH_CHARS, index_path);
-							PathAppendA(full_file_path, "..");
-							PathAppendA(full_file_path, short_file_path);
-							GetFullPathNameA(full_file_path, MAX_PATH_CHARS, full_file_path, NULL);
-
-							file_exists = PathFileExistsA(full_file_path) == TRUE;
-
-							// Build the absolute file path to the destination file. The directory structure will be the same as
-							// the path on the original website.
-							if(file_exists && exporter->should_copy_files)
-							{
-								copy_file_using_url_directory_structure(&exporter->arena, full_file_path, output_copy_path, url, filename);
-							}
-						}
-				
-						char cached_file_size[MAX_UINT32_CHARS];
-						_ultoa_s(url_entry->cached_file_size, cached_file_size, MAX_UINT32_CHARS, INT_FORMAT_RADIX);
-						char num_hits[MAX_UINT32_CHARS];
-						_ultoa_s(url_entry->num_entry_locks, num_hits, MAX_UINT32_CHARS, INT_FORMAT_RADIX);
-						char* is_file_missing = (file_exists) ? ("No") : ("Yes");
-						char* is_leak_entry = (is_leak) ? ("Yes") : ("No");
-
-						if(exporter->should_create_csv)
-						{
-							char* csv_row[CSV_NUM_COLUMNS] = {filename, url, file_extension, cached_file_size,
-														  last_modified_time, last_access_time, creation_time, expiry_time,
-														  server_response, content_type, content_length, content_encoding,
-														  num_hits, short_file_path, is_file_missing, is_leak_entry};
-
-							csv_print_row(&exporter->arena, csv_file, csv_row, CSV_NUM_COLUMNS);
-						}
-
-						clear_arena(&exporter->arena);
-					} // Intentional fallthrough.
-
-					case(ENTRY_REDIRECT):
-					case(ENTRY_HASH):
-					case(ENTRY_DELETED):
-					case(ENTRY_UPDATED):
-					case(ENTRY_NEWLY_ALLOCATED):
+					TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+					bool file_exists = true;
+					if(url_entry->cache_directory_index < MAX_NUM_CACHE_DIRECTORIES)
 					{
-						// Skip to the last allocated block so we move to a new entry on the next iteration.
-						i += entry->num_allocated_blocks - 1;
-					} break;
+						// Build the short file path by using the cached file's directory and its (decorated) filename.
+						// E.g. "ABCDEFGH\image[1].gif". The cache directory's name doesn't include the null terminator.
+						const char* cache_directory_name_in_mmf = header->cache_directories[url_entry->cache_directory_index].name;
+						char cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS + 1];
+						CopyMemory(cache_directory_ansi_name, cache_directory_name_in_mmf, NUM_CACHE_DIRECTORY_NAME_CHARS * sizeof(char));
+						cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
 
-					default:
+						TCHAR* cache_directory_name = copy_ansi_string_to_tchar(arena, cache_directory_ansi_name);
+						StringCchCopy(short_file_path, MAX_PATH_CHARS, cache_directory_name);
+						PathAppend(short_file_path, decorated_filename);
+
+						// Build the absolute file path to the cache file. The cache directories are next to the index file
+						// in this version of Internet Explorer.
+						TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
+						StringCchCopy(full_file_path, MAX_PATH_CHARS, index_path);
+						PathAppend(full_file_path, TEXT(".."));
+						PathAppend(full_file_path, short_file_path);
+						// Since GetFullPathName() is called at the beginning of this function for cache_path, the index_path
+						// will also hold the full path.
+
+						file_exists = PathFileExists(full_file_path) == TRUE;
+
+						// Build the absolute file path to the destination file. The directory structure will be the same as
+						// the path on the original website.
+						if(file_exists && exporter->should_copy_files)
+						{
+							copy_file_using_url_directory_structure(arena, full_file_path, output_copy_path, url, filename);
+						}
+					}
+			
+					TCHAR cached_file_size[MAX_UINT32_CHARS];
+					convert_u32_to_string(url_entry->cached_file_size, cached_file_size);
+					
+					TCHAR num_hits[MAX_UINT32_CHARS];
+					convert_u32_to_string(url_entry->num_entry_locks, num_hits);
+
+					TCHAR* is_file_missing = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+					TCHAR* is_leak_entry = (entry->signature == ENTRY_LEAK) ? (TEXT("Yes")) : (TEXT("No"));
+
+					if(exporter->should_create_csv)
 					{
-						char signature_string[5];
-						CopyMemory(signature_string, &(entry->signature), 4);
-						signature_string[4] = '\0';
-						log_print(LOG_INFO, "Internet Explorer: Found unknown entry signature at (%u, %u): 0x%08X (%s) with %u blocks allocated.\n", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
-					} break;
+						Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+						{
+							{filename}, {url}, {file_extension}, {cached_file_size},
+							{last_modified_time}, {last_access_time}, {creation_time}, {expiry_time},
+							{server_response}, {content_type}, {content_length}, {content_encoding},
+							{num_hits}, {short_file_path}, {is_file_missing}, {is_leak_entry}
+						};
 
-				}
+						csv_print_row(arena, csv_file, csv_header, csv_row, CSV_NUM_COLUMNS);
+					}
+
+					clear_arena(arena);
+				} // Intentional fallthrough.
+
+				case(ENTRY_REDIRECT):
+				case(ENTRY_HASH):
+				case(ENTRY_DELETED):
+				case(ENTRY_UPDATED):
+				case(ENTRY_NEWLY_ALLOCATED):
+				{
+					// Skip to the last allocated block so we move to a new entry on the next iteration.
+					i += entry->num_allocated_blocks - 1;
+				} break;
+
+				default:
+				{
+					char signature_string[5];
+					CopyMemory(signature_string, &(entry->signature), 4);
+					signature_string[4] = '\0';
+					log_print(LOG_INFO, "Internet Explorer: Found unknown entry signature at (%Iu, %Iu): 0x%08X (%hs) with %I32u blocks allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
+				} break;
 
 			}
+
 		}
-
-		close_csv_file(csv_file);
-
-		UnmapViewOfFile(index_file);
-		index_file = NULL;
 	}
-	else
-	{
-		log_print(LOG_ERROR, "Internet Explorer: Error while trying to create the file mapping for '%s'.\n", index_path);
-	}
+
+	close_csv_file(csv_file);
+	csv_file = INVALID_HANDLE_VALUE;
+
+	UnmapViewOfFile(index_file);
+	index_file = NULL;
+
+	if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+
+	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
 }
 
+/*
 #ifndef BUILD_9X
 	void windows_nt_test_ie10(char* index_path)
 	{
@@ -420,7 +478,6 @@ void export_specific_internet_explorer_cache(Exporter* exporter)
 		log_print(LOG_INFO, "Database error code: %ld", error_code);
 	}
 #endif
-
 */
 
 /*

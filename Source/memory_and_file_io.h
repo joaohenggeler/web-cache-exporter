@@ -36,21 +36,27 @@ const size_t MAX_UINT64_CHARS = 65;
 bool convert_u32_to_string(u32 value, TCHAR* result_string);
 bool convert_u64_to_string(u64 value, TCHAR* result_string);
 
+TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
+TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string, size_t num_chars);
+
 char* skip_leading_whitespace(char* str);
+wchar_t* skip_leading_whitespace(wchar_t* str);
 TCHAR* skip_to_file_extension(TCHAR* str);
 
-bool decode_url(const char* url, char* decoded_url);
+bool decode_url(const TCHAR* url, TCHAR* decoded_url);
 void create_directories(const TCHAR* path_to_create);
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
 
-const size_t MAX_PATH_CHARS = MAX_PATH + 1;
-//const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(char); // @TODO: wide version?
+const size_t MAX_PATH_CHARS = MAX_PATH;
+//const size_t MAX_PATH_CHARS_WITH_NULL = MAX_PATH_CHARS + 1;
 
 u64 combine_high_and_low_u32s(u32 high, u32 low);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
-void* memory_map_entire_file(char* path);
+void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result);
+bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_file_path_result);
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
-bool query_registry(HKEY hkey, const char* key_name, const char* value_name, char* value_data, DWORD value_data_size);
+bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, DWORD value_data_size);
+#define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
 
 enum Log_Type
 {
@@ -77,22 +83,44 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 
 enum Csv_Type
 {
-	CSV_FILENAME = 0,
-	CSV_FILE_EXTENSION = 1,
-	CSV_FILE_SIZE = 2,
+	CSV_NONE = 0,
 
-	CSV_LAST_WRITE_TIME = 3,
-	CSV_LAST_ACCESS_TIME = 4,
-	CSV_CREATION_TIME = 5,
+	CSV_FILENAME = 1,
+	CSV_URL = 2,
+	CSV_FILE_EXTENSION = 3,
+	CSV_FILE_SIZE = 4,
 
-	CSV_DIRECTOR_FILE_TYPE = 6,
+	CSV_LAST_WRITE_TIME = 5,
+	CSV_LAST_MODIFIED_TIME = 6,
+	CSV_LAST_ACCESS_TIME = 7,
+	CSV_CREATION_TIME = 8,
+	CSV_EXPIRY_TIME = 9,
 
-	NUM_CSV_TYPES = 7
+	CSV_SERVER_RESPONSE = 10,
+	CSV_CONTENT_TYPE = 11,
+	CSV_CONTENT_LENGTH = 12,
+	CSV_CONTENT_ENCODING = 13,
+
+	CSV_LOCATION_ON_CACHE = 14,
+	CSV_MISSING_FILE = 15,
+	
+	// Internet Explorer specific.
+	CSV_HITS = 16,
+	CSV_LEAK_ENTRY = 17,
+	
+	// Shockwave Plugin specific.
+	CSV_DIRECTOR_FILE_TYPE = 18,
+
+	NUM_CSV_TYPES = 19
 };
 const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
 {
-	"Filename", "File Extension", "File Size",
-	"Last Write Time", "Last Access Time", "Creation Time",
+	"None",
+	"Filename", "URL", "File Extension", "File Size",
+	"Last Write Time", "Last Modified Time", "Last Access Time", "Creation Time", "Expiry Time",
+	"Server Response", "Content-Type", "Content-Length", "Content-Encoding",
+	"Location On Cache", "Missing File",
+	"Hits", "Leak Entry",
 	"Director File Type"
 };
 
@@ -151,6 +179,12 @@ inline bool is_string_empty(const wchar_t* str)
 {
 	return str[0] == L'\0';
 }
+
+/*
+_byteswap_ushort
+_byteswap_ulong
+_byteswap_uint64
+*/
 
 #ifndef BUILD_9X
 	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path);

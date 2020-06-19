@@ -44,6 +44,7 @@ wchar_t* skip_leading_whitespace(wchar_t* str);
 TCHAR* skip_to_file_extension(TCHAR* str);
 
 bool decode_url(const TCHAR* url, TCHAR* decoded_url);
+bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result = NULL);
 void create_directories(const TCHAR* path_to_create);
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
 
@@ -73,6 +74,7 @@ bool create_log_file(const TCHAR* filename);
 void close_log_file(void);
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 #define log_print(log_type, string_format, ...) tchar_log_print(log_type, TEXT(string_format), __VA_ARGS__)
+#define log_print_newline() log_print(LOG_NONE, "")
 #ifdef DEBUG
 	#define debug_log_print(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
 #else

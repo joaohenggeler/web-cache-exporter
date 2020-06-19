@@ -351,6 +351,22 @@ static void convert_url_to_path(TCHAR* url)
 	}
 }
 
+bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result)
+{
+	if(optional_full_path_result != NULL)
+	{
+		GetFullPathName(path, MAX_PATH_CHARS, optional_full_path_result, NULL);
+	}
+	else
+	{
+		TCHAR full_path[MAX_PATH_CHARS];
+		GetFullPathName(path, MAX_PATH_CHARS, full_path, NULL);
+		StringCchCopy(path, MAX_PATH_CHARS, full_path);
+	}
+	
+	return GetLastError() != ERROR_SUCCESS;
+}
+
 bool create_empty_file(const TCHAR* file_path)
 {
 	DWORD error_code;

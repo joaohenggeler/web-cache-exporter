@@ -31,6 +31,17 @@
 	uint in hexadecimal		= 0x%08X
 */
 
+void resolve_cache_version_output_paths(Exporter* exporter, TCHAR* cache_version_to_string[])
+{
+	get_full_path_name(exporter->output_path);
+
+	StringCchCopy(exporter->output_copy_path, MAX_PATH_CHARS, exporter->output_path);
+	PathAppend(exporter->output_copy_path, cache_version_to_string[exporter->cache_version]);
+
+	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
+	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
+}
+
 static TCHAR* skip_to_suboption(TCHAR* str)
 {
 	TCHAR* suboption = NULL;
@@ -174,6 +185,11 @@ int _tmain(int argc, TCHAR* argv[])
 	exporter.cache_path[0] = TEXT('\0');
 	exporter.output_path[0] = TEXT('\0');
 	exporter.arena = NULL_ARENA;
+	
+	exporter.cache_version = 0;
+	exporter.index_path[0] = TEXT('\0');
+	exporter.output_copy_path[0] = TEXT('\0');
+	exporter.output_csv_path[0] = TEXT('\0');
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Web Cache Exporter version %hs", BUILD_VERSION);
@@ -233,7 +249,7 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_INFO, "No cache path specified. Exporting the cache from any existing default directories.");
 	}
 
-	log_print(LOG_NONE, "");
+	log_print_newline();
 
 	switch(exporter.cache_type)
 	{
@@ -258,7 +274,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 			export_specific_or_default_internet_explorer_cache(&exporter);
 			exporter.cache_path[0] = TEXT('\0');
-			log_print(LOG_NONE, "");
+			log_print_newline();
 
 			export_specific_or_default_shockwave_plugin_cache(&exporter);
 			exporter.cache_path[0] = TEXT('\0');

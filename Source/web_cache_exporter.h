@@ -109,6 +109,13 @@ struct Exporter
 	TCHAR output_path[MAX_PATH_CHARS];
 
 	Arena arena;
+
+	u32 cache_version;
+	TCHAR index_path[MAX_PATH_CHARS];
+	TCHAR output_copy_path[MAX_PATH_CHARS];
+	TCHAR output_csv_path[MAX_PATH_CHARS];
 };
+
+void resolve_cache_version_output_paths(Exporter* exporter, TCHAR* cache_version_to_string[]);
 
 #endif

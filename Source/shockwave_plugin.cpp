@@ -2,6 +2,18 @@
 #include "memory_and_file_io.h"
 #include "shockwave_plugin.h"
 
+enum Shockwave_Plugin_Cache_Version
+{
+	SHOCKWAVE_CACHE_UNKNOWN = 0,
+	SHOCKWAVE_CACHE = 1,
+	NUM_SHOCKWAVE_CACHE_VERSIONS = 2
+};
+TCHAR* SHOCKWAVE_CACHE_CACHE_VERSION_TO_STRING[NUM_SHOCKWAVE_CACHE_VERSIONS] =
+{
+	TEXT("Shockwave-Plugin-Unknown"),
+	TEXT("Shockwave-Plugin")
+};
+
 #pragma pack(push, 1)
 struct Partial_Director_Rifx_Chunk
 {
@@ -62,55 +74,43 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 {
 	if(is_string_empty(exporter->cache_path))
 	{
-		if(GetTempPath(MAX_PATH_CHARS, exporter->cache_path) != 0)
-		{
-			export_specific_shockwave_plugin_cache(exporter);
-		}
-		else
+		if(GetTempPath(MAX_PATH_CHARS, exporter->cache_path) == 0)
 		{
 			log_print(LOG_ERROR, "Shockwave Plugin: Failed to get the temporary files directory path.");
+			return;
 		}
 	}
-	else
-	{
-		export_specific_shockwave_plugin_cache(exporter);
-	}
+
+	get_full_path_name(exporter->cache_path);
+	log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", exporter->cache_path);
+
+	resolve_cache_version_output_paths(exporter, SHOCKWAVE_CACHE, SHOCKWAVE_CACHE_CACHE_VERSION_TO_STRING);
+	export_shockwave_plugin_cache(exporter);
+	log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");
 }
 
-void export_specific_shockwave_plugin_cache(Exporter* exporter)
+void export_shockwave_plugin_cache(Exporter* exporter)
 {
 	Arena* arena = &(exporter->arena);
-
-	TCHAR cache_path[MAX_PATH_CHARS];
-	GetFullPathName(exporter->cache_path, MAX_PATH_CHARS, cache_path, NULL);
-	log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", cache_path);
-
-	TCHAR output_copy_path[MAX_PATH_CHARS];
-	GetFullPathName(exporter->output_path, MAX_PATH_CHARS, output_copy_path, NULL);
-	PathAppend(output_copy_path, TEXT("ShockwavePlugin"));
-	
-	TCHAR output_csv_path[MAX_PATH_CHARS];
-	GetFullPathName(exporter->output_path, MAX_PATH_CHARS, output_csv_path, NULL);
-	PathAppend(output_csv_path, TEXT("ShockwavePlugin.csv"));
 
 	const size_t CSV_NUM_COLUMNS = 7;
 	const Csv_Type csv_header[CSV_NUM_COLUMNS] =
 	{
 		CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-		CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME, CSV_CREATION_TIME, 
+		CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
 		CSV_DIRECTOR_FILE_TYPE
 	};
 
 	HANDLE csv_file = INVALID_HANDLE_VALUE;
 	if(exporter->should_create_csv)
 	{
-		csv_file = create_csv_file(output_csv_path);
+		csv_file = create_csv_file(exporter->output_csv_path);
 		csv_print_header(arena, csv_file, csv_header, CSV_NUM_COLUMNS);
 		clear_arena(arena);
 	}
 
 	TCHAR search_cache_path[MAX_PATH_CHARS];
-	StringCchCopy(search_cache_path, MAX_PATH_CHARS, cache_path);
+	StringCchCopy(search_cache_path, MAX_PATH_CHARS, exporter->cache_path);
 	PathAppend(search_cache_path, TEXT("mp*"));
 
 	WIN32_FIND_DATA file_find_data;
@@ -129,7 +129,7 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 		_ASSERT(filename != NULL);
 
 		TCHAR full_file_path[MAX_PATH_CHARS];
-		StringCchCopy(full_file_path, MAX_PATH_CHARS, cache_path);
+		StringCchCopy(full_file_path, MAX_PATH_CHARS, exporter->cache_path);
 		PathAppend(full_file_path, filename);
 
 		if(exporter->should_create_csv)
@@ -154,7 +154,7 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 			Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 			{
 				{filename}, {file_extension}, {file_size_string},
-				{last_write_time}, {creation_time}, {last_access_time},
+				{last_write_time}, {last_access_time}, {creation_time},
 				{director_file_type}
 			};
 
@@ -163,7 +163,7 @@ void export_specific_shockwave_plugin_cache(Exporter* exporter)
 
 		if(exporter->should_copy_files)
 		{
-			copy_file_using_url_directory_structure(arena, full_file_path, output_copy_path, NULL, filename);
+			copy_file_using_url_directory_structure(arena, full_file_path, exporter->output_copy_path, NULL, filename);
 		}
 
 		clear_arena(arena);

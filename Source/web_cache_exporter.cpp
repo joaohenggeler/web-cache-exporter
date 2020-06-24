@@ -31,12 +31,14 @@
 	uint in hexadecimal		= 0x%08X
 */
 
-void resolve_cache_version_output_paths(Exporter* exporter, TCHAR* cache_version_to_string[])
+void resolve_cache_version_output_paths(Exporter* exporter, u32 cache_version, TCHAR* cache_version_to_string[])
 {
 	get_full_path_name(exporter->output_path);
 
+	exporter->cache_version = cache_version;
+
 	StringCchCopy(exporter->output_copy_path, MAX_PATH_CHARS, exporter->output_path);
-	PathAppend(exporter->output_copy_path, cache_version_to_string[exporter->cache_version]);
+	PathAppend(exporter->output_copy_path, cache_version_to_string[cache_version]);
 
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
 	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
@@ -81,9 +83,9 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			exporter->should_create_csv = false;
 		}
-		else if(lstrcmpi(option, TEXT("-no-csv-header")) == 0)
+		else if(lstrcmpi(option, TEXT("-merge-copied-files")) == 0)
 		{
-			exporter->should_add_csv_header = false;
+			exporter->should_merge_copied_files = true;
 		}
 		else if(lstrcmpi(option, TEXT("-find-and-export-all")) == 0)
 		{
@@ -180,16 +182,16 @@ int _tmain(int argc, TCHAR* argv[])
 	Exporter exporter;
 	exporter.should_copy_files = true;
 	exporter.should_create_csv = true;
-	exporter.should_add_csv_header = true;
+	exporter.should_merge_copied_files = false;
 	exporter.cache_type = CACHE_UNKNOWN;
 	exporter.cache_path[0] = TEXT('\0');
 	exporter.output_path[0] = TEXT('\0');
 	exporter.arena = NULL_ARENA;
 	
 	exporter.cache_version = 0;
-	exporter.index_path[0] = TEXT('\0');
 	exporter.output_copy_path[0] = TEXT('\0');
 	exporter.output_csv_path[0] = TEXT('\0');
+	exporter.index_path[0] = TEXT('\0');
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Web Cache Exporter version %hs", BUILD_VERSION);
@@ -216,7 +218,7 @@ int _tmain(int argc, TCHAR* argv[])
 	}
 
 	size_t memory_to_use = megabytes_to_bytes(4) * sizeof(TCHAR);
-	debug_log_print("Allocating %Iu bytes for the main memory arena.", memory_to_use);
+	debug_log_print("Memory Arena: Allocating %Iu bytes for the temporary memory arena.", memory_to_use);
 
 	if(!create_arena(&exporter.arena, memory_to_use))
 	{
@@ -240,9 +242,14 @@ int _tmain(int argc, TCHAR* argv[])
 	debug_log_print("- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
 	debug_log_print("- Should Copy Files: %hs", (exporter.should_copy_files) ? ("true") : ("false"));
 	debug_log_print("- Should Create CSV: %hs", (exporter.should_create_csv) ? ("true") : ("false"));
-	debug_log_print("- Should Add CSV Header: %hs", (exporter.should_add_csv_header) ? ("true") : ("false"));
+	debug_log_print("- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("true") : ("false"));
 	debug_log_print("- Cache Path: '%s'", (exporter.cache_path != NULL) ? (exporter.cache_path) : (TEXT("-")));
 	debug_log_print("- Output Path: '%s'", (exporter.output_path != NULL) ? (exporter.output_path) : (TEXT("-")));
+	
+	debug_log_print("- Cache Version: %I32u", exporter.cache_version);
+	debug_log_print("- Output Copy Path: '%s'", (exporter.output_copy_path != NULL) ? (exporter.output_copy_path) : (TEXT("-")));
+	debug_log_print("- Output CSV Path: '%s'", (exporter.output_csv_path != NULL) ? (exporter.output_csv_path) : (TEXT("-")));
+	debug_log_print("- Index Path: '%s'", (exporter.index_path != NULL) ? (exporter.index_path) : (TEXT("-")));
 
 	if(is_string_empty(exporter.cache_path) && (exporter.cache_type != CACHE_ALL))
 	{

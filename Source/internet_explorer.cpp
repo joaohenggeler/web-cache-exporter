@@ -22,16 +22,27 @@
 enum Internet_Explorer_Cache_Version
 {
 	IE_CACHE_UNKNOWN = 0,
-	IE_CACHE_4_TO_9 = 1,
-	IE_CACHE_10_TO_11 = 2,
-	NUM_IE_CACHE_VERSIONS = 3
+	IE_CACHE_4 = 1, // <cache_path>\index.dat
+	IE_CACHE_5_TO_9 = 2, // <cache_path>\Content.IE5\index.dat
+	IE_CACHE_10_TO_11 = 3, // <cache_path>\..\WebCache\WebCacheV01.dat or WebCacheV24.dat
+	NUM_IE_CACHE_VERSIONS = 4
 };
 TCHAR* IE_CACHE_VERSION_TO_STRING[NUM_IE_CACHE_VERSIONS] =
 {
-	TEXT("Internet-Explorer-Unknown"), TEXT("Internet-Explorer-4-to-9"), TEXT("Internet-Explorer-10-to-11")
+	TEXT("Internet-Explorer-Unknown"),
+	TEXT("Internet-Explorer-4"), TEXT("Internet-Explorer-5-to-9"), TEXT("Internet-Explorer-10-to-11")
 };
 
-static const size_t SIGNATURE_SIZE = 28;
+const size_t CSV_NUM_COLUMNS = 16;
+const Csv_Type CSV_HEADER[CSV_NUM_COLUMNS] =
+{
+	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
+	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
+	CSV_SERVER_RESPONSE, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
+	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE, CSV_LEAK_ENTRY
+};
+
+static const size_t NUM_SIGNATURE_CHARS = 28;
 static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
 static const size_t MAX_NUM_CACHE_DIRECTORIES = 32;
 static const size_t HEADER_DATA_LENGTH = 32;
@@ -57,7 +68,7 @@ enum Internet_Explorer_Index_Entry_Signature
 
 struct Internet_Explorer_Index_Header
 {
-	s8 signature[SIGNATURE_SIZE]; // Including null terminator.
+	s8 signature[NUM_SIGNATURE_CHARS]; // Including null terminator.
 	u32 file_size;
 	u32 file_offset_to_first_hash_table_page;
 
@@ -216,33 +227,33 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	get_full_path_name(exporter->cache_path);
 	log_print(LOG_INFO, "Internet Explorer: Exporting the cache from '%s'.", exporter->cache_path);
 
-	exporter->cache_version = IE_CACHE_4_TO_9;
-	resolve_cache_version_output_paths(exporter, IE_CACHE_VERSION_TO_STRING);
-
+	resolve_cache_version_output_paths(exporter, IE_CACHE_4, IE_CACHE_VERSION_TO_STRING);
 	log_print_newline();
 	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
 	PathAppend(exporter->index_path, TEXT("index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
+	resolve_cache_version_output_paths(exporter, IE_CACHE_5_TO_9, IE_CACHE_VERSION_TO_STRING);
 	log_print_newline();
 	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
 	PathAppend(exporter->index_path, TEXT("Content.IE5\\index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	#ifndef BUILD_9X
-		exporter->cache_version = IE_CACHE_10_TO_11;
-		resolve_cache_version_output_paths(exporter, IE_CACHE_VERSION_TO_STRING);
+		resolve_cache_version_output_paths(exporter, IE_CACHE_10_TO_11, IE_CACHE_VERSION_TO_STRING);
 
-		/*log_print_newline();
+		log_print_newline();
 		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
 		PathAppendW(exporter->index_path, L"..\\WebCache\\WebCacheV01.dat");
-		windows_nt_export_internet_explorer_10_to_11_cache(exporter);
+		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
 
 		log_print_newline();
 		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
 		PathAppendW(exporter->index_path, L"..\\WebCache\\WebCacheV24.dat");
-		windows_nt_export_internet_explorer_10_to_11_cache(exporter);*/
+		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
 	#endif
+
+	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
 }
 
 void export_internet_explorer_4_to_9_cache(Exporter* exporter)
@@ -254,21 +265,28 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	bool was_index_copied_to_temporary_file = false;
 	TCHAR temporary_index_path[MAX_PATH_CHARS];
 
-	if(index_file == NULL && GetLastError() == ERROR_SHARING_VIOLATION)
+	if(index_file == NULL)
 	{
-		log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a copy and opening that one...");
-		
-		// @TODO: Can we get a handle with CreateFile() that has the DELETE_ON_CLOSE flag set?
-		// We wouldn't need to explicitly delete the temporary file + it's deleted if the exporter crashes.
-		if(copy_to_temporary_file(exporter->index_path, temporary_index_path))
+		if( (GetLastError() == ERROR_FILE_NOT_FOUND) || (GetLastError() == ERROR_PATH_NOT_FOUND) )
 		{
-			log_print(LOG_INFO, "Internet Explorer 4 to 9: Copied the index file to '%s'.", temporary_index_path);
-			was_index_copied_to_temporary_file = true;
-			index_file = memory_map_entire_file(temporary_index_path, &index_file_size);
+			log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was not found.");
 		}
-		else
+		else if(GetLastError() == ERROR_SHARING_VIOLATION)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to create a copy of the index file.");
+			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a copy and opening that one...");
+		
+			// @TODO: Can we get a handle with CreateFile() that has the DELETE_ON_CLOSE flag set?
+			// We wouldn't need to explicitly delete the temporary file + it's deleted if the exporter crashes.
+			if(copy_to_temporary_file(exporter->index_path, temporary_index_path))
+			{
+				log_print(LOG_INFO, "Internet Explorer 4 to 9: Copied the index file to '%s'.", temporary_index_path);
+				was_index_copied_to_temporary_file = true;
+				index_file = memory_map_entire_file(temporary_index_path, &index_file_size);
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to create a copy of the index file.");
+			}
 		}
 	}
 
@@ -291,9 +309,9 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	if(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) != 0)
 	{
-		char signature_string[SIGNATURE_SIZE + 1];
-		CopyMemory(signature_string, header->signature, SIGNATURE_SIZE);
-		signature_string[SIGNATURE_SIZE] = '\0';
+		char signature_string[NUM_SIGNATURE_CHARS + 1];
+		CopyMemory(signature_string, header->signature, NUM_SIGNATURE_CHARS);
+		signature_string[NUM_SIGNATURE_CHARS] = '\0';
 
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file starts with an invalid signature: '%hs'. No files will be exported from this cache.", signature_string);
 		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
@@ -311,7 +329,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	char major_version = header->signature[24];
 	char minor_version = header->signature[26];
-	//bool is_version_4 = (major_version == '4');
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %hc.%hc) was opened successfully. Starting the export process.", major_version, minor_version);
 	_ASSERT( (major_version == '4' && minor_version == '7') || (major_version == '5' && minor_version == '2') );
 
@@ -322,21 +339,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_4: 0x%08X", header->_reserved_4);
 		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_5: 0x%08X", header->_reserved_5);
 	#endif
-
-	const size_t CSV_NUM_COLUMNS = 16;
-	const Csv_Type csv_header[CSV_NUM_COLUMNS] =
-	{
-		CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-		CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
-		CSV_SERVER_RESPONSE, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
-		CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE, CSV_LEAK_ENTRY
-	};
 	
 	HANDLE csv_file = INVALID_HANDLE_VALUE;
 	if(exporter->should_create_csv)
 	{
 		csv_file = create_csv_file(exporter->output_csv_path);
-		csv_print_header(arena, csv_file, csv_header, CSV_NUM_COLUMNS);
+		csv_print_header(arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
 		clear_arena(arena);
 	}
 
@@ -362,6 +370,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				{
 					void* url_entry = advance_bytes(entry, sizeof(Internet_Explorer_Index_File_Map_Entry));
 					
+					// @Aliasing: These two variables point to the same memory but they're never deferenced at the same type.
 					Internet_Explorer_4_Index_Url_Entry* url_entry_4 			= (Internet_Explorer_4_Index_Url_Entry*) 		url_entry;
 					Internet_Explorer_5_To_9_Index_Url_Entry* url_entry_5_to_9 	= (Internet_Explorer_5_To_9_Index_Url_Entry*) 	url_entry;
 
@@ -385,8 +394,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					TCHAR* filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
 					PathUndecorate(filename);
 
-					TCHAR* file_extension_start = skip_to_file_extension(filename);
-					TCHAR* file_extension = push_and_copy_to_arena(arena, string_size(file_extension_start), TCHAR, file_extension_start, string_size(file_extension_start));
+					TCHAR* file_extension = skip_to_file_extension(filename);
 
 					u32 entry_offset_to_url;
 					GET_URL_ENTRY_FIELD(entry_offset_to_url, entry_offset_to_url);
@@ -514,7 +522,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						// Since GetFullPathName() is called at the beginning of this function for cache_path, the index_path
 						// will also hold the full path.
 
-						file_exists = PathFileExists(full_file_path) == TRUE;
+						file_exists = does_file_exist(full_file_path);
 
 						// Build the absolute file path to the destination file. The directory structure will be the same as
 						// the path on the original website.
@@ -556,7 +564,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 							{num_hits}, {short_file_path}, {is_file_missing}, {is_leak_entry}
 						};
 
-						csv_print_row(arena, csv_file, csv_header, csv_row, CSV_NUM_COLUMNS);
+						csv_print_row(arena, csv_file, CSV_HEADER, csv_row, CSV_NUM_COLUMNS);
 					}
 
 					clear_arena(arena);
@@ -574,9 +582,10 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 				default:
 				{
-					char signature_string[5];
-					CopyMemory(signature_string, &(entry->signature), 4);
-					signature_string[4] = '\0';
+					const size_t NUM_ENTRY_SIGNATURE_CHARS = 4;
+					char signature_string[NUM_ENTRY_SIGNATURE_CHARS + 1];
+					CopyMemory(signature_string, &(entry->signature), NUM_ENTRY_SIGNATURE_CHARS);
+					signature_string[NUM_ENTRY_SIGNATURE_CHARS] = '\0';
 					log_print(LOG_INFO, "Internet Explorer 4 to 9: Found unknown entry signature at (%Iu, %Iu): 0x%08X (%hs) with %I32u blocks allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
 				} break;
 
@@ -598,72 +607,411 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 
 #ifndef BUILD_9X
-	void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter)
+	static void windows_nt_jet_clean_up(JET_INSTANCE* instance, JET_SESID* session_id, JET_DBID* database_id, JET_TABLEID* containers_table_id)
 	{
-		Arena* arena = &(exporter->arena);
-		arena;
-
-		wchar_t* cache_path = exporter->cache_path; cache_path;
-		wchar_t* index_path = exporter->index_path;
-
-		// @Compatibility: For Windows 2000.
 		JET_ERR error_code = JET_errSuccess;
 
-		error_code = JetSetSystemParameterW(NULL, JET_sesidNil, JET_paramEventLoggingLevel, JET_EventLoggingDisable, NULL);
-		if(error_code < 0)
+		if(*containers_table_id != JET_tableidNil)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to disable event logging.", error_code);
+			error_code = JetCloseTable(*session_id, *containers_table_id);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to close the Containers table.", error_code);
+			*containers_table_id = JET_tableidNil;
 		}
 
-		error_code = JetInit(NULL);
-		if(error_code < 0)
+		if(*database_id != JET_dbidNil)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to initialize ESE.", error_code);
+			error_code = JetCloseDatabase(*session_id, *database_id, 0);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to close the database.", error_code);
+			error_code = JetDetachDatabaseW(*session_id, NULL);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to detach the database.", error_code);
+			*database_id = JET_dbidNil;
+		}
+
+		if(*session_id != JET_sesidNil)
+		{
+			error_code = JetEndSession(*session_id, 0);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to end the session.", error_code);
+			*session_id = JET_sesidNil;
+		}
+
+		if(*instance != JET_instanceNil)
+		{
+			error_code = JetTerm(*instance);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to terminate the ESE instance.", error_code);
+			*instance = JET_instanceNil;
+		}			
+	}
+
+	void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
+	{
+		Arena* arena = &(exporter->arena);
+		wchar_t* index_path = exporter->index_path;
+		
+		if(!does_file_exist(index_path))
+		{
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: The index file ('%ls') was not found. No files will be exported from this cache.", ese_files_prefix);
 			return;
 		}
 
+		JET_ERR error_code = JET_errSuccess;
+		JET_INSTANCE instance = JET_instanceNil;
 		JET_SESID session_id = JET_sesidNil;
-		error_code = JetBeginSessionW(NULL, &session_id, NULL, NULL);
+		JET_DBID database_id = JET_dbidNil;
+		JET_TABLEID containers_table_id = JET_tableidNil;
+
+		unsigned long page_size = 0;
+		error_code = JetGetDatabaseFileInfoW(index_path, &page_size, sizeof(page_size), JET_DbInfoPageSize);
+		if(error_code < 0)
+		{
+			page_size = 32768;
+			log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to get the ESE database's page size with the error code %ld. This value will default to %lu.", error_code, page_size);
+		}
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramDatabasePageSize, page_size, NULL);
+
+		JET_DBINFOMISC database_info = {};
+		error_code = JetGetDatabaseFileInfoW(index_path, &database_info, sizeof(database_info), JET_DbInfoMisc);
+		if(error_code == JET_errSuccess)
+		{
+			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's state is %lu.", database_info.dbstate);
+		}
+
+		error_code = JetCreateInstanceW(&instance, L"WebCacheExporter");
+		if(error_code < 0)
+		{
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to create the ESE instance.", error_code);
+			return;
+		}
+
+		const size_t MAX_ESE_PATH_CHARS = 246;
+		wchar_t database_path[MAX_ESE_PATH_CHARS];
+		StringCchCopyW(database_path, MAX_ESE_PATH_CHARS, index_path);
+		PathAppendW(database_path, L"..");
+		StringCchCatW(database_path, MAX_ESE_PATH_CHARS, L"\\");
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramRecovery, 0, L"On");
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramMaxTemporaryTables, 0, NULL);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramBaseName, 0, ese_files_prefix);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramLogFilePath, 0, database_path);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramSystemPath, 0, database_path);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramAlternateDatabaseRecoveryPath, 0, database_path);
+		
+		error_code = JetInit(&instance);
+		if(error_code < 0)
+		{
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to initialize the ESE instance.", error_code);
+			return;
+		}
+		
+		error_code = JetBeginSessionW(instance, &session_id, NULL, NULL);
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to begin the session.", error_code);
+			windows_nt_jet_clean_up(&instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
-		JET_DBID database_id = JET_dbidNil;
+		error_code = JetAttachDatabase2W(session_id, index_path, 0, JET_bitDbReadOnly);
+		if(error_code < 0)
+		{
+			wchar_t error_message[1024];
+			JET_API_PTR err = error_code;
+			JetGetSystemParameterW(instance, session_id, JET_paramErrorToString, &err, error_message, sizeof(error_message));
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to attach the database '%ls'", error_code, index_path);
+			windows_nt_jet_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+			return;
+		}
+	
 		error_code = JetOpenDatabaseW(session_id, index_path, NULL, &database_id, JET_bitDbReadOnly);
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the database '%ls'.", error_code, index_path);
+			windows_nt_jet_clean_up(&instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
-		// Query the database:
-		JET_TABLEID containers_table_id = JET_tableidNil;
 		error_code = JetOpenTableW(session_id, database_id, L"Containers", NULL, 0, JET_bitTableReadOnly, &containers_table_id);
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the Containers table.", error_code);
+			windows_nt_jet_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+			return;
 		}
 
-		error_code = JetCloseTable(session_id, containers_table_id);
-		if(error_code < 0)
+		HANDLE csv_file = INVALID_HANDLE_VALUE;
+		if(exporter->should_create_csv)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to close the Containers table.", error_code);
+			csv_file = create_csv_file(exporter->output_csv_path);
+			csv_print_header(arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
+			clear_arena(arena);
 		}
 
-		error_code = JetCloseDatabase(session_id, database_id, 0);
-		if(error_code < 0)
+		JET_COLUMNDEF name_column_info = {};
+		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"Name",
+											&name_column_info, sizeof(name_column_info), JET_ColInfo);
+		JET_COLUMNDEF container_id_column_info = {};
+		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"ContainerId",
+											&container_id_column_info, sizeof(container_id_column_info), JET_ColInfo);
+
+		JET_COLUMNDEF directory_column_info = {};
+		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"Directory",
+											&directory_column_info, sizeof(directory_column_info), JET_ColInfo);
+
+		JET_COLUMNDEF secure_directories_column_info = {};
+		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"SecureDirectories",
+											&secure_directories_column_info, sizeof(secure_directories_column_info), JET_ColInfo);
+
+		bool found_container_record = (JetMove(session_id, containers_table_id, JET_MoveFirst, 0) == JET_errSuccess);
+		while(found_container_record)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to close the database.", error_code);
+			wchar_t container_name[256];
+			unsigned long actual_container_name_size;
+			error_code = JetRetrieveColumn(	session_id, containers_table_id, name_column_info.columnid,
+											container_name, sizeof(container_name), &actual_container_name_size, 0, NULL);
+			size_t num_container_name_chars = actual_container_name_size / sizeof(wchar_t);
+
+			// Check if the container record belongs to the cache.
+			if(wcsncmp(container_name, L"Content", num_container_name_chars) == 0)
+			{
+				const size_t num_container_columns = 3;
+				JET_RETRIEVECOLUMN container_columns[num_container_columns]; // "ContainerId", "Directory", and "SecureDirectories".
+
+				s64 container_id;
+				container_columns[0].columnid = container_id_column_info.columnid;
+				container_columns[0].pvData = &container_id;
+				container_columns[0].cbData = sizeof(container_id);
+				container_columns[0].grbit = 0;
+				container_columns[0].ibLongValue = 0;
+				container_columns[0].itagSequence = 1;
+
+				wchar_t directory[MAX_PATH_CHARS];
+				container_columns[1].columnid = directory_column_info.columnid;
+				container_columns[1].pvData = directory;
+				container_columns[1].cbData = sizeof(directory);
+				container_columns[1].grbit = 0;
+				container_columns[1].ibLongValue = 0;
+				container_columns[1].itagSequence = 1;
+
+				wchar_t secure_directories[NUM_CACHE_DIRECTORY_NAME_CHARS * MAX_NUM_CACHE_DIRECTORIES + 1];
+				container_columns[2].columnid = secure_directories_column_info.columnid;
+				container_columns[2].pvData = secure_directories;
+				container_columns[2].cbData = sizeof(secure_directories);
+				container_columns[2].grbit = 0;
+				container_columns[2].ibLongValue = 0;
+				container_columns[2].itagSequence = 1;
+
+				error_code = JetRetrieveColumns(session_id, containers_table_id, container_columns, num_container_columns);
+				bool retrieval_success = true;
+				for(size_t i = 0; i < num_container_columns; ++i)
+				{
+					if(container_columns[i].err != JET_errSuccess)
+					{
+						retrieval_success = false;
+
+						JET_RECPOS record_position = {};
+						error_code = JetGetRecordPosition(session_id, containers_table_id, &record_position, sizeof(record_position));
+						log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to retrieve column %Iu for Content record %lu in the Containers table.", container_columns[i].err, i, record_position.centriesLT);
+					}
+				}
+
+				// We'll only handle cache locations (records) whose column values were read correctly. Otherwise, we wouldn't have
+				// enough information to properly export them.
+				if(retrieval_success)
+				{
+					// @Assert: The names of the directories that contain the cached files should have exactly this many characters.
+					_ASSERT( (wcslen(secure_directories) % NUM_CACHE_DIRECTORY_NAME_CHARS) == 0 );
+					debug_log_print("Container ID = %I64d.", container_id);
+					debug_log_print("Directory = %ls.", directory);
+					debug_log_print("SecureDirectories = %ls.", secure_directories);
+
+					const size_t NUM_CACHE_TABLE_NAME_CHARS = 10 + MAX_UINT64_CHARS;
+					wchar_t cache_table_name[NUM_CACHE_TABLE_NAME_CHARS]; // "Container_<s64 id>"
+					if(SUCCEEDED(StringCchPrintfW(cache_table_name, NUM_CACHE_TABLE_NAME_CHARS, L"Container_%I64d", container_id)))
+					{
+						JET_TABLEID cache_table_id = JET_tableidNil;
+						error_code = JetOpenTableW(session_id, database_id, cache_table_name, NULL, 0, JET_bitTableReadOnly, &cache_table_id);
+						if(error_code >= 0)
+						{
+							// >>>>
+							// >>>> START EXPORTING
+							// >>>>
+
+							if(error_code > 0)
+							{
+								log_print(LOG_WARNING, "Internet Explorer 10 to 11: Opened the cache table '%ls' with warning %ld.", cache_table_name, error_code);
+							}
+							
+							enum Cache_Column_Index
+							{
+								IDX_FILENAME = 0,
+								IDX_URL = 1,
+								IDX_FILE_SIZE = 2,
+								IDX_LAST_MODIFIED_TIME = 3,
+								IDX_CREATION_TIME = 4,
+								IDX_LAST_ACCESS_TIME = 5,
+								IDX_EXPIRY_TIME = 6,
+								IDX_HEADERS = 7,
+								IDX_SECURE_DIRECTORY = 8,
+								IDX_ACCESS_COUNT = 9,
+								NUM_CACHE_COLUMNS = 10
+							};
+
+							const wchar_t* CACHE_COLUMN_NAMES[NUM_CACHE_COLUMNS] =
+							{
+								L"Filename", 		// JET_coltypLongText 		(12)
+								L"Url", 			// JET_coltypLongText 		(12)
+								L"FileSize",		// JET_coltypLongLong 		(15)
+								L"ModifiedTime",	// JET_coltypLongLong 		(15)
+								L"CreationTime",	// JET_coltypLongLong 		(15)
+								L"AccessedTime",	// JET_coltypLongLong 		(15)
+								L"ExpiryTime",		// JET_coltypLongLong 		(15)
+								L"ResponseHeaders",	// JET_coltypLongBinary 	(11)
+								L"SecureDirectory",	// JET_coltypUnsignedLong 	(14)
+								L"AccessCount"		// JET_coltypUnsignedLong 	(14)
+							};
+							JET_COLUMNDEF cache_column_info[NUM_CACHE_COLUMNS];
+
+							for(size_t i = 0; i < NUM_CACHE_COLUMNS; ++i)
+							{
+								error_code = JetGetTableColumnInfoW(session_id, cache_table_id, CACHE_COLUMN_NAMES[i],
+																	&cache_column_info[i], sizeof(cache_column_info[i]), JET_ColInfo);
+							}
+
+							bool found_cache_record = (JetMove(session_id, cache_table_id, JET_MoveFirst, 0) == JET_errSuccess);
+							while(found_cache_record)
+							{
+								JET_RETRIEVECOLUMN cache_columns[NUM_CACHE_COLUMNS];
+
+								for(size_t i = 0; i < NUM_CACHE_COLUMNS; ++i)
+								{
+									cache_columns[i].columnid = cache_column_info[i].columnid;
+									cache_columns[i].pvData = NULL;
+									cache_columns[i].cbData = 0;
+									cache_columns[i].grbit = JET_bitRetrieveIgnoreDefault;
+									cache_columns[i].ibLongValue = 0;
+									cache_columns[i].itagSequence = 1;
+								}
+								error_code = JetRetrieveColumns(session_id, cache_table_id, cache_columns, NUM_CACHE_COLUMNS);
+
+								unsigned long filename_size = cache_columns[IDX_FILENAME].cbActual;
+								wchar_t* filename = push_arena(arena, filename_size, wchar_t);
+								cache_columns[IDX_FILENAME].pvData = filename;
+								cache_columns[IDX_FILENAME].cbData = filename_size;
+
+								unsigned long url_size = cache_columns[IDX_URL].cbActual;
+								wchar_t* url = push_arena(arena, url_size, wchar_t);
+								cache_columns[IDX_URL].pvData = url;
+								cache_columns[IDX_URL].cbData = url_size;
+
+								s64 file_size;
+								cache_columns[IDX_FILE_SIZE].pvData = &file_size;
+								cache_columns[IDX_FILE_SIZE].cbData = sizeof(file_size);
+
+								s64 last_modified_time_value;
+								cache_columns[IDX_LAST_MODIFIED_TIME].pvData = &last_modified_time_value;
+								cache_columns[IDX_LAST_MODIFIED_TIME].cbData = sizeof(last_modified_time_value);
+
+								s64 creation_time_value;
+								cache_columns[IDX_CREATION_TIME].pvData = &creation_time_value;
+								cache_columns[IDX_CREATION_TIME].cbData = sizeof(creation_time_value);
+								
+								s64 last_access_time_value;
+								cache_columns[IDX_LAST_ACCESS_TIME].pvData = &last_access_time_value;
+								cache_columns[IDX_LAST_ACCESS_TIME].cbData = sizeof(last_access_time_value);
+
+								s64 expiry_time_value;
+								cache_columns[IDX_EXPIRY_TIME].pvData = &expiry_time_value;
+								cache_columns[IDX_EXPIRY_TIME].cbData = sizeof(expiry_time_value);
+
+								unsigned long headers_size = cache_columns[IDX_HEADERS].cbActual;
+								char* headers = push_arena(arena, headers_size, char);
+								cache_columns[IDX_HEADERS].pvData = headers;
+								cache_columns[IDX_HEADERS].cbData = headers_size;
+
+								u32 secure_directory;
+								cache_columns[IDX_SECURE_DIRECTORY].pvData = &secure_directory;
+								cache_columns[IDX_SECURE_DIRECTORY].cbData = sizeof(secure_directory);
+
+								u32 access_count;
+								cache_columns[IDX_ACCESS_COUNT].pvData = &access_count;
+								cache_columns[IDX_ACCESS_COUNT].cbData = sizeof(access_count);
+
+								error_code = JetRetrieveColumns(session_id, cache_table_id, cache_columns, NUM_CACHE_COLUMNS);
+								for(size_t i = 0; i < NUM_CACHE_COLUMNS; ++i)
+								{
+									if(cache_columns[i].err < 0)
+									{
+										cache_columns[i].pvData = NULL;
+
+										JET_RECPOS record_position = {};
+										error_code = JetGetRecordPosition(session_id, cache_table_id, &record_position, sizeof(record_position));
+										log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to retrieve column %Iu for Cache record %lu in the Cache table '%ls'.", cache_columns[i].err, i, record_position.centriesLT, cache_table_name);
+									}
+								}
+
+								{
+									/*debug_log_print("Filename = '%ls'", filename);
+									debug_log_print("Url = '%ls'", url);
+									debug_log_print("File Size = '%I64d'", file_size);
+									debug_log_print("ModifiedTime = '%I64d'", last_modified_time_value);
+									debug_log_print("CreationTime = '%I64d'", creation_time_value);
+									debug_log_print("AccessedTime = '%I64d'", last_access_time_value);
+									debug_log_print("ExpiryTime = '%I64d'", expiry_time_value);
+									debug_log_print("Headers = '%hs'", headers);
+									debug_log_print("Secure Directory = '%I32u'", secure_directory);
+									debug_log_print("Access Count = '%I32u'", access_count);*/
+
+									PathUndecorateW(filename);
+									wchar_t* file_extension = skip_to_file_extension(filename);
+
+									if(exporter->should_create_csv)
+									{
+										Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+										{
+											{filename}, {url}, {file_extension}, {NULL},
+											{NULL}, {NULL}, {NULL}, {NULL},
+											{NULL}, {NULL}, {NULL}, {NULL},
+											{NULL}, {NULL}, {NULL}, {NULL}
+										};
+
+										csv_print_row(arena, csv_file, CSV_HEADER, csv_row, CSV_NUM_COLUMNS);
+									}
+								}
+								
+								clear_arena(arena);
+								found_cache_record = (JetMove(session_id, cache_table_id, JET_MoveNext, 0) == JET_errSuccess);
+							}
+
+							// >>>>
+							// >>>> FINISH EXPORTING
+							// >>>>
+							error_code = JetCloseTable(session_id, cache_table_id);
+							cache_table_id = JET_tableidNil;
+							if(error_code < 0)
+							{
+								log_print(LOG_WARNING, "Internet Explorer 10 to 11: Error %ld while trying to close the cache table '%ls'.", error_code, cache_table_name);
+							}
+						}
+						else
+						{
+							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the cache table '%ls'. The contents of this table will be ignored.", error_code, cache_table_name);
+						}
+					}
+					else
+					{
+						log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to format the cache container table's name for container ID %I64d.", container_id);
+					}
+
+				}
+			}
+
+			found_container_record = (JetMove(session_id, containers_table_id, JET_MoveNext, 0) == JET_errSuccess);
 		}
 
-		error_code = JetEndSession(session_id, 0);
-		if(error_code < 0)
-		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to end the session.", error_code);
-		}
+		close_csv_file(csv_file);
+		csv_file = INVALID_HANDLE_VALUE;
+
+		windows_nt_jet_clean_up(&instance, &session_id, &database_id, &containers_table_id);
 	}
+
 #endif
 
 /*

@@ -105,7 +105,7 @@ bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
 
 	if(!success)
 	{
-		debug_log_print("Error %lu while trying to convert FILETIME datetime (high datetime = %lu, low datetime = %lu).", GetLastError(), date_time.dwHighDateTime, date_time.dwLowDateTime);
+		debug_log_print("Format Filetime DateTime: Error %lu while trying to convert FILETIME datetime (high datetime = %lu, low datetime = %lu).", GetLastError(), date_time.dwHighDateTime, date_time.dwLowDateTime);
 		*formatted_string = TEXT('\0');
 	}
 
@@ -126,7 +126,7 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 
 	if(!success)
 	{
-		debug_log_print("Error %lu while trying to convert DOS datetime (date = %I32u, time = %I32u).", GetLastError(), date_time.date, date_time.time);
+		debug_log_print("Format Dos DateTime: Error %lu while trying to convert DOS datetime (date = %I32u, time = %I32u).", GetLastError(), date_time.date, date_time.time);
 		*formatted_string = TEXT('\0');
 	}
 
@@ -473,6 +473,12 @@ bool get_file_size(HANDLE file_handle, u64* file_size_result)
 	#endif
 }
 
+bool does_file_exist(TCHAR* file_path)
+{
+	DWORD attributes = GetFileAttributes(file_path);
+	return (attributes != INVALID_FILE_ATTRIBUTES) && ( (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
+}
+
 void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result)
 {
 	void* mapped_memory = NULL;
@@ -507,32 +513,32 @@ void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result)
 
 					if(mapped_memory == NULL)
 					{
-						log_print(LOG_ERROR, "Error %lu while trying to map a view of the file '%s'.", GetLastError(), file_path);
+						log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to map a view of the file '%s'.", GetLastError(), file_path);
 					}
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Error %lu while trying to create the file mapping for '%s'.", GetLastError(), file_path);
+					log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to create the file mapping for '%s'.", GetLastError(), file_path);
 				}
 
 				CloseHandle(mapping_handle); // @Note: According to MSDN, CloseHandle() and UnmapViewOfFile() can be called in any order.
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Skipping file mapping for empty file '%s'.", file_path);
+				log_print(LOG_WARNING, "Memory Mapping: Skipping file mapping for empty file '%s'.", file_path);
 			}
 
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Error %lu while trying to get the file size for '%s'.", GetLastError(), file_path);
+			log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file size for '%s'.", GetLastError(), file_path);
 		}
 
 		CloseHandle(file_handle); // @Note: "Files for which the last view has not yet been unmapped are held open with no sharing restrictions."
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Error %lu while trying to get the file handle for '%s'.", GetLastError(), file_path);
+		log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file handle for '%s'.", GetLastError(), file_path);
 	}
 
 	return mapped_memory;
@@ -555,17 +561,17 @@ bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Error %lu while trying to copy to the temporary file '%s'.", GetLastError(), full_temporary_file_path_result);
+				log_print(LOG_ERROR, "Copy To Temporary File: Error %lu while trying to copy to the temporary file '%s'.", GetLastError(), full_temporary_file_path_result);
 			}
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Error %lu while trying to get the temporary file path in '%s'.", GetLastError(), temporary_path);
+			log_print(LOG_ERROR, "Copy To Temporary File: Error %lu while trying to get the temporary file path in '%s'.", GetLastError(), temporary_path);
 		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Error %lu while trying to get the temporary directory path.", GetLastError());
+		log_print(LOG_ERROR, "Copy To Temporary File: Error %lu while trying to get the temporary directory path.", GetLastError());
 	}
 
 	return success;
@@ -591,7 +597,7 @@ bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_re
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Error %lu while trying to get the file handle for '%s'.", GetLastError(), path);
+		log_print(LOG_ERROR, "Read First File Bytes: Error %lu while trying to get the file handle for '%s'.", GetLastError(), path);
 		success = false;
 	}
 
@@ -609,7 +615,7 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Error %ld while trying to open registry key '%s'.", error_code, key_name);
+		log_print(LOG_ERROR, "Query Registry: Error %ld while trying to open registry key '%s'.", error_code, key_name);
 		// These registry functions only return this value, they don't set the last error code.
 		// We'll do it ourselves for consistent error handling when calling our function.
 		SetLastError(error_code);
@@ -625,7 +631,7 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 	// For now, we'll only handle simple string. Strings with expandable environment variables are skipped (REG_EXPAND_SZ).
 	if(success && (value_data_type != REG_SZ))
 	{
-		log_print(LOG_ERROR, "Unsupported data type %lu in registry value '%s\\%s'.", value_data_type, key_name, value_name);
+		log_print(LOG_ERROR, "Query Registry: Unsupported data type %lu in registry value '%s\\%s'.", value_data_type, key_name, value_name);
 		error_code = ERROR_NOT_SUPPORTED;
 		success = false;
 	}
@@ -990,7 +996,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
 	NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
 	{
-		log_print(LOG_WARNING, "Calling the stub version of NtQuerySystemInformation.");
+		log_print(LOG_WARNING, "NtQuerySystemInformation: Calling the stub version of this function.");
 		_ASSERT(false);
 		return STATUS_NOT_IMPLEMENTED;
 	}
@@ -1004,7 +1010,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
 	NT_QUERY_OBJECT(stub_nt_query_object)
 	{
-		log_print(LOG_WARNING, "Calling the stub version of NtQueryObject.");
+		log_print(LOG_WARNING, "NtQueryObject: Calling the stub version of this function.");
 		_ASSERT(false);
 		return STATUS_NOT_IMPLEMENTED;
 	}

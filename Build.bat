@@ -79,6 +79,12 @@ PUSHD "%~dp0"
 		SET "BUILD_VERSION=UNKNOWN"
 	)
 
+	REM SET "ZIP_PATH=_7z920-extra\7zr.exe"
+	REM SET "DIR_TO_ZIP="
+	REM SET "ARCHIVE_NAME_RELEASE=Web-Cache-Exporter-"
+	REM SET "ARCHIVE_NAME_DEBUG="
+	REM "%ZIP_PATH%" a "%ARCHIVE_NAME%" "%DIR_TO_ZIP%\"
+
 	IF "%CLEAN_BUILD%"=="Yes" (
 
 		ECHO [%~nx0] Cleaning build...

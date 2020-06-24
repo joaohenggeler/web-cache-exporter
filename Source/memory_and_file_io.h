@@ -53,6 +53,7 @@ const size_t MAX_PATH_CHARS = MAX_PATH;
 
 u64 combine_high_and_low_u32s(u32 high, u32 low);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
+bool does_file_exist(TCHAR* file_path);
 void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result);
 bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_file_path_result);
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
@@ -94,33 +95,34 @@ enum Csv_Type
 
 	CSV_LAST_WRITE_TIME = 5,
 	CSV_LAST_MODIFIED_TIME = 6,
-	CSV_LAST_ACCESS_TIME = 7,
-	CSV_CREATION_TIME = 8,
+	CSV_CREATION_TIME = 7,
+	CSV_LAST_ACCESS_TIME = 8,
 	CSV_EXPIRY_TIME = 9,
 
 	CSV_SERVER_RESPONSE = 10,
-	CSV_CONTENT_TYPE = 11,
-	CSV_CONTENT_LENGTH = 12,
-	CSV_CONTENT_ENCODING = 13,
+	CSV_CACHE_CONTROL = 11,
+	CSV_CONTENT_TYPE = 12,
+	CSV_CONTENT_LENGTH = 13,
+	CSV_CONTENT_ENCODING = 14,
 
-	CSV_LOCATION_ON_CACHE = 14,
-	CSV_MISSING_FILE = 15,
+	CSV_LOCATION_ON_CACHE = 15,
+	CSV_MISSING_FILE = 16,
 	
 	// Internet Explorer specific.
-	CSV_HITS = 16,
-	CSV_LEAK_ENTRY = 17,
+	CSV_HITS = 17,
+	CSV_LEAK_ENTRY = 18,
 	
 	// Shockwave Plugin specific.
-	CSV_DIRECTOR_FILE_TYPE = 18,
+	CSV_DIRECTOR_FILE_TYPE = 19,
 
-	NUM_CSV_TYPES = 19
+	NUM_CSV_TYPES = 20
 };
 const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
 {
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
-	"Last Write Time", "Last Modified Time", "Last Access Time", "Creation Time", "Expiry Time",
-	"Server Response", "Content-Type", "Content-Length", "Content-Encoding",
+	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
+	"Server Response", "Cache-Control", "Content-Type", "Content-Length", "Content-Encoding",
 	"Location On Cache", "Missing File",
 	"Hits", "Leak Entry",
 	"Director File Type"

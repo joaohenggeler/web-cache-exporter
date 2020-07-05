@@ -137,7 +137,7 @@ void export_shockwave_plugin_cache(Exporter* exporter)
 			TCHAR* file_extension = skip_to_file_extension(filename);
 
 			u64 file_size = combine_high_and_low_u32s(file_find_data.nFileSizeHigh, file_find_data.nFileSizeLow);
-			TCHAR file_size_string[MAX_UINT64_CHARS];
+			TCHAR file_size_string[MAX_INT64_CHARS];
 			convert_u64_to_string(file_size, file_size_string);
 
 			TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS];

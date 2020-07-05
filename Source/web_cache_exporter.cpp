@@ -195,6 +195,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Web Cache Exporter version %hs", BUILD_VERSION);
+	log_print(LOG_INFO, "foo is %d", foo);
 
 	if(argc <= 1)
 	{

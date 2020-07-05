@@ -1,6 +1,8 @@
 #include "web_cache_exporter.h"
 #include "memory_and_file_io.h"
 
+const int foo = 123;
+
 #ifdef DEBUG
 	#ifdef BUILD_9X
 		void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = NULL;
@@ -136,11 +138,15 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 const size_t INT_FORMAT_RADIX = 10;
 bool convert_u32_to_string(u32 value, TCHAR* result_string)
 {
-	return _ultot_s(value, result_string, MAX_UINT32_CHARS, INT_FORMAT_RADIX) != 0;
+	return _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) != 0;
 }
 bool convert_u64_to_string(u64 value, TCHAR* result_string)
 {
-	return _ui64tot_s(value, result_string, MAX_UINT64_CHARS, INT_FORMAT_RADIX) != 0;
+	return _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) != 0;
+}
+bool convert_s64_to_string(s64 value, TCHAR* result_string)
+{
+	return _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) != 0;
 }
 
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)

@@ -1,6 +1,8 @@
 #ifndef MEMORY_AND_FILE_IO_H
 #define MEMORY_AND_FILE_IO_H
 
+extern const int foo;
+
 struct Arena
 {
 	size_t used_size;
@@ -31,10 +33,11 @@ const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
 
-const size_t MAX_UINT32_CHARS = 33;
-const size_t MAX_UINT64_CHARS = 65;
+const size_t MAX_INT32_CHARS = 33;
+const size_t MAX_INT64_CHARS = 65;
 bool convert_u32_to_string(u32 value, TCHAR* result_string);
 bool convert_u64_to_string(u64 value, TCHAR* result_string);
+bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string, size_t num_chars);
@@ -101,28 +104,29 @@ enum Csv_Type
 
 	CSV_SERVER_RESPONSE = 10,
 	CSV_CACHE_CONTROL = 11,
-	CSV_CONTENT_TYPE = 12,
-	CSV_CONTENT_LENGTH = 13,
-	CSV_CONTENT_ENCODING = 14,
+	CSV_PRAGMA = 12,
+	CSV_CONTENT_TYPE = 13,
+	CSV_CONTENT_LENGTH = 14,
+	CSV_CONTENT_ENCODING = 15,
 
-	CSV_LOCATION_ON_CACHE = 15,
-	CSV_MISSING_FILE = 16,
+	CSV_LOCATION_ON_CACHE = 16,
+	CSV_MISSING_FILE = 17,
 	
 	// Internet Explorer specific.
-	CSV_HITS = 17,
-	CSV_LEAK_ENTRY = 18,
+	CSV_HITS = 18,
+	CSV_LEAK_ENTRY = 19,
 	
 	// Shockwave Plugin specific.
-	CSV_DIRECTOR_FILE_TYPE = 19,
+	CSV_DIRECTOR_FILE_TYPE = 20,
 
-	NUM_CSV_TYPES = 20
+	NUM_CSV_TYPES = 21
 };
 const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
 {
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
-	"Server Response", "Cache-Control", "Content-Type", "Content-Length", "Content-Encoding",
+	"Server Response", "Cache-Control", "Pragma", "Content-Type", "Content-Length", "Content-Encoding",
 	"Location On Cache", "Missing File",
 	"Hits", "Leak Entry",
 	"Director File Type"

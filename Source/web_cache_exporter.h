@@ -1,11 +1,24 @@
 #ifndef WEB_CACHE_EXPORTER_H
 #define WEB_CACHE_EXPORTER_H
 
+// Passed by the Build.bat batch file.
 #ifndef BUILD_VERSION
-	#ifdef DEBUG
-		#define BUILD_VERSION "UNKNOWN-debug"
+	#define BUILD_VERSION "UNKNOWN"
+#endif
+
+#ifdef DEBUG
+	#define BUILD_MODE "debug"
+#else
+	#define BUILD_MODE "release"
+#endif
+
+#ifdef BUILD_9X
+	#define BUILD_TARGET "9x-x86-32"
+#else
+	#ifdef BUILD_32_BIT
+		#define BUILD_TARGET "NT-x86-32"
 	#else
-		#define BUILD_VERSION "UNKNOWN-release"
+		#define BUILD_TARGET "NT-x86-64"
 	#endif
 #endif
 
@@ -107,8 +120,12 @@ struct Exporter
 	Exporter_Cache_Type cache_type;
 	TCHAR cache_path[MAX_PATH_CHARS];
 	TCHAR output_path[MAX_PATH_CHARS];
+	bool is_exporting_from_default_locations;
 
 	Arena arena;
+
+	TCHAR temporary_path[MAX_PATH_CHARS];
+	TCHAR executable_path[MAX_PATH_CHARS];
 
 	u32 cache_version;
 	TCHAR output_copy_path[MAX_PATH_CHARS];

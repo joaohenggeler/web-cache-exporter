@@ -250,7 +250,7 @@ TCHAR* skip_to_file_extension(TCHAR* str)
 	return file_extension;*/
 }
 
-static s8 hexadecimal_char_to_numeric(TCHAR hex_char)
+static s8 hexadecimal_char_to_integer(TCHAR hex_char)
 {
 	if(TEXT('0') <= hex_char && hex_char <= TEXT('9')) return (s8) (hex_char - TEXT('0'));
 	else if(TEXT('a') <= hex_char && hex_char <= TEXT('f')) return (s8) (hex_char - TEXT('a') + 0x0A);
@@ -258,7 +258,7 @@ static s8 hexadecimal_char_to_numeric(TCHAR hex_char)
 	else return -1;
 }
 
-bool decode_url(const TCHAR* url, TCHAR* decoded_url)
+bool decode_url(TCHAR* url)
 {
 	bool success = true;
 
@@ -266,95 +266,241 @@ bool decode_url(const TCHAR* url, TCHAR* decoded_url)
 	{
 		while(*url != TEXT('\0'))
 		{
+			// Decode percent-encoded characters.
+			// @Documentation: https://tools.ietf.org/html/rfc3986#section-2.1
 			if(*url == TEXT('%'))
 			{
 				TCHAR next_char_1 = *(url+1);
 				TCHAR next_char_2 = (next_char_1 != TEXT('\0')) ? (*(url+2)) : (TEXT('\0'));
-				s8 next_value_1 = hexadecimal_char_to_numeric(next_char_1);
-				s8 next_value_2 = hexadecimal_char_to_numeric(next_char_2);
+				s8 next_value_1 = hexadecimal_char_to_integer(next_char_1);
+				s8 next_value_2 = hexadecimal_char_to_integer(next_char_2);
 
 				if(next_value_1 > -1 && next_value_2 > -1)
 				{
-					*decoded_url = (TCHAR) (next_value_1 * 16 + next_value_2);
-					url += 3; // Skip "%xx".
+					TCHAR* url_end_of_encoded_char = url + 2;
+					MoveMemory(url, url_end_of_encoded_char, string_size(url_end_of_encoded_char));
+					*url = (TCHAR) (next_value_1 * 16 + next_value_2);
 				}
 				else
 				{
+					// If the percent sign isn't followed by two characters or if the characters
+					// don't represent a valid hexadecimal value.
 					success = false;
 					break;
 				}
 			}
 			else if(*url == TEXT('+'))
 			{
-				*decoded_url = TEXT(' ');
-				url += 1;
-			}
-			else
-			{
-				*decoded_url = *url;
-				url += 1;
+				*url = TEXT(' ');
 			}
 			
-			++decoded_url;
+			++url;
 		}
+	}
 
-		*decoded_url = TEXT('\0');
+	if(!success)
+	{
+		_ASSERT(false);
 	}
 
 	return success;
 }
 
-static void convert_url_to_path(TCHAR* url)
+// scheme:[//authority]path[?query][#fragment]
+// authority = [userinfo@]host[:port]
+
+bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts)
 {
-	if(url == NULL) return;
+	if(original_url == NULL) return false;
 
-	TCHAR* url_start = url;
-	TCHAR* last_path_separator = NULL;
-	TCHAR* url_path_start = NULL;
+	TCHAR* url = push_and_copy_to_arena(arena, string_size(original_url), TCHAR, original_url, string_size(original_url));
+	SecureZeroMemory(url_parts, sizeof(Url_Parts));
 
+	TCHAR* remaining_url = NULL;
+	TCHAR* scheme = _tcstok_s(url, TEXT(":"), &remaining_url);
+
+	if(scheme == NULL || is_string_empty(scheme))
+	{
+		return false;
+	}
+
+	url_parts->scheme = push_and_copy_to_arena(arena, string_size(scheme), TCHAR, scheme, string_size(scheme));
+
+	if(*remaining_url == TEXT('/') && *(remaining_url+1) == TEXT('/'))
+	{
+		remaining_url += 2;
+
+		bool has_path_delimiter = (_tcschr(remaining_url, TEXT('/')) != NULL) || (_tcschr(remaining_url, TEXT('\\')) != NULL);
+		TCHAR* authority = _tcstok_s(NULL, TEXT("/\\"), &remaining_url);
+
+		if(has_path_delimiter && authority != NULL)
+		{
+			TCHAR* remaining_authority = NULL;
+			
+			bool has_userinfo = _tcschr(authority, TEXT('@')) != NULL;
+			TCHAR* userinfo = (has_userinfo) ? (_tcstok_s(authority, TEXT("@"), &remaining_authority)) : (NULL);
+
+			TCHAR* string_to_split = (has_userinfo) ? (NULL) : (authority);
+			TCHAR* host = _tcstok_s(string_to_split, TEXT(":"), &remaining_authority);
+			TCHAR* port = (!is_string_empty(remaining_authority)) ? (remaining_authority) : (NULL);
+
+			if(host != NULL && !is_string_empty(host))
+			{
+				url_parts->host = push_and_copy_to_arena(arena, string_size(host), TCHAR, host, string_size(host));
+			}
+			else
+			{
+				return false;
+			}
+
+			if(userinfo != NULL) url_parts->userinfo = push_and_copy_to_arena(arena, string_size(userinfo), TCHAR, userinfo, string_size(userinfo));
+			if(port != NULL) url_parts->port = push_and_copy_to_arena(arena, string_size(port), TCHAR, port, string_size(port));
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	TCHAR* path = _tcstok_s(NULL, TEXT("?"), &remaining_url);
+	if(path != NULL && !is_string_empty(path))
+	{
+		url_parts->path = push_and_copy_to_arena(arena, string_size(path), TCHAR, path, string_size(path));
+	}
+	else
+	{
+		return false;
+	}
+
+	TCHAR* query = _tcstok_s(NULL, TEXT("#"), &remaining_url);
+	TCHAR* fragment = (!is_string_empty(remaining_url)) ? (remaining_url) : (NULL);
+	if(query != NULL) url_parts->query = push_and_copy_to_arena(arena, string_size(query), TCHAR, query, string_size(query));
+	if(fragment != NULL) url_parts->fragment = push_and_copy_to_arena(arena, string_size(fragment), TCHAR, fragment, string_size(fragment));
+
+	return true;
+
+	/*TCHAR* scheme_begin = url;
+	bool seen_scheme = false;
 	while(*url != TEXT('\0'))
 	{
-		if(*url == TEXT('/'))
+		if(*url == TEXT(':'))
 		{
-			*url = TEXT('\\');
-			last_path_separator = url;
-		}
-		else if(*url == TEXT('?') || *url == TEXT('#'))
-		{
+			size_t scheme_size = pointer_difference(url, scheme_begin) + sizeof(TCHAR);
+			size_t num_scheme_chars = scheme_size / sizeof(TCHAR);
+			url_parts->scheme = push_and_copy_to_arena(arena, scheme_size, TCHAR, scheme_begin, scheme_size);
+			url_parts->scheme[num_scheme_chars - 1] = TEXT('\0');
+
+			seen_scheme = true;
 			break;
-		}
-		else if(*url == TEXT(':'))
-		{
-			url_path_start = url + 1;
-
-			TCHAR* next_char_1 = url + 1;
-			if(*next_char_1 == TEXT('/'))
-			{
-				url_path_start = next_char_1 + 1;
-				++url;
-			}
-
-			TCHAR* next_char_2 = next_char_1 + 1;
-			if(*next_char_1 == TEXT('/') && *next_char_2 == TEXT('/'))
-			{
-				url_path_start = next_char_2 + 1;
-				++url;
-			}
-			
 		}
 
 		++url;
 	}
 
-	if(last_path_separator != NULL)
+	if(!seen_scheme) return false;
+	++url;
+
+	// authority = [username:password@]host[:port]
+	// authority = [username@]host[:port]
+	if(*url == TEXT('/') && *(url+1) == TEXT('/'))
 	{
-		*last_path_separator = TEXT('\0');
+		url += 2;
+		TCHAR* authority_begin = url;
+
+		TCHAR* username_begin = NULL;
+		TCHAR* password_begin = NULL;
+		TCHAR* host_begin = NULL;
+		TCHAR* port_begin = NULL;
+
+		TCHAR* username_end = NULL;
+		TCHAR* password_end = NULL;
+		TCHAR* host_end = NULL;
+		TCHAR* port_end = NULL;
+
+		size_t username_size = 0;
+		size_t password_size = 0;
+		size_t host_size = 0;
+		size_t port_size = 0;
+
+		bool seen_username = false;
+		bool seen_end_of_userinfo = false;
+
+		while(*url != TEXT('\0'))
+		{
+			if(*url == TEXT(':'))
+			{ 
+				if(!seen_end_of_userinfo)
+				{
+					username_begin = authority_begin;
+					username_end = url - 1;
+					password_begin = url + 1;
+				}
+				else
+				{
+					if(host_begin != NULL) host_end = url - 1;
+					port_begin = url + 1;
+				}
+			}
+			else if(*url == TEXT('@'))
+			{
+				seen_end_of_userinfo = true;
+
+				if(password_begin != NULL)
+				{
+					password_end = url - 1;
+				}
+				else
+				{
+					username_end = url - 1;
+				}
+
+				host_begin = url + 1;
+			}
+
+			++url;
+		}
+
+		if(port_begin != NULL) port_end = url - 1;
+		if(host_begin == NULL) return false;
+
+		if(username_begin != NULL)
+		{
+			size_t username_size = pointer_difference(url, username_begin) + sizeof(TCHAR);
+			size_t num_username_chars = username_size / sizeof(TCHAR);
+			url_parts->scheme = push_and_copy_to_arena(arena, username_size, TCHAR, username_begin, username_size);
+			url_parts->scheme[num_scheme_chars - 1] = TEXT('\0');
+		}
 	}
 
-	if(url_path_start != NULL)
+
+	return true;*/
+
+	/*
+	bool success = true;
+
+	while(*url != TEXT('\0'))
 	{
-		MoveMemory(url_start, url_path_start, string_size(url_path_start));
+		size_t part_size = pointer_difference(url, part_begin) + sizeof(TCHAR);
+		size_t num_part_chars = part_size / sizeof(TCHAR);
+
+		if(!seen_scheme && *url == TEXT(':'))
+		{
+			seen_scheme = true;
+			url_parts->scheme = push_and_copy_to_arena(arena, part_size, TCHAR, part_begin, part_size);
+			url_parts->scheme[num_part_chars - 1] = TEXT('\0');
+			part_begin = url + 1;
+		}
+		else if(XXX && *url == TEXT('/') && *(url+1) == TEXT('/'))
+		{
+
+
+			seen_authority = true;
+		}
+
+		++url;
 	}
+
+	return success;*/
 }
 
 bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result)
@@ -411,29 +557,102 @@ void create_directories(const TCHAR* path_to_create)
 	}
 }
 
+static void correct_url_path_separators(TCHAR* path)
+{
+	if(path != NULL)
+	{
+		while(*path != TEXT('\0'))
+		{
+			// Path = "www.example.com/../file.ext" -> "www.example.com/__/file.ext"
+			/*if( 	(*path == TEXT('\\') || *path == TEXT('/'))
+				&& 	*(path+1) == TEXT('.')
+				&& 	*(path+2) == TEXT('.')
+				&& 	(*(path+3) == TEXT('\\') || *(path+3) == TEXT('/')))
+			{
+				*(path+1) = TEXT('_');
+				*(path+2) = TEXT('_');
+			}*/
+
+			// Path = "www.example.com/path/file.ext" -> "www.example.com\path\file.ext"
+			if(*path == TEXT('/'))
+			{
+				*path = TEXT('\\');
+			}
+
+			++path;
+		}		
+	}
+}
+
+static void convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* path)
+{
+	Url_Parts url_parts;
+	if(partition_url(arena, url, &url_parts))
+	{
+		path[0] = TEXT('\0');
+		if(url_parts.host != NULL) PathAppend(path, url_parts.host);
+		
+		_ASSERT(url_parts.path != NULL);
+
+		correct_url_path_separators(url_parts.path);
+		// Remove the resource's filename so it's not part of the final path.
+		TCHAR* last_separator = _tcsrchr(url_parts.path, TEXT('\\'));
+		if(last_separator != NULL) *last_separator = TEXT('\0');
+		
+		PathAppend(path, url_parts.path);
+	}
+}
+
+/*void path_append_and_truncate(TCHAR* base_path, const TCHAR* path_to_append)
+{
+	const size_t MAX_CHARS = MAX_PATH_CHARS - 1;
+	size_t num_base_path_chars = _tcslen(base_path);
+
+	if(num_base_path_chars > MAX_CHARS)
+	{
+		base_path[MAX_CHARS] = TEXT('\0');
+		return;
+	}
+
+	size_t num_path_to_append_chars = _tcslen(path_to_append);
+	TCHAR foo[MAX_PATH_CHARS];
+	StringCchCopy(foo, MAX_PATH_CHARS, path_to_append);
+
+	MIN();
+}*/
+
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename)
 {
-	TCHAR* url_path;
-	if(url != NULL)
+	TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
+	if(url != NULL) convert_url_to_path(arena, url, url_path);
+
+	TCHAR full_copy_target_path[MAX_PATH_CHARS] = TEXT("");
+	get_full_path_name((TCHAR*) base_destination_path, full_copy_target_path);
+	bool path_append_success = PathAppend(full_copy_target_path, url_path) == TRUE;
+	if(is_string_empty(url_path) || !path_append_success)
 	{
-		url_path = push_and_copy_to_arena(arena, string_size(url), TCHAR, url, string_size(url));
-		convert_url_to_path(url_path);
-	}
-	else
-	{
-		url_path = NULL;
+		console_print("The website directory structure for the file '%s' could not be created because it's too long. This file will be copied to the base export destination instead: '%s'.\n", filename, base_destination_path);
+		log_print(LOG_WARNING, "Copy File Using URL Structure: Failed to build the website directory structure for the file '%s' because its URL is too long. This file will be copied to the base export destination instead: '%s'.", filename, base_destination_path);
+		get_full_path_name((TCHAR*) base_destination_path, full_copy_target_path);
 	}
 
-	TCHAR full_copy_target_path[MAX_PATH_CHARS];
-	GetFullPathName(base_destination_path, MAX_PATH_CHARS, full_copy_target_path, NULL);
-	if(url_path != NULL) PathAppend(full_copy_target_path, url_path);
+	_ASSERT(!is_string_empty(full_copy_target_path));
 	
 	create_directories(full_copy_target_path);
-	PathAppend(full_copy_target_path, filename);
+	path_append_success = PathAppend(full_copy_target_path, filename) == TRUE;
+	if(!path_append_success)
+	{
+		console_print("An error occurred while building the final output copy path for the file '%s'. This file will not be copied.\n", filename);
+		log_print(LOG_ERROR, "Copy File Using URL Structure: Failed to append the filename '%s' to the output copy path '%s'. This file will not be copied.", filename, full_copy_target_path);
+		_ASSERT(false);
+		return false;
+	}
 
-	bool copy_success;
+	_ASSERT(!is_string_empty(full_copy_target_path));
 
-	#if defined(DEBUG) && defined(EXPORT_DUMMY_FILES)
+	bool copy_success = false;
+
+	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
 		copy_success = create_empty_file(full_copy_target_path);
 		full_file_path;
 	#else
@@ -444,10 +663,10 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 	while(!copy_success && GetLastError() == ERROR_FILE_EXISTS)
 	{
 		++num_naming_collisions;
-		TCHAR full_unique_copy_target_path[MAX_PATH_CHARS];
+		TCHAR full_unique_copy_target_path[MAX_PATH_CHARS] = TEXT("");
 		StringCchPrintf(full_unique_copy_target_path, MAX_PATH_CHARS, TEXT("%s.%I32u"), full_copy_target_path, num_naming_collisions);
 		
-		#if defined(DEBUG) && defined(EXPORT_DUMMY_FILES)
+		#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
 			copy_success = create_empty_file(full_unique_copy_target_path);
 			full_file_path;
 		#else
@@ -485,20 +704,25 @@ bool does_file_exist(TCHAR* file_path)
 	return (attributes != INVALID_FILE_ATTRIBUTES) && ( (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
 }
 
-void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result)
+void safe_close_handle(HANDLE* handle)
+{
+	if(*handle != INVALID_HANDLE_VALUE && *handle != NULL)
+	{
+		CloseHandle(*handle);
+		*handle = INVALID_HANDLE_VALUE;
+	}
+	else
+	{
+		_ASSERT(false);
+	}
+}
+
+void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result)
 {
 	void* mapped_memory = NULL;
 	*file_size_result = 0;
 
-	HANDLE file_handle = CreateFile(file_path,
-								     GENERIC_READ,
-								     FILE_SHARE_READ, // @Note: MSDN recommends exclusive access (though not required).
-								     NULL,
-								     OPEN_EXISTING,
-								     0,
-								     NULL);
-
-	if(file_handle != INVALID_HANDLE_VALUE)
+	if(file_handle != INVALID_HANDLE_VALUE && file_handle != NULL)
 	{
 		// Reject empty files.
 		u64 file_size;
@@ -513,55 +737,95 @@ void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result)
 				{
 					#ifdef DEBUG
 						mapped_memory = MapViewOfFileEx(mapping_handle, FILE_MAP_READ, 0, 0, 0, DEBUG_MEMORY_MAPPING_BASE_ADDRESS);
+						#ifndef BUILD_9X
+							DEBUG_MEMORY_MAPPING_BASE_ADDRESS = advance_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, 0x01000000);
+						#endif
 					#else
 						mapped_memory = MapViewOfFile(mapping_handle, FILE_MAP_READ, 0, 0, 0);
 					#endif
 
 					if(mapped_memory == NULL)
 					{
-						log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to map a view of the file '%s'.", GetLastError(), file_path);
+						log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to map a view of the file '%p'.", GetLastError(), file_handle);
 					}
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to create the file mapping for '%s'.", GetLastError(), file_path);
+					log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to create the file mapping for '%p'.", GetLastError(), file_handle);
 				}
 
 				CloseHandle(mapping_handle); // @Note: According to MSDN, CloseHandle() and UnmapViewOfFile() can be called in any order.
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Memory Mapping: Skipping file mapping for empty file '%s'.", file_path);
+				log_print(LOG_WARNING, "Memory Mapping: Skipping file mapping for empty file '%p'.", file_handle);
 			}
 
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file size for '%s'.", GetLastError(), file_path);
+			log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file size for '%p'.", GetLastError(), file_handle);
 		}
 
-		CloseHandle(file_handle); // @Note: "Files for which the last view has not yet been unmapped are held open with no sharing restrictions."
+		// CloseHandle(file_handle); // @Note: "Files for which the last view has not yet been unmapped are held open with no sharing restrictions."
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file handle for '%s'.", GetLastError(), file_path);
+		log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file handle for '%p'.", GetLastError(), file_handle);
 	}
 
 	return mapped_memory;
 }
 
-bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_file_path_result)
+void* memory_map_entire_file(TCHAR* file_path, HANDLE* result_file_handle, u64* file_size_result)
 {
-	bool success = false;
+	HANDLE file_handle = CreateFile(file_path,
+									GENERIC_READ,
+									FILE_SHARE_READ, // @Note: MSDN recommends exclusive access (though not required).
+									NULL,
+									OPEN_EXISTING,
+									0,
+									NULL);
 
-	const size_t NUM_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
-	TCHAR temporary_path[NUM_TEMPORARY_PATH_CHARS];
+	*result_file_handle = file_handle;
 
-	if(GetTempPath(NUM_TEMPORARY_PATH_CHARS, temporary_path) != 0)
+	return memory_map_entire_file(file_handle, file_size_result);
+}
+
+bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path,
+							TCHAR* result_file_destination_path, HANDLE* result_handle)
+{
+	bool copy_success = false;
+	bool get_handle_success = false;
+
+	copy_success = GetTempFileName(base_temporary_path, TEXT("WCE"), 0, result_file_destination_path) != 0
+					&& CopyFile(file_source_path, result_file_destination_path, FALSE) == TRUE;
+
+	if(copy_success)
+	{
+		HANDLE file_handle = CreateFile(result_file_destination_path,
+										GENERIC_READ,
+										0,
+										NULL,
+										OPEN_EXISTING,
+										FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+										NULL);
+
+		*result_handle = file_handle;
+		get_handle_success = file_handle != INVALID_HANDLE_VALUE;
+		if(!get_handle_success) DeleteFile(result_file_destination_path);
+	}
+
+	return copy_success && get_handle_success;
+
+	/*bool success = false;
+	TCHAR temporary_path[MAX_TEMPORARY_PATH_CHARS];
+
+	if(GetTempPath(MAX_TEMPORARY_PATH_CHARS, temporary_path) != 0)
 	{
 		if(GetTempFileName(temporary_path, TEXT("WCE"), 0, full_temporary_file_path_result) != 0)
 		{
-			if(CopyFile(full_source_file_path, full_temporary_file_path_result, FALSE) == TRUE)
+			if(CopyFile(file_source_path, full_temporary_file_path_result, FALSE) == TRUE)
 			{
 				success = true;
 			}
@@ -580,7 +844,38 @@ bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_
 		log_print(LOG_ERROR, "Copy To Temporary File: Error %lu while trying to get the temporary directory path.", GetLastError());
 	}
 
-	return success;
+	return success;*/
+}
+
+bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path, HANDLE* result_handle)
+{	
+	bool create_success = false;
+	bool get_handle_success = false;
+
+	u32 unique_id = 1;
+	do
+	{
+		create_success = GetTempFileName(base_temporary_path, TEXT("WCE"), unique_id, result_directory_path) != 0
+						&& CreateDirectory(result_directory_path, NULL) == TRUE;
+		++unique_id;
+	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
+
+	if(create_success)
+	{
+		HANDLE directory_handle = CreateFile(result_directory_path,
+										     GENERIC_READ,
+										     0,
+										     NULL,
+										     OPEN_EXISTING,
+										     FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_DELETE_ON_CLOSE,
+										     NULL);
+
+		*result_handle = directory_handle;
+		get_handle_success = directory_handle != INVALID_HANDLE_VALUE;
+		if(!get_handle_success) RemoveDirectory(result_directory_path);
+	}
+
+	return create_success && get_handle_success;
 }
 
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read)
@@ -598,7 +893,7 @@ bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_re
 	{
 		DWORD num_bytes_read;
 		success = (ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, NULL) == TRUE)
-					&& (num_bytes_read == num_bytes_to_read);
+				&& (num_bytes_read == num_bytes_to_read);
 		CloseHandle(file_handle);
 	}
 	else
@@ -827,16 +1122,9 @@ HANDLE create_csv_file(const TCHAR* file_path)
 					NULL);
 }
 
-void close_csv_file(HANDLE csv_file)
+void close_csv_file(HANDLE* csv_file)
 {
-	if(csv_file != NULL && csv_file != INVALID_HANDLE_VALUE)
-	{
-		CloseHandle(csv_file);
-	}
-	else
-	{
-		_ASSERT(false);
-	}
+	safe_close_handle(csv_file);
 }
 
 void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns)

@@ -46,19 +46,51 @@ char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
 TCHAR* skip_to_file_extension(TCHAR* str);
 
-bool decode_url(const TCHAR* url, TCHAR* decoded_url);
+struct Url_Parts
+{
+	TCHAR* scheme;
+
+	TCHAR* userinfo;
+	TCHAR* host;
+	TCHAR* port;
+
+	TCHAR* path;
+	TCHAR* query;
+	TCHAR* fragment;
+};
+
+bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
+bool decode_url(TCHAR* url);
 bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result = NULL);
 void create_directories(const TCHAR* path_to_create);
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
 
-const size_t MAX_PATH_CHARS = MAX_PATH;
+const size_t MAX_PATH_CHARS = MAX_PATH + 1;
+const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 //const size_t MAX_PATH_CHARS_WITH_NULL = MAX_PATH_CHARS + 1;
 
+#define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
+#define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
 u64 combine_high_and_low_u32s(u32 high, u32 low);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
 bool does_file_exist(TCHAR* file_path);
-void* memory_map_entire_file(TCHAR* file_path, u64* file_size_result);
-bool copy_to_temporary_file(TCHAR* full_source_file_path, TCHAR* full_temporary_file_path_result);
+void safe_close_handle(HANDLE* handle);
+#define safe_unmap_view_of_file(base_address)\
+{\
+	if(base_address != NULL)\
+	{\
+		UnmapViewOfFile(base_address);\
+		base_address = NULL;\
+	}\
+	else\
+	{\
+		_ASSERT(false);\
+	}\
+}
+void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result);
+void* memory_map_entire_file(TCHAR* file_path, HANDLE* result_file_handle, u64* file_size_result);
+bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
+bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path, HANDLE* result_handle);
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, DWORD value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
@@ -85,7 +117,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 	#define debug_log_print(...)
 #endif
 
-#define console_print(string_format, ...) _tprintf(TEXT(string_format), __VA_ARGS__)
+#define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n"), __VA_ARGS__)
 
 enum Csv_Type
 {
@@ -139,7 +171,7 @@ struct Csv_Entry
 };
 
 HANDLE create_csv_file(const TCHAR* file_path);
-void close_csv_file(HANDLE csv_file);
+void close_csv_file(HANDLE* csv_file);
 void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);
 void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Csv_Entry row[], size_t num_columns);
 

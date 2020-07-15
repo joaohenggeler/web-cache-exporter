@@ -50,21 +50,23 @@ static TCHAR* skip_to_suboption(TCHAR* str)
 
 	if(str != NULL)
 	{
-		if(*str == '-')
+		if(*str == TEXT('-'))
 		{
 			++str;
 		}
 
-		while(*str != '\0' && *str != '-')
+		while(*str != TEXT('\0') && *str != TEXT('-'))
 		{
 			++str;
 		}
 
-		suboption = (*str != '\0') ? (str) : (NULL);
+		suboption = (*str != TEXT('\0')) ? (str) : (NULL);
 	}
 
 	return suboption;
 }
+
+const TCHAR* DEFAULT_EXPORT_PATH = TEXT("Exported-Cache");
 
 static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Exporter* exporter)
 {
@@ -95,7 +97,9 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
-			PathAppend(exporter->output_path, TEXT("ExportedCache"));
+			PathAppend(exporter->output_path, DEFAULT_EXPORT_PATH);
+
+			exporter->is_exporting_from_default_locations = true;
 
 			seen_export_option = true;
 			break;
@@ -140,7 +144,9 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
 			}
-			PathAppend(exporter->output_path, TEXT("ExportedCache"));
+			PathAppend(exporter->output_path, DEFAULT_EXPORT_PATH);
+
+			exporter->is_exporting_from_default_locations = is_string_empty(exporter->cache_path);
 			
 			seen_export_option = true;
 			break;
@@ -186,7 +192,12 @@ int _tmain(int argc, TCHAR* argv[])
 	exporter.cache_type = CACHE_UNKNOWN;
 	exporter.cache_path[0] = TEXT('\0');
 	exporter.output_path[0] = TEXT('\0');
+	exporter.is_exporting_from_default_locations = false;
+
 	exporter.arena = NULL_ARENA;
+
+	exporter.temporary_path[0] = TEXT('\0');
+	exporter.executable_path[0] = TEXT('\0');
 	
 	exporter.cache_version = 0;
 	exporter.output_copy_path[0] = TEXT('\0');
@@ -194,7 +205,7 @@ int _tmain(int argc, TCHAR* argv[])
 	exporter.index_path[0] = TEXT('\0');
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
-	log_print(LOG_INFO, "Web Cache Exporter version %hs", BUILD_VERSION);
+	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
 	log_print(LOG_INFO, "foo is %d", foo);
 
 	if(argc <= 1)
@@ -213,27 +224,33 @@ int _tmain(int argc, TCHAR* argv[])
 
 	if(!parse_exporter_arguments(argc, argv, &exporter))
 	{
-		log_print(LOG_ERROR, "An error occured while parsing the command line arguments. The program will not run.");
+		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will not run.");
 		clean_up(&exporter);
 		return 1;
 	}
 
 	size_t memory_to_use = megabytes_to_bytes(4) * sizeof(TCHAR);
-	debug_log_print("Memory Arena: Allocating %Iu bytes for the temporary memory arena.", memory_to_use);
+	debug_log_print("Startup: Allocating %Iu bytes for the temporary memory arena.", memory_to_use);
 
 	if(!create_arena(&exporter.arena, memory_to_use))
 	{
-		log_print(LOG_ERROR, "Could not allocate enough memory to run the program.");
+		log_print(LOG_ERROR, "Startup: Could not allocate enough memory to run the program.");
 		clean_up(&exporter);
 		return 1;
 	}
 
+	if(GetTempPath(MAX_PATH_CHARS, exporter.temporary_path) == 0)
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the temporary path with error code %lu.", GetLastError());
+	}
+
+	if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) == 0)
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the executable path with error code %lu.", GetLastError());
+	}
+	PathAppend(exporter.executable_path, TEXT(".."));
+
 	/*
-	char executable_path[MAX_PATH_CHARS] = "";
-	GetModuleFileNameA(NULL, executable_path, MAX_PATH_CHARS);
-	PathAppendA(executable_path, "..");
-	debug_log_print("Executable Directory: %s", executable_path);
-	
 	char working_path[MAX_PATH_CHARS] = "";
 	GetCurrentDirectoryA(MAX_PATH_CHARS, working_path);
 	debug_log_print("Working Directory: %s", working_path);
@@ -246,15 +263,19 @@ int _tmain(int argc, TCHAR* argv[])
 	debug_log_print("- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("true") : ("false"));
 	debug_log_print("- Cache Path: '%s'", (exporter.cache_path != NULL) ? (exporter.cache_path) : (TEXT("-")));
 	debug_log_print("- Output Path: '%s'", (exporter.output_path != NULL) ? (exporter.output_path) : (TEXT("-")));
-	
+	debug_log_print("- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("true") : ("false"));
+	debug_log_print("----------------------------------------");
+	debug_log_print("- Temporary Path: '%s'", (exporter.temporary_path != NULL) ? (exporter.temporary_path) : (TEXT("-")));
+	debug_log_print("- Executable Path: '%s'", (exporter.executable_path != NULL) ? (exporter.executable_path) : (TEXT("-")));
+	debug_log_print("----------------------------------------");
 	debug_log_print("- Cache Version: %I32u", exporter.cache_version);
 	debug_log_print("- Output Copy Path: '%s'", (exporter.output_copy_path != NULL) ? (exporter.output_copy_path) : (TEXT("-")));
 	debug_log_print("- Output CSV Path: '%s'", (exporter.output_csv_path != NULL) ? (exporter.output_csv_path) : (TEXT("-")));
 	debug_log_print("- Index Path: '%s'", (exporter.index_path != NULL) ? (exporter.index_path) : (TEXT("-")));
 
-	if(is_string_empty(exporter.cache_path) && (exporter.cache_type != CACHE_ALL))
+	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
 	{
-		log_print(LOG_INFO, "No cache path specified. Exporting the cache from any existing default directories.");
+		log_print(LOG_INFO, "Startup: No cache path specified. Exporting the cache from any existing default directories.");
 	}
 
 	log_print_newline();
@@ -278,6 +299,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 		case(CACHE_ALL):
 		{
+			_ASSERT(exporter.is_exporting_from_default_locations);
 			_ASSERT(is_string_empty(exporter.cache_path));
 
 			export_specific_or_default_internet_explorer_cache(&exporter);

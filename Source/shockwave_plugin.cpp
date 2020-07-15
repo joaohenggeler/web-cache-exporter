@@ -174,6 +174,5 @@ void export_shockwave_plugin_cache(Exporter* exporter)
 	FindClose(search_handle);
 	search_handle = INVALID_HANDLE_VALUE;
 
-	close_csv_file(csv_file);
-	csv_file = INVALID_HANDLE_VALUE;
+	close_csv_file(&csv_file);
 }

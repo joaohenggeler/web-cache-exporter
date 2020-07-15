@@ -29,8 +29,8 @@ enum Internet_Explorer_Cache_Version
 };
 TCHAR* IE_CACHE_VERSION_TO_STRING[NUM_IE_CACHE_VERSIONS] =
 {
-	TEXT("Internet-Explorer-Unknown"),
-	TEXT("Internet-Explorer-4"), TEXT("Internet-Explorer-5-to-9"), TEXT("Internet-Explorer-10-to-11")
+	TEXT("IE-UNKNOWN"),
+	TEXT("IE-4"), TEXT("IE-5-9"), TEXT("IE-10-11")
 };
 
 const size_t CSV_NUM_COLUMNS = 18;
@@ -368,7 +368,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		_ASSERT(lstrcmp(test_1, test_2) == 0);
 	}*/
 
-	if(is_string_empty(exporter->cache_path))
+	if(exporter->is_exporting_from_default_locations)
 	{
 		if(find_internet_explorer_cache(exporter->cache_path))
 		{
@@ -420,28 +420,29 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 {
 	Arena* arena = &(exporter->arena);
 
-	u64 index_file_size;
-	void* index_file = memory_map_entire_file(exporter->index_path, &index_file_size);
-	bool was_index_copied_to_temporary_file = false;
-	TCHAR temporary_index_path[MAX_PATH_CHARS];
-
+	HANDLE index_handle = INVALID_HANDLE_VALUE;
+	u64 index_file_size = 0;
+	void* index_file = memory_map_entire_file(exporter->index_path, &index_handle, &index_file_size);
+	
 	if(index_file == NULL)
 	{
-		if( (GetLastError() == ERROR_FILE_NOT_FOUND) || (GetLastError() == ERROR_PATH_NOT_FOUND) )
+		DWORD error_code = GetLastError();
+
+		if( (error_code == ERROR_FILE_NOT_FOUND) || (error_code == ERROR_PATH_NOT_FOUND) )
 		{
 			log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was not found.");
 		}
-		else if(GetLastError() == ERROR_SHARING_VIOLATION)
+		else if(error_code == ERROR_SHARING_VIOLATION)
 		{
 			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a copy and opening that one...");
 		
 			// @TODO: Can we get a handle with CreateFile() that has the DELETE_ON_CLOSE flag set?
 			// We wouldn't need to explicitly delete the temporary file + it's deleted if the exporter crashes.
-			if(copy_to_temporary_file(exporter->index_path, temporary_index_path))
+			TCHAR temporary_index_path[MAX_PATH_CHARS] = TEXT("");
+			if(copy_to_temporary_file(exporter->index_path, exporter->temporary_path, temporary_index_path, &index_handle))
 			{
 				log_print(LOG_INFO, "Internet Explorer 4 to 9: Copied the index file to '%s'.", temporary_index_path);
-				was_index_copied_to_temporary_file = true;
-				index_file = memory_map_entire_file(temporary_index_path, &index_file_size);
+				index_file = memory_map_entire_file(index_handle, &index_file_size);
 			}
 			else
 			{
@@ -453,7 +454,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file == NULL)
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to open the index file correctly. No files will be exported from this cache.");
-		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		safe_close_handle(&index_handle);
 		return;
 	}
 
@@ -465,7 +466,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file_size < sizeof(Internet_Explorer_Index_Header))
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is smaller than the file format's header. No files will be exported from this cache.");
-		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
 	}
@@ -479,7 +480,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		signature_string[NUM_SIGNATURE_CHARS] = '\0';
 
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file starts with an invalid signature: '%hs'. No files will be exported from this cache.", signature_string);
-		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
 	}
@@ -487,7 +488,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file_size != header->file_size)
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is different than the size specified in its header. No files will be exported from this cache.");
-		if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
 	}
@@ -583,12 +584,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
 					TCHAR* url = copy_ansi_string_to_tchar(arena, url_in_mmf);
 					// @TODO: Change decode_url() so it decodes the URL in-place.
-					TCHAR* url_copy = push_and_copy_to_arena(arena, string_size(url), TCHAR, url, string_size(url));
-					if(!decode_url(url_copy, url))
-					{
-						_ASSERT(false);
-						url = NULL;
-					}
+					//TCHAR* url_copy = push_and_copy_to_arena(arena, string_size(url), TCHAR, url, string_size(url));
+					decode_url(url);
 
 					u32 entry_offset_to_headers;
 					GET_URL_ENTRY_FIELD(entry_offset_to_headers, entry_offset_to_headers);
@@ -741,13 +738,10 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
-	close_csv_file(csv_file);
-	csv_file = INVALID_HANDLE_VALUE;
+	close_csv_file(&csv_file);
 
-	UnmapViewOfFile(index_file);
-	index_file = NULL;
-
-	if(was_index_copied_to_temporary_file) DeleteFile(temporary_index_path);
+	safe_unmap_view_of_file(index_file);
+	safe_close_handle(&index_handle);
 
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Finished exporting the cache.");
 }
@@ -837,6 +831,23 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		StringCchCopyW(database_path, MAX_ESE_PATH_CHARS, index_path);
 		PathAppendW(database_path, L"..");
 		StringCchCatW(database_path, MAX_ESE_PATH_CHARS, L"\\");
+
+		// @TODO:
+		// 1. Copy every file in this directory to a temporary location. This will require:
+		// 1a. The normal CopyFile function which will be used for files that aren't being used by another
+		// process (if we're exporting from a live machine) or for every file (if we're exporting from
+		// a backup of another machine).
+		// 1b. Our own force_copy_file function which uses the Native API to duplicate the file handle for
+		// any file that is being used by another process (sharing violation). We'll map that file into memory
+		// and then dump the contents into the temporary location we mentioned above.
+		// 2. Regardless of how these files are copied, we'll mark this temporary for deletion.
+
+		wchar_t temporary_directory[MAX_TEMPORARY_PATH_CHARS] = L"";
+		HANDLE temporary_directory_handle = INVALID_HANDLE_VALUE;
+		bool result = create_temporary_directory(exporter->temporary_path, temporary_directory, &temporary_directory_handle);
+		result;
+		safe_close_handle(&temporary_directory_handle);
+		
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramRecovery, 0, L"On");
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramMaxTemporaryTables, 0, NULL);
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramBaseName, 0, ese_files_prefix);
@@ -1135,6 +1146,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									undecorate_path(filename);
 									wchar_t* file_extension = skip_to_file_extension(filename);
 
+									decode_url(url);
+
 									wchar_t cached_file_size[MAX_INT64_CHARS];
 									convert_s64_to_string(file_size, cached_file_size);
 
@@ -1163,7 +1176,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									wchar_t num_hits[MAX_INT32_CHARS];
 									convert_u32_to_string(access_count, num_hits);
 
-									// @Format: The cache directory indexes are one based.
+									// @Format: The cache directory indexes stored in the database are one based.
 									secure_directory_index -= 1;
 									_ASSERT(secure_directory_index < num_cache_directories);
 									wchar_t* cache_directory = cache_directory_names[secure_directory_index];
@@ -1172,6 +1185,31 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									StringCchCopyW(short_file_path, MAX_PATH_CHARS, cache_directory);
 									PathAppendW(short_file_path, decorated_filename);
 
+									wchar_t full_file_path[MAX_PATH_CHARS];
+									StringCchCopyW(full_file_path, MAX_PATH_CHARS, directory);
+									PathAppendW(full_file_path, short_file_path);
+
+									bool file_exists = does_file_exist(full_file_path);
+									wchar_t* is_file_missing = (file_exists) ? (L"No") : (L"Yes");
+
+									Url_Parts url_parts;
+									partition_url(arena, TEXT("http://john.doe:hunter2@www.example.com:123/path/index.html?foo=1&bar=2#top"), &url_parts);
+									partition_url(arena, TEXT("file://C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
+									partition_url(arena, TEXT("file:///C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
+
+									if(file_exists && exporter->should_copy_files)
+									{
+										copy_file_using_url_directory_structure(arena, full_file_path, exporter->output_copy_path, url, filename);
+									}
+
+									/*wchar_t relative_path[MAX_PATH_CHARS];
+									PathRelativePathToW(relative_path,
+														directory, FILE_ATTRIBUTE_DIRECTORY, // From this path...
+														database_path, FILE_ATTRIBUTE_DIRECTORY); // To this path.
+
+									StringCchCopyW(relative_path, MAX_PATH_CHARS, index_path);
+									PathAppendW(relative_path, L"..\\..\\..\\..\\..\\..\\..\\..\\..\\");*/
+
 									if(exporter->should_create_csv)
 									{
 										Csv_Entry csv_row[CSV_NUM_COLUMNS] =
@@ -1179,7 +1217,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 											{filename}, {url}, {file_extension}, {cached_file_size},
 											{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 											{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-											{num_hits}, {short_file_path}, {NULL}, {NULL}
+											{num_hits}, {short_file_path}, {is_file_missing}, {NULL}
 										};
 
 										csv_print_row(arena, csv_file, CSV_HEADER, csv_row, CSV_NUM_COLUMNS);
@@ -1216,8 +1254,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			found_container_record = (JetMove(session_id, containers_table_id, JET_MoveNext, 0) == JET_errSuccess);
 		}
 
-		close_csv_file(csv_file);
-		csv_file = INVALID_HANDLE_VALUE;
+		close_csv_file(&csv_file);
 
 		windows_nt_ese_clean_up(&instance, &session_id, &database_id, &containers_table_id);
 	}

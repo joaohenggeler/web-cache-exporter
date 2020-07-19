@@ -362,15 +362,25 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 		}
 	}
 
+	// The path starts after the scheme or authority (if it exists) and ends at the query symbol or at the
+	// end of the string (if there's no query).
 	TCHAR* path = _tcstok_s(NULL, TEXT("?"), &remaining_url);
-	if(path != NULL && !is_string_empty(path))
+	// We'll allow empty paths (even though they're required by the RFC) because the cache's index/database
+	// file might store some of them like this. E.g. the resource "http://www.example.com/index.html" might
+	// have its URL stored as "http://www.example.com/" since the server would know to serve the index.html
+	// file for that request.
+	if(path == NULL) path = TEXT("");
+	url_parts->path = push_and_copy_to_arena(arena, string_size(path), TCHAR, path, string_size(path));
+
+	// Here is the previous code that rejected empty paths:
+	/*if(path != NULL && !is_string_empty(path))
 	{
 		url_parts->path = push_and_copy_to_arena(arena, string_size(path), TCHAR, path, string_size(path));
 	}
 	else
 	{
 		return false;
-	}
+	}*/
 
 	TCHAR* query = _tcstok_s(NULL, TEXT("#"), &remaining_url);
 	TCHAR* fragment = (!is_string_empty(remaining_url)) ? (remaining_url) : (NULL);
@@ -677,9 +687,15 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 	return copy_success;
 }
 
-u64 combine_high_and_low_u32s(u32 high, u32 low)
+u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low)
 {
-	return (high << sizeof(u32)) | low;
+	return (((u64) high) << 32) | low;
+}
+
+void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low)
+{
+	*low = (u32) (value & 0xFFFFFFFF);
+	*high = (u32) (value >> 32);
 }
 
 bool get_file_size(HANDLE file_handle, u64* file_size_result)
@@ -688,7 +704,7 @@ bool get_file_size(HANDLE file_handle, u64* file_size_result)
 		DWORD file_size_high;
 		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
 		bool success = GetLastError() == NO_ERROR;
-		if(success) *file_size_result = combine_high_and_low_u32s(file_size_high, file_size_low);
+		if(success) *file_size_result = combine_high_and_low_u32s_into_u64(file_size_high, file_size_low);
 		return success;
 	#else
 		LARGE_INTEGER file_size;
@@ -698,11 +714,23 @@ bool get_file_size(HANDLE file_handle, u64* file_size_result)
 	#endif
 }
 
-bool does_file_exist(TCHAR* file_path)
+bool does_file_exist(const TCHAR* file_path)
 {
 	DWORD attributes = GetFileAttributes(file_path);
-	return (attributes != INVALID_FILE_ATTRIBUTES) && ( (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
+	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
 }
+
+/*bool does_directory_exist(const TCHAR* directory_path)
+{
+	DWORD attributes = GetFileAttributes(directory_path);
+	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
+}
+
+bool does_path_exist(const TCHAR* path)
+{
+	DWORD attributes = GetFileAttributes(path);
+	return (attributes != INVALID_FILE_ATTRIBUTES);
+}*/
 
 void safe_close_handle(HANDLE* handle)
 {
@@ -713,7 +741,7 @@ void safe_close_handle(HANDLE* handle)
 	}
 	else
 	{
-		_ASSERT(false);
+		log_print(LOG_WARNING, "Safe Close Handle: Attempted to close and invalid handle.");
 	}
 }
 
@@ -771,7 +799,7 @@ void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Memory Mapping: Error %lu while trying to get the file handle for '%p'.", GetLastError(), file_handle);
+		log_print(LOG_ERROR, "Memory Mapping: Skipping invalid file handle.");
 	}
 
 	return mapped_memory;
@@ -792,6 +820,18 @@ void* memory_map_entire_file(TCHAR* file_path, HANDLE* result_file_handle, u64* 
 	return memory_map_entire_file(file_handle, file_size_result);
 }
 
+bool mark_file_for_deletion(const TCHAR* file_path, DWORD desired_access, DWORD share_mode, HANDLE* result_doomed_handle)
+{
+	*result_doomed_handle = CreateFile( file_path,
+										desired_access,
+										share_mode,
+										NULL,
+										OPEN_EXISTING,
+										0,
+										NULL);
+	return *result_doomed_handle != INVALID_HANDLE_VALUE;
+}
+
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path,
 							TCHAR* result_file_destination_path, HANDLE* result_handle)
 {
@@ -803,16 +843,7 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 
 	if(copy_success)
 	{
-		HANDLE file_handle = CreateFile(result_file_destination_path,
-										GENERIC_READ,
-										0,
-										NULL,
-										OPEN_EXISTING,
-										FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
-										NULL);
-
-		*result_handle = file_handle;
-		get_handle_success = file_handle != INVALID_HANDLE_VALUE;
+		get_handle_success = mark_file_for_deletion(result_file_destination_path, GENERIC_READ, 0, result_handle);
 		if(!get_handle_success) DeleteFile(result_file_destination_path);
 	}
 
@@ -847,6 +878,18 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 	return success;*/
 }
 
+/*void get_temporary_directory_path(const TCHAR* base_temporary_path, TCHAR* result_directory_path)
+{
+	bool generated_unique_name = false;
+	u32 unique_id = 1;
+	do
+	{
+		generated_unique_name = GetTempFileName(base_temporary_path, TEXT("WCE"), unique_id, result_directory_path) != 0
+								&& !does_path_exist(result_directory_path);
+		++unique_id;
+	} while(!generated_unique_name);
+}
+
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path, HANDLE* result_handle)
 {	
 	bool create_success = false;
@@ -864,7 +907,7 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	{
 		HANDLE directory_handle = CreateFile(result_directory_path,
 										     GENERIC_READ,
-										     0,
+										     FILE_SHARE_READ,
 										     NULL,
 										     OPEN_EXISTING,
 										     FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_DELETE_ON_CLOSE,
@@ -876,6 +919,50 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	}
 
 	return create_success && get_handle_success;
+}*/
+
+bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path)
+{	
+	bool create_success = false;
+	u32 unique_id = GetTickCount();
+	do
+	{
+		create_success = GetTempFileName(base_temporary_path, TEXT("WCE"), unique_id, result_directory_path) != 0
+						&& CreateDirectory(result_directory_path, NULL) == TRUE;
+		++unique_id;
+	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
+
+	return create_success;
+}
+
+bool delete_directory_and_contents(const TCHAR* directory_path)
+{
+	_ASSERT(!is_string_empty(directory_path));
+
+	TCHAR path_to_delete[MAX_PATH_CHARS] = TEXT("");
+	get_full_path_name((TCHAR*) directory_path, path_to_delete);
+
+	size_t num_path_chars = _tcslen(path_to_delete);
+	if(num_path_chars >= MAX_PATH_CHARS - 1)
+	{
+		log_print(LOG_ERROR, "Delete Directory: Failed to add a second null terminator to the directory path '%s'.", directory_path);
+		return false;
+	}
+	path_to_delete[num_path_chars + 1] = TEXT('\0');
+
+	SHFILEOPSTRUCT file_operation = {};
+	file_operation.wFunc = FO_DELETE;
+	file_operation.pFrom = path_to_delete;
+	file_operation.fFlags = FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_SILENT;
+
+	int error_code = SHFileOperation(&file_operation);
+	if(error_code != 0)
+	{
+		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' and its contents with error code %d.", directory_path, error_code);
+		_ASSERT(false);
+	}
+
+	return error_code == 0;
 }
 
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read)
@@ -1285,7 +1372,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 		ULONG Reserved[22]; // reserved for internal use
 	};
 
-	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
+	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS __stdcall function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
 	#pragma warning(push)
 	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
 	NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
@@ -1299,7 +1386,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	Nt_Query_System_Information* dll_nt_query_system_information = stub_nt_query_system_information;
 	#define NtQuerySystemInformation dll_nt_query_system_information
 
-	#define NT_QUERY_OBJECT(function_name) NTSTATUS function_name(HANDLE Handle, OBJECT_INFORMATION_CLASS ObjectInformationClass, PVOID ObjectInformation, ULONG ObjectInformationLength, PULONG ReturnLength)
+	#define NT_QUERY_OBJECT(function_name) NTSTATUS __stdcall function_name(HANDLE Handle, OBJECT_INFORMATION_CLASS ObjectInformationClass, PVOID ObjectInformation, ULONG ObjectInformationLength, PULONG ReturnLength)
 	#pragma warning(push)
 	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
 	NT_QUERY_OBJECT(stub_nt_query_object)
@@ -1313,43 +1400,215 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	Nt_Query_Object* dll_nt_query_object = stub_nt_query_object;
 	#define NtQueryObject dll_nt_query_object
 
-	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path)
+	#define GET_FUNCTION_ADDRESS(library, function_name, Function_Pointer_Type, function_pointer_variable)\
+	{\
+		Function_Pointer_Type address = (Function_Pointer_Type) GetProcAddress(library, function_name);\
+		if(address != NULL)\
+		{\
+			function_pointer_variable = address;\
+		}\
+		else\
+		{\
+			log_print(LOG_ERROR, "Get Function Address: Failed to retrieve %hs's function address with error code %lu.", function_name, GetLastError());\
+		}\
+	}
+
+	void windows_nt_load_ntdll_functions(void)
 	{
-		HANDLE file_handle_result = INVALID_HANDLE_VALUE;
-
 		HMODULE ntdll_library = LoadLibraryA("Ntdll.dll");
-
-		if(ntdll_library == NULL)
+		if(ntdll_library != NULL)
 		{
-			log_print(LOG_ERROR, "Error %lu while loading library.", GetLastError());
-			return file_handle_result;
-		}
-
-		Nt_Query_System_Information* nt_query_system_information_address = (Nt_Query_System_Information*) GetProcAddress(ntdll_library, "NtQuerySystemInformation");
-
-		if(nt_query_system_information_address == NULL)
-		{
-			log_print(LOG_ERROR, "Error %lu while retrieving the function's address.", GetLastError());
-			return file_handle_result;
+			GET_FUNCTION_ADDRESS(ntdll_library, "NtQuerySystemInformation", Nt_Query_System_Information*, NtQuerySystemInformation);
+			GET_FUNCTION_ADDRESS(ntdll_library, "NtQueryObject", Nt_Query_Object*, NtQueryObject);
 		}
 		else
 		{
-			NtQuerySystemInformation = nt_query_system_information_address;
+			log_print(LOG_ERROR, "Load Ntdll Functions: Failed to load the library with error code %lu.", GetLastError());
 		}
+	}
 
-		Nt_Query_Object* nt_query_object_function_address = (Nt_Query_Object*) GetProcAddress(ntdll_library, "NtQueryObject");
-
-		if(nt_query_object_function_address == NULL)
+	bool convert_full_path_to_dos_path(const wchar_t* full_path, wchar_t* result_dos_path)
+	{
+		wchar_t full_long_path[MAX_PATH_CHARS] = L"";
+		if(GetLongPathNameW(full_path, full_long_path, MAX_PATH_CHARS) == 0)
 		{
-			log_print(LOG_ERROR, "Error %lu while retrieving the function's address.", GetLastError());
-			return file_handle_result;
-		}
-		else
-		{
-			NtQueryObject = nt_query_object_function_address;
+			// log
+			return false;
 		}
 
-		ULONG handle_info_size = (ULONG) (arena->total_size - arena->used_size) / 2;
+		int drive_number = PathGetDriveNumberW(full_long_path);
+		if(drive_number == -1)
+		{
+			// log
+			return false;
+		}
+
+		wchar_t drive[3] = L"";
+		drive[0] = (wchar_t) drive_number + L'A';
+		drive[1] = L':';
+		drive[2] = L'\0';
+
+		if(QueryDosDeviceW(drive, result_dos_path, MAX_PATH_CHARS) == 0)
+		{
+			return false;
+		}
+
+		if(!PathAppendW(result_dos_path, full_long_path + 3))
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	static bool do_handles_refer_to_the_same_file(HANDLE file_handle_1, HANDLE file_handle_2)
+	{
+		BY_HANDLE_FILE_INFORMATION handle_info_1 = {};
+		BY_HANDLE_FILE_INFORMATION handle_info_2 = {};
+
+		if(		GetFileInformationByHandle(file_handle_1, &handle_info_1) != 0
+			&& 	GetFileInformationByHandle(file_handle_2, &handle_info_2) != 0)
+		{
+			return 		handle_info_1.nFileIndexHigh == handle_info_2.nFileIndexHigh
+					&&	handle_info_1.nFileIndexLow == handle_info_2.nFileIndexLow
+					&&	handle_info_1.dwVolumeSerialNumber == handle_info_2.dwVolumeSerialNumber;
+		}
+
+		return false;
+	}
+
+	bool windows_nt_query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle)
+	{
+		*result_file_handle = INVALID_HANDLE_VALUE;
+
+		windows_nt_load_ntdll_functions();
+
+		ULONG handle_info_size = (ULONG) megabytes_to_bytes(1);
+		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
+		ULONG actual_handle_info_size = 0;
+		
+		{
+			NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+			while(error_code == STATUS_INFO_LENGTH_MISMATCH)
+			{
+				ULONG extra_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(5);
+				push_arena(arena, extra_size, u8);
+				handle_info_size += extra_size;
+
+				log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query system information. Expanding the buffer to %lu bytes.", handle_info_size);
+				error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+			}
+
+			if(!NT_SUCCESS(error_code))
+			{
+				log_print(LOG_ERROR, "Query File Handle: Failed to query system information with error code %ld.", error_code);
+				return false;
+			}
+		}
+
+		// @TODO: compare using the handles instead (read attributes only) - GetFileInformationByHandle
+		/*wchar_t dos_file_path[MAX_PATH_CHARS] = L"";
+		if(!convert_full_path_to_dos_path(full_file_path, dos_file_path))
+		{
+
+			return result_file_handle;
+		}*/
+
+		HANDLE read_attributes_file_handle = CreateFileW(	full_file_path,
+															FILE_READ_ATTRIBUTES,
+															FILE_SHARE_READ,
+															NULL,
+															OPEN_EXISTING,
+															0,
+															NULL);
+		if(read_attributes_file_handle == INVALID_HANDLE_VALUE)
+		{
+			log_print(LOG_ERROR, "Query File Handle: Failed to get the read attributes files handle for '%ls' with error code %lu.", full_file_path, GetLastError());
+			return false;
+		}
+
+		ULONG object_info_size = (ULONG) kilobytes_to_bytes(2);
+		OBJECT_NAME_INFORMATION* object_info = push_arena(arena, object_info_size, OBJECT_NAME_INFORMATION);
+		ULONG actual_object_info_size = 0;
+
+		DWORD current_process_id = GetCurrentProcessId();
+		HANDLE current_process_handle = GetCurrentProcess();
+
+		bool success = false;
+
+		for(ULONG i = 0; i < handle_info->NumberOfHandles; ++i)
+		{
+			SYSTEM_HANDLE_TABLE_ENTRY_INFO handle_entry = handle_info->Handles[i];
+
+			DWORD process_id = handle_entry.UniqueProcessId;
+			if(process_id == current_process_id) continue;
+
+			HANDLE process_handle = OpenProcess(PROCESS_DUP_HANDLE, FALSE, process_id);
+			if(process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) continue;
+
+			HANDLE file_handle = (HANDLE) handle_entry.HandleValue;
+			HANDLE duplicated_file_handle = INVALID_HANDLE_VALUE;
+
+			if(DuplicateHandle(	process_handle, file_handle,
+								current_process_handle, &duplicated_file_handle,
+								0, FALSE, DUPLICATE_SAME_ACCESS)
+				&& GetFileType(duplicated_file_handle) == FILE_TYPE_DISK)
+			{
+				NTSTATUS error_code = NtQueryObject(duplicated_file_handle, ObjectNameInformation, object_info, object_info_size, &actual_object_info_size);
+
+				while(error_code == STATUS_INFO_LENGTH_MISMATCH)
+				{
+					ULONG extra_size = actual_object_info_size + (ULONG) kilobytes_to_bytes(1);
+					push_arena(arena, extra_size, u8);
+					object_info_size += extra_size;
+
+					log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query object information. Expanding the buffer to %lu bytes.", object_info_size);
+					error_code = NtQueryObject(duplicated_file_handle, ObjectNameInformation, object_info, object_info_size, &actual_object_info_size);
+				}
+
+				if(do_handles_refer_to_the_same_file(read_attributes_file_handle, duplicated_file_handle))
+				{
+					success = true;
+					*result_file_handle = duplicated_file_handle;
+					safe_close_handle(&process_handle);
+					debug_log_print("Query File Handle: Found handle with attributes 0x%02X and granted access 0x%08X.", handle_entry.HandleAttributes, handle_entry.GrantedAccess);
+					break;
+				}
+
+				/*UNICODE_STRING filename = object_info->Name;
+
+				if(filename.Length > 0 && filename.Buffer != NULL)
+				{
+					_ASSERT(NT_SUCCESS(error_code));
+
+					//size_t num_filename_chars = filename.Length / sizeof(wchar_t);
+					//if(wcsncmp(dos_file_path, filename.Buffer, num_filename_chars) == 0)
+					if(wcscmp(dos_file_path, filename.Buffer) == 0)
+					{
+						result_file_handle = duplicated_file_handle;
+						safe_close_handle(&process_handle);
+						break;
+					}
+				}
+				else
+				{
+
+				}*/
+
+				safe_close_handle(&duplicated_file_handle);
+			}
+			else
+			{
+				// Failed to duplicate
+			}
+
+			safe_close_handle(&process_handle);
+		}
+
+		return success;
+
+
+		/*ULONG handle_info_size = (ULONG) (arena->total_size - arena->used_size) / 2;
 		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
 		ULONG actual_handle_info_size;
 		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
@@ -1357,7 +1616,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 		if(!NT_SUCCESS(error_code))
 		{
 			log_print(LOG_ERROR, "Error %ld while running NtQuerySystemInformation.", error_code);
-			return file_handle_result;
+			return result_file_handle;
 		}
 
 		ULONG object_info_size = (ULONG) (arena->total_size - arena->used_size);
@@ -1366,7 +1625,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 
 		HANDLE current_process_handle = GetCurrentProcess();
 		wchar_t wide_file_path[MAX_PATH_CHARS];
-		MultiByteToWideChar(CP_ACP, 0, file_path, -1, wide_file_path, MAX_PATH_CHARS);
+		MultiByteToWideChar(CP_ACP, 0, full_file_path, -1, wide_file_path, MAX_PATH_CHARS);
 
 		for(ULONG i = 0; i < handle_info->NumberOfHandles; ++i)
 		{
@@ -1395,17 +1654,17 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 						//OBJECT_NAME_INFORMATION local_object_info = *object_info; local_object_info;
 						UNICODE_STRING filename = object_info->Name;
 
-						/*log_print(LOG_INFO, "Process %hu has handle %hu of type %hhu with access rights 0x%08X. Name is '%S'.",
+						log_print(LOG_INFO, "Process %hu has handle %hu of type %hhu with access rights 0x%08X. Name is '%S'.",
 						handle_entry.UniqueProcessId, handle_entry.HandleValue,
 						handle_entry.ObjectTypeIndex, handle_entry.GrantedAccess,
-						filename.Buffer);*/
+						filename.Buffer);
 
 						_ASSERT(NT_SUCCESS(error_code_2));
 
 						size_t num_filename_chars = filename.Length / sizeof(wchar_t);
 						if(wcsncmp(wide_file_path, filename.Buffer, num_filename_chars) == 0)
 						{
-							file_handle_result = duplicated_file_handle;
+							result_file_handle = duplicated_file_handle;
 							break;
 						}
 					}
@@ -1426,12 +1685,126 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 			}
 		}
 
-		file_path;
+		full_file_path;
 
-		FreeLibrary(ntdll_library);
 		clear_arena(arena);
 
-		return file_handle_result;
+		return result_file_handle;*/
+	}
+
+	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
+	{
+		HANDLE source_file_handle = INVALID_HANDLE_VALUE;
+		bool was_source_handle_found = windows_nt_query_file_handle_from_file_path(arena, copy_source_path, &source_file_handle);
+		clear_arena(arena);
+
+		bool copy_success = false;
+
+		if(was_source_handle_found)
+		{
+			HANDLE destination_file_handle = CreateFileW(	copy_destination_path,
+															GENERIC_WRITE,
+															0,
+															NULL,
+															CREATE_ALWAYS,
+															FILE_ATTRIBUTE_NORMAL,
+															NULL);
+
+			if(destination_file_handle != INVALID_HANDLE_VALUE)
+			{
+				/*void* file_buffer = memory_map_entire_file(source_file_handle, &file_size);
+				WriteFile(destination_file_handle, file_buffer, (DWORD) file_size, &num_bytes_written, NULL);
+				safe_unmap_view_of_file(file_buffer);*/
+
+				SYSTEM_INFO system_info = {};
+				GetSystemInfo(&system_info);
+
+				const size_t FILE_BUFFER_SIZE = 32768;
+				void* file_buffer = aligned_push_arena(arena, FILE_BUFFER_SIZE, system_info.dwPageSize);
+
+				u64 total_bytes_read = 0;
+				u64 total_bytes_written = 0;
+				OVERLAPPED overlapped = {};
+				
+				bool reached_end_of_file = false;
+				do
+				{
+					DWORD num_bytes_read = 0;
+					bool read_success = ReadFile(source_file_handle, file_buffer, FILE_BUFFER_SIZE, &num_bytes_read, &overlapped) == TRUE;
+					
+					if(!read_success)
+					{
+						DWORD read_error_code = GetLastError();
+						if(read_error_code == ERROR_IO_PENDING)
+						{
+							// This should timeout otherwise it might hang the exporter forever.
+							// We should make GetOverlappedResult the stub function and try to load GetOverlappedResultEx at startup.
+							//const DWORD TIMEOUT = 10 * 1000;
+							//if(GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT, FALSE) == 0)
+							//  || overlapped_result_error_code == WAIT_TIMEOUT
+							if(GetOverlappedResult(source_file_handle, &overlapped, &num_bytes_read, TRUE) == 0)
+							{
+								DWORD overlapped_result_error_code = GetLastError();
+								if(overlapped_result_error_code == ERROR_HANDLE_EOF)
+								{
+									reached_end_of_file = true;
+								}
+								else
+								{
+									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far.", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written);
+									_ASSERT(false);
+								}
+							}
+						}
+						else if(read_error_code == ERROR_HANDLE_EOF)
+						{
+							reached_end_of_file = true;
+						}
+						else
+						{
+							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far.", copy_source_path, read_error_code, total_bytes_read, total_bytes_written);
+							_ASSERT(false);
+						}
+					}
+
+					if(!reached_end_of_file)
+					{
+						total_bytes_read += num_bytes_read;
+					
+						DWORD num_bytes_written = 0;
+						if(WriteFile(destination_file_handle, file_buffer, num_bytes_read, &num_bytes_written, NULL))
+						{
+							total_bytes_written += num_bytes_written;
+						}
+
+						u32 offset_high, offset_low;
+						separate_u64_into_high_and_low_u32s(total_bytes_read, &offset_high, &offset_low);					
+						overlapped.OffsetHigh = (DWORD) offset_high;
+						overlapped.Offset = (DWORD) offset_low;
+					}
+					else
+					{
+						_ASSERT(num_bytes_read == 0);
+					}
+
+				} while(!reached_end_of_file);
+
+				clear_arena(arena);
+
+				copy_success = (total_bytes_read == total_bytes_written);
+
+				u64 file_size = 0;
+				if(copy_success && get_file_size(source_file_handle, &file_size))
+				{
+					copy_success = copy_success && (total_bytes_read == file_size);
+				}
+			}
+
+			safe_close_handle(&destination_file_handle);
+		}
+		
+		safe_close_handle(&source_file_handle);
+		return copy_success;
 	}
 
 #endif

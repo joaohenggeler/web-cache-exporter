@@ -124,6 +124,7 @@ struct Exporter
 
 	Arena arena;
 
+	bool was_temporary_directory_created;
 	TCHAR temporary_path[MAX_PATH_CHARS];
 	TCHAR executable_path[MAX_PATH_CHARS];
 

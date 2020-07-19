@@ -71,9 +71,11 @@ const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 
 #define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
 #define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
-u64 combine_high_and_low_u32s(u32 high, u32 low);
+u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
-bool does_file_exist(TCHAR* file_path);
+bool does_file_exist(const TCHAR* file_path);
+bool does_directory_exist(const TCHAR* directory_path);
+bool does_directory_exist(const TCHAR* path);
 void safe_close_handle(HANDLE* handle);
 #define safe_unmap_view_of_file(base_address)\
 {\
@@ -84,13 +86,16 @@ void safe_close_handle(HANDLE* handle);
 	}\
 	else\
 	{\
+		log_print(LOG_WARNING, "Safe Unmap View Of File: Attempted to unmap an invalid address.");\
 		_ASSERT(false);\
 	}\
 }
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result);
 void* memory_map_entire_file(TCHAR* file_path, HANDLE* result_file_handle, u64* file_size_result);
+bool mark_file_for_deletion(const TCHAR* file_path, DWORD desired_access, DWORD share_mode, HANDLE* result_doomed_handle);
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
-bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path, HANDLE* result_handle);
+bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
+bool delete_directory_and_contents(const TCHAR* directory_path);
 bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, DWORD value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
@@ -227,9 +232,11 @@ _byteswap_uint64
 */
 
 #ifndef BUILD_9X
-	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, char* file_path);
+	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, const TCHAR* file_path);
+	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path);
 #else
 	#define windows_nt_query_file_handle_from_file_path(...) _STATIC_ASSERT(false)
+	#define windows_nt_force_copy_open_file(...) _STATIC_ASSERT(false)
 #endif
 
 #endif

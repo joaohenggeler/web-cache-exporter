@@ -393,6 +393,8 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	PathAppend(exporter->index_path, TEXT("index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
+	// Low\Content.IE5\index.dat
+
 	resolve_cache_version_output_paths(exporter, IE_CACHE_5_TO_9, IE_CACHE_VERSION_TO_STRING);
 	log_print_newline();
 	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
@@ -748,7 +750,9 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 
 #ifndef BUILD_9X
-	static void windows_nt_ese_clean_up(JET_INSTANCE* instance, JET_SESID* session_id, JET_DBID* database_id, JET_TABLEID* containers_table_id)
+	static void windows_nt_ese_clean_up(TCHAR* temporary_directory_path,
+										JET_INSTANCE* instance, JET_SESID* session_id,
+										JET_DBID* database_id, JET_TABLEID* containers_table_id)
 	{
 		JET_ERR error_code = JET_errSuccess;
 
@@ -780,57 +784,54 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			error_code = JetTerm(*instance);
 			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to terminate the ESE instance.", error_code);
 			*instance = JET_instanceNil;
-		}			
+		}
+
+		if(!is_string_empty(temporary_directory_path) && !delete_directory_and_contents(temporary_directory_path))
+		{
+			log_print(LOG_WARNING, "Error %lu while trying to delete the temporary recovery directory and its contents.", GetLastError());
+			_ASSERT(false);
+		}
+	}
+
+	static wchar_t* windows_nt_get_database_state_string(unsigned long state)
+	{
+		switch(state)
+		{
+			case(JET_dbstateJustCreated): 		return L"Just Created";
+			case(JET_dbstateDirtyShutdown): 	return L"Dirty Shutdown";
+			case(JET_dbstateCleanShutdown): 	return L"Clean Shutdown";
+			case(JET_dbstateBeingConverted): 	return L"Being Converted";
+			case(JET_dbstateForceDetach): 		return L"Force Detach";
+			default: 							return L"Unknown";
+		}
 	}
 
 	void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
 	{
 		Arena* arena = &(exporter->arena);
-		wchar_t* index_path = exporter->index_path;
-		
-		if(!does_file_exist(index_path))
+		wchar_t* index_filename = PathFindFileNameW(exporter->index_path);
+
+		//windows_nt_force_copy_open_file(arena, L"C:\\NonASCIIHaven\\Flashpoint\\Devs\\wordfall.jar", L"C:\\NonASCIIHaven\\Flashpoint\\Devs\\wordfall_copy.jar");
+
+		if(!does_file_exist(exporter->index_path))
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: The index file ('%ls') was not found. No files will be exported from this cache.", ese_files_prefix);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: The ESE database file '%ls' was not found. No files will be exported from this cache.", index_filename);
 			return;
 		}
 
-		JET_ERR error_code = JET_errSuccess;
-		JET_INSTANCE instance = JET_instanceNil;
-		JET_SESID session_id = JET_sesidNil;
-		JET_DBID database_id = JET_dbidNil;
-		JET_TABLEID containers_table_id = JET_tableidNil;
-
-		// @PageSize: We need to set the database's page size parameter to the same value that's stored in the database file.
-		// Otherwise, we'd get the error JET_errPageSizeMismatch (-1213) when calling JetInit().
-		unsigned long page_size = 0;
-		error_code = JetGetDatabaseFileInfoW(index_path, &page_size, sizeof(page_size), JET_DbInfoPageSize);
-		if(error_code < 0)
+		if(!exporter->was_temporary_directory_created)
 		{
-			// Default to this value (taken from sample WebCacheV01.dat files) if we can't get it out of the database for some reason.
-			page_size = 32768;
-			log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to get the ESE database's page size with the error code %ld. This value will default to %lu.", error_code, page_size);
-		}
-		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramDatabasePageSize, page_size, NULL);
-
-		JET_DBINFOMISC database_info = {};
-		error_code = JetGetDatabaseFileInfoW(index_path, &database_info, sizeof(database_info), JET_DbInfoMisc);
-		if(error_code == JET_errSuccess)
-		{
-			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's state is %lu.", database_info.dbstate);
-		}
-
-		error_code = JetCreateInstanceW(&instance, L"WebCacheExporter");
-		if(error_code < 0)
-		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to create the ESE instance.", error_code);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: The temporary exporter directory used to recover the ESE database's contents was not previously created. No files will be exported from this cache.");
 			return;
 		}
 
-		const size_t MAX_ESE_PATH_CHARS = 246;
-		wchar_t database_path[MAX_ESE_PATH_CHARS];
+		log_print(LOG_INFO, "Internet Explorer 10 to 11: The cache will be exported based on the information in the ESE database file '%ls'.", index_filename);
+
+		/*
+		wchar_t database_path[MAX_ESE_PATH_CHARS] = L"";
 		StringCchCopyW(database_path, MAX_ESE_PATH_CHARS, index_path);
 		PathAppendW(database_path, L"..");
-		StringCchCatW(database_path, MAX_ESE_PATH_CHARS, L"\\");
+		StringCchCatW(database_path, MAX_ESE_PATH_CHARS, L"\\");*/
 
 		// @TODO:
 		// 1. Copy every file in this directory to a temporary location. This will require:
@@ -841,24 +842,121 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		// any file that is being used by another process (sharing violation). We'll map that file into memory
 		// and then dump the contents into the temporary location we mentioned above.
 		// 2. Regardless of how these files are copied, we'll mark this temporary for deletion.
-
-		wchar_t temporary_directory[MAX_TEMPORARY_PATH_CHARS] = L"";
-		HANDLE temporary_directory_handle = INVALID_HANDLE_VALUE;
-		bool result = create_temporary_directory(exporter->temporary_path, temporary_directory, &temporary_directory_handle);
-		result;
-		safe_close_handle(&temporary_directory_handle);
 		
+		wchar_t index_directory_path[MAX_PATH_CHARS] = L"";
+		StringCchCopyW(index_directory_path, MAX_PATH_CHARS, exporter->index_path);
+		PathAppendW(index_directory_path, TEXT(".."));
+
+		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
+		if(create_temporary_directory(exporter->temporary_path, temporary_directory_path))
+		{
+			wchar_t search_path[MAX_PATH_CHARS] = L"";
+			StringCchCopyW(search_path, MAX_PATH_CHARS, index_directory_path);
+			PathAppendW(search_path, L"*");
+
+			WIN32_FIND_DATAW file_find_data = {};
+			HANDLE search_handle = FindFirstFileW(search_path, &file_find_data);
+			
+			bool found_file = search_handle != INVALID_HANDLE_VALUE;
+			while(found_file)
+			{
+				// Ignore directories, "." and ".."
+				if( (file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0
+					&& wcscmp(file_find_data.cFileName, L".") != 0
+					&& wcscmp(file_find_data.cFileName, L"..") != 0)
+				{
+					wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
+					StringCchCopyW(copy_source_path, MAX_PATH_CHARS, index_directory_path);
+					PathAppendW(copy_source_path, file_find_data.cFileName);
+
+					wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
+					StringCchCopyW(copy_destination_path, MAX_PATH_CHARS, temporary_directory_path);
+					PathAppendW(copy_destination_path, file_find_data.cFileName);
+
+					if(!CopyFile(copy_source_path, copy_destination_path, FALSE))
+					{
+						if(GetLastError() == ERROR_SHARING_VIOLATION)
+						{
+							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", file_find_data.cFileName);
+
+							if(!windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
+							{
+								log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to forcibly copy the database file '%ls' to the temporary recovery directory.", file_find_data.cFileName);
+							}
+						}
+						else
+						{
+							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", file_find_data.cFileName, GetLastError());
+						}
+					}
+				}
+
+				found_file = FindNextFile(search_handle, &file_find_data) == TRUE;
+			}
+
+			if(search_handle != INVALID_HANDLE_VALUE)
+			{
+				FindClose(search_handle);
+				search_handle = INVALID_HANDLE_VALUE;
+			}
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %lu while trying to create the temporary recovery directory.", GetLastError());
+			return;
+		}
+
+		wchar_t temporary_database_path[MAX_PATH_CHARS] = L"";
+		StringCchCopyW(temporary_database_path, MAX_PATH_CHARS, temporary_directory_path);
+		PathAppendW(temporary_database_path, index_filename);
+
+		JET_ERR error_code = JET_errSuccess;
+		JET_INSTANCE instance = JET_instanceNil;
+		JET_SESID session_id = JET_sesidNil;
+		JET_DBID database_id = JET_dbidNil;
+		JET_TABLEID containers_table_id = JET_tableidNil;
+
+		// @PageSize: We need to set the database's page size parameter to the same value that's stored in the database file.
+		// Otherwise, we'd get the error JET_errPageSizeMismatch (-1213) when calling JetInit().
+		unsigned long page_size = 0;
+		error_code = JetGetDatabaseFileInfoW(temporary_database_path, &page_size, sizeof(page_size), JET_DbInfoPageSize);
+		if(error_code < 0)
+		{
+			// Default to this value (taken from sample WebCacheV01.dat files) if we can't get it out of the database for some reason.
+			page_size = 32768;
+			log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to get the ESE database's page size with the error code %ld. This value will default to %lu.", error_code, page_size);
+		}
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramDatabasePageSize, page_size, NULL);
+
+		JET_DBINFOMISC database_info = {};
+		error_code = JetGetDatabaseFileInfoW(temporary_database_path, &database_info, sizeof(database_info), JET_DbInfoMisc);
+		if(error_code == JET_errSuccess)
+		{
+			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's state is '%ls'.", windows_nt_get_database_state_string(database_info.dbstate));
+		}
+
+		error_code = JetCreateInstanceW(&instance, L"WebCacheExporter");
+		if(error_code < 0)
+		{
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to create the ESE instance.", error_code);
+			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			return;
+		}
+		
+		// The system parameters that use this path require it to end in a backslash.
+		StringCchCatW(temporary_directory_path, MAX_TEMPORARY_PATH_CHARS, L"\\");
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramRecovery, 0, L"On");
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramMaxTemporaryTables, 0, NULL);
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramBaseName, 0, ese_files_prefix);
-		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramLogFilePath, 0, database_path);
-		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramSystemPath, 0, database_path);
-		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramAlternateDatabaseRecoveryPath, 0, database_path);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramLogFilePath, 0, temporary_directory_path);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramSystemPath, 0, temporary_directory_path);
+		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramAlternateDatabaseRecoveryPath, 0, temporary_directory_path);
 		
 		error_code = JetInit(&instance);
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to initialize the ESE instance.", error_code);
+			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 		
@@ -866,27 +964,27 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to begin the session.", error_code);
-			windows_nt_ese_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
 		// @PageSize: Passing zero to the page size makes it so no maximum is enforced by the database engine.
-		error_code = JetAttachDatabase2W(session_id, index_path, 0, JET_bitDbReadOnly);
+		error_code = JetAttachDatabase2W(session_id, temporary_database_path, 0, JET_bitDbReadOnly);
 		if(error_code < 0)
 		{
 			wchar_t error_message[1024];
 			JET_API_PTR err = error_code;
 			JetGetSystemParameterW(instance, session_id, JET_paramErrorToString, &err, error_message, sizeof(error_message));
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to attach the database '%ls'", error_code, index_path);
-			windows_nt_ese_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to attach the database '%ls'", error_code, temporary_database_path);
+			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 	
-		error_code = JetOpenDatabaseW(session_id, index_path, NULL, &database_id, JET_bitDbReadOnly);
+		error_code = JetOpenDatabaseW(session_id, temporary_database_path, NULL, &database_id, JET_bitDbReadOnly);
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the database '%ls'.", error_code, index_path);
-			windows_nt_ese_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the database '%ls'.", error_code, temporary_database_path);
+			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
@@ -894,7 +992,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the Containers table.", error_code);
-			windows_nt_ese_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
@@ -1207,7 +1305,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 														directory, FILE_ATTRIBUTE_DIRECTORY, // From this path...
 														database_path, FILE_ATTRIBUTE_DIRECTORY); // To this path.
 
-									StringCchCopyW(relative_path, MAX_PATH_CHARS, index_path);
+									StringCchCopyW(relative_path, MAX_PATH_CHARS, temporary_database_path);
 									PathAppendW(relative_path, L"..\\..\\..\\..\\..\\..\\..\\..\\..\\");*/
 
 									if(exporter->should_create_csv)
@@ -1256,7 +1354,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 		close_csv_file(&csv_file);
 
-		windows_nt_ese_clean_up(&instance, &session_id, &database_id, &containers_table_id);
+		windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 	}
 
 #endif

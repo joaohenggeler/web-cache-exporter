@@ -179,6 +179,11 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 static void clean_up(Exporter* exporter)
 {
+	if(exporter->was_temporary_directory_created)
+	{
+		exporter->was_temporary_directory_created = !delete_directory_and_contents(exporter->temporary_path);
+		exporter->temporary_path[0] = TEXT('\0');
+	}
 	destroy_arena(&exporter->arena);
 	close_log_file();
 }
@@ -196,6 +201,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 	exporter.arena = NULL_ARENA;
 
+	exporter.was_temporary_directory_created = false;
 	exporter.temporary_path[0] = TEXT('\0');
 	exporter.executable_path[0] = TEXT('\0');
 	
@@ -239,14 +245,21 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
-	if(GetTempPath(MAX_PATH_CHARS, exporter.temporary_path) == 0)
+	TCHAR temporary_files_directory_path[MAX_PATH_CHARS] = TEXT("");
+	if(GetTempPath(MAX_PATH_CHARS, temporary_files_directory_path) != 0
+		&& create_temporary_directory(temporary_files_directory_path, exporter.temporary_path))
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the temporary path with error code %lu.", GetLastError());
+		exporter.was_temporary_directory_created = true;
+		log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.temporary_path);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Startup: Failed to create the temporary exporter directory with error code %lu.", GetLastError());
 	}
 
 	if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) == 0)
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the executable path with error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
 	}
 	PathAppend(exporter.executable_path, TEXT(".."));
 

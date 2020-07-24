@@ -89,6 +89,16 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			exporter->should_merge_copied_files = true;
 		}
+		else if(lstrcmpi(option, TEXT("-hint-ie")) == 0)
+		{
+			exporter->should_use_ie_hint = true;
+			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
+			{
+				StringCchCopy(exporter->ie_hint_path, MAX_PATH_CHARS, arguments[i+1]);
+			}
+
+			i += 1;
+		}
 		else if(lstrcmpi(option, TEXT("-find-and-export-all")) == 0)
 		{
 			exporter->cache_type = CACHE_ALL;
@@ -104,7 +114,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			seen_export_option = true;
 			break;
 		}
-		else if(_tcsncicmp(option, TEXT("-export"), 7) == 0)
+		else if(string_starts_with_insensitive(option, TEXT("-export")))
 		{
 			TCHAR* cache_type = skip_to_suboption(option);
 			//char* cache_version = skip_to_suboption(cache_type);
@@ -174,6 +184,13 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		success = false;
 	}
 
+	if(exporter->should_use_ie_hint && is_string_empty(exporter->ie_hint_path))
+	{
+		log_print(LOG_ERROR, "Argument Parsing: The -hint-ie option was used without passing its value.");
+		console_print("The -hint-ie option requires a path as its argument.");
+		success = false;
+	}
+
 	return success;
 }
 
@@ -182,9 +199,17 @@ static void clean_up(Exporter* exporter)
 	if(exporter->was_temporary_directory_created)
 	{
 		exporter->was_temporary_directory_created = !delete_directory_and_contents(exporter->temporary_path);
-		exporter->temporary_path[0] = TEXT('\0');
 	}
-	destroy_arena(&exporter->arena);
+
+	#ifndef BUILD_9X
+		if( (exporter->cache_type == CACHE_INTERNET_EXPLORER) || (exporter->cache_type == CACHE_ALL) )
+		{
+			windows_nt_free_ntdll_functions();
+			windows_nt_free_kernel32_functions();
+		}
+	#endif
+
+	destroy_arena( &(exporter->arena) );
 	close_log_file();
 }
 
@@ -204,6 +229,13 @@ int _tmain(int argc, TCHAR* argv[])
 	exporter.was_temporary_directory_created = false;
 	exporter.temporary_path[0] = TEXT('\0');
 	exporter.executable_path[0] = TEXT('\0');
+
+	exporter.roaming_appdata_path[0] = TEXT('\0');
+	exporter.local_appdata_path[0] = TEXT('\0');
+	exporter.local_low_appdata_path[0] = TEXT('\0');
+
+	exporter.should_use_ie_hint = false;
+	exporter.ie_hint_path[0] = TEXT('\0');
 	
 	exporter.cache_version = 0;
 	exporter.output_copy_path[0] = TEXT('\0');
@@ -212,6 +244,13 @@ int _tmain(int argc, TCHAR* argv[])
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
+	{
+		const size_t ie_version_size = 32;
+		TCHAR ie_version[ie_version_size] = TEXT("");
+		find_internet_explorer_version(ie_version, ie_version_size);
+		log_print(LOG_INFO, "Startup: Running Internet Explorer version '%s'.", ie_version);		
+	}
+
 	log_print(LOG_INFO, "foo is %d", foo);
 
 	if(argc <= 1)
@@ -245,6 +284,14 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
+	#ifndef BUILD_9X
+		if( (exporter.cache_type == CACHE_INTERNET_EXPLORER) || (exporter.cache_type == CACHE_ALL) )
+		{
+			windows_nt_load_ntdll_functions();
+			windows_nt_load_kernel32_functions();
+		}
+	#endif
+
 	TCHAR temporary_files_directory_path[MAX_PATH_CHARS] = TEXT("");
 	if(GetTempPath(MAX_PATH_CHARS, temporary_files_directory_path) != 0
 		&& create_temporary_directory(temporary_files_directory_path, exporter.temporary_path))
@@ -257,11 +304,29 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to create the temporary exporter directory with error code %lu.", GetLastError());
 	}
 
-	if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) == 0)
+	if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) != 0)
+	{
+		PathAppend(exporter.executable_path, TEXT(".."));
+	}
+	else
 	{
 		log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
 	}
-	PathAppend(exporter.executable_path, TEXT(".."));
+	
+	if(!get_special_folder_path(CSIDL_APPDATA, exporter.roaming_appdata_path))
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
+	}
+
+	if(get_special_folder_path(CSIDL_LOCAL_APPDATA, exporter.local_appdata_path))
+	{
+		StringCchCopy(exporter.local_low_appdata_path, MAX_PATH_CHARS, exporter.local_appdata_path);
+		PathAppend(exporter.local_low_appdata_path, TEXT("..\\LocalLow"));
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
+	}
 
 	/*
 	char working_path[MAX_PATH_CHARS] = "";
@@ -271,20 +336,23 @@ int _tmain(int argc, TCHAR* argv[])
 
 	debug_log_print("Exporter Options:");
 	debug_log_print("- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
-	debug_log_print("- Should Copy Files: %hs", (exporter.should_copy_files) ? ("true") : ("false"));
-	debug_log_print("- Should Create CSV: %hs", (exporter.should_create_csv) ? ("true") : ("false"));
-	debug_log_print("- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("true") : ("false"));
-	debug_log_print("- Cache Path: '%s'", (exporter.cache_path != NULL) ? (exporter.cache_path) : (TEXT("-")));
-	debug_log_print("- Output Path: '%s'", (exporter.output_path != NULL) ? (exporter.output_path) : (TEXT("-")));
-	debug_log_print("- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("true") : ("false"));
+	debug_log_print("- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
+	debug_log_print("- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
+	debug_log_print("- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("Yes") : ("No"));
+	debug_log_print("- Cache Path: '%s'", exporter.cache_path);
+	debug_log_print("- Output Path: '%s'", exporter.output_path);
+	debug_log_print("- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
 	debug_log_print("----------------------------------------");
-	debug_log_print("- Temporary Path: '%s'", (exporter.temporary_path != NULL) ? (exporter.temporary_path) : (TEXT("-")));
-	debug_log_print("- Executable Path: '%s'", (exporter.executable_path != NULL) ? (exporter.executable_path) : (TEXT("-")));
+	debug_log_print("- Temporary Path: '%s'", exporter.temporary_path);
+	debug_log_print("- Executable Path: '%s'", exporter.executable_path);
+	debug_log_print("- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
+	debug_log_print("- Local AppData Path: '%s'", exporter.local_appdata_path);
+	debug_log_print("- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
 	debug_log_print("----------------------------------------");
 	debug_log_print("- Cache Version: %I32u", exporter.cache_version);
-	debug_log_print("- Output Copy Path: '%s'", (exporter.output_copy_path != NULL) ? (exporter.output_copy_path) : (TEXT("-")));
-	debug_log_print("- Output CSV Path: '%s'", (exporter.output_csv_path != NULL) ? (exporter.output_csv_path) : (TEXT("-")));
-	debug_log_print("- Index Path: '%s'", (exporter.index_path != NULL) ? (exporter.index_path) : (TEXT("-")));
+	debug_log_print("- Output Copy Path: '%s'", exporter.output_copy_path);
+	debug_log_print("- Output CSV Path: '%s'", exporter.output_csv_path);
+	debug_log_print("- Index Path: '%s'", exporter.index_path);
 
 	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
 	{

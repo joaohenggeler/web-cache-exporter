@@ -197,15 +197,6 @@ bool find_internet_explorer_version(TCHAR* ie_version, DWORD ie_version_size)
 		|| query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ie_version, ie_version_size);
 }
 
-bool find_internet_explorer_cache(TCHAR* cache_path)
-{
-	#ifdef BUILD_9X
-		return SHGetSpecialFolderPathA(NULL, cache_path, CSIDL_INTERNET_CACHE, FALSE) == TRUE;
-	#else
-		return SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_INTERNET_CACHE, NULL, SHGFP_TYPE_CURRENT, cache_path));
-	#endif
-}
-
 void undecorate_path(TCHAR* path)
 {
 	TCHAR* filename = PathFindFileName(path);
@@ -277,10 +268,10 @@ void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_t heade
 	{
 		// Keep the first line intact since it's the server's response (e.g. "HTTP/1.1 200 OK"),
 		// and not a key-value pair.
-		if(is_first_line && server_response != NULL)
+		if(is_first_line)
 		{
 			is_first_line = false;
-			*server_response = copy_ansi_string_to_tchar(arena, line);
+			if(server_response != NULL) *server_response = copy_ansi_string_to_tchar(arena, line);
 		}
 		// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
 		// where "Content-Type" is the key, and "text/html" the value).
@@ -368,24 +359,14 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		_ASSERT(lstrcmp(test_1, test_2) == 0);
 	}*/
 
-	if(exporter->is_exporting_from_default_locations)
+	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, exporter->cache_path))
 	{
-		if(find_internet_explorer_cache(exporter->cache_path))
-		{
-			const size_t ie_version_size = 32;
-			TCHAR ie_version[ie_version_size] = TEXT("");
-			find_internet_explorer_version(ie_version, ie_version_size);
-			log_print(LOG_INFO, "Internet Explorer: Browser version in the current user is '%s'.", ie_version);
-		}
-		else
-		{
-			log_print(LOG_ERROR, "Internet Explorer: Failed to get the current Temporary Internet Files cache directory path. No files will be exported.");
-			return;
-		}
+		log_print(LOG_ERROR, "Internet Explorer: Failed to get the current Temporary Internet Files cache directory path. No files will be exported.");
+		return;
 	}
 
 	get_full_path_name(exporter->cache_path);
-	log_print(LOG_INFO, "Internet Explorer: Exporting the cache from '%s'.", exporter->cache_path);
+	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 
 	resolve_cache_version_output_paths(exporter, IE_CACHE_4, IE_CACHE_VERSION_TO_STRING);
 	log_print_newline();
@@ -402,17 +383,27 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	#ifndef BUILD_9X
+
+		if(exporter->is_exporting_from_default_locations)
+		{
+			StringCchCopyW(exporter->cache_path, MAX_PATH_CHARS, exporter->local_appdata_path);
+			PathAppendW(exporter->cache_path, L"Microsoft\\Windows\\WebCache");
+		}
+
+		log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
+
 		resolve_cache_version_output_paths(exporter, IE_CACHE_10_TO_11, IE_CACHE_VERSION_TO_STRING);
 
 		log_print_newline();
 		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-		PathAppendW(exporter->index_path, L"..\\WebCache\\WebCacheV01.dat");
+		PathAppendW(exporter->index_path, L"WebCacheV01.dat");
 		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
 
 		log_print_newline();
 		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-		PathAppendW(exporter->index_path, L"..\\WebCache\\WebCacheV24.dat");
+		PathAppendW(exporter->index_path, L"WebCacheV24.dat");
 		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
+		
 	#endif
 
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
@@ -1004,20 +995,15 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			clear_arena(arena);
 		}
 
-		/*JET_COLUMNDEF name_column_info = {};
-		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"Name",
-											&name_column_info, sizeof(name_column_info), JET_ColInfo);
-		JET_COLUMNDEF container_id_column_info = {};
-		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"ContainerId",
-											&container_id_column_info, sizeof(container_id_column_info), JET_ColInfo);
-
-		JET_COLUMNDEF directory_column_info = {};
-		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"Directory",
-											&directory_column_info, sizeof(directory_column_info), JET_ColInfo);
-
-		JET_COLUMNDEF secure_directories_column_info = {};
-		error_code = JetGetTableColumnInfoW(session_id, containers_table_id, L"SecureDirectories",
-											&secure_directories_column_info, sizeof(secure_directories_column_info), JET_ColInfo);*/
+		// Empty or "C:\Users\<Username>\AppData\Local\Microsoft\Windows\WebCache"
+		bool set_original_database_path = false;
+		wchar_t original_database_path[MAX_PATH_CHARS] = L"";
+		if(!exporter->is_exporting_from_default_locations && exporter->should_use_ie_hint)
+		{
+			set_original_database_path = true;
+			StringCchCopyW(original_database_path, MAX_PATH_CHARS, exporter->ie_hint_path);
+			PathAppendW(original_database_path, L"Microsoft\\Windows\\WebCache");
+		}
 
 		enum Container_Column_Index
 		{
@@ -1099,9 +1085,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				{
 					// @Assert: The names of the directories that contain the cached files should have exactly this many characters.
 					_ASSERT( (wcslen(secure_directories) % NUM_CACHE_DIRECTORY_NAME_CHARS) == 0 );
-					debug_log_print("Container ID = %I64d.", container_id);
-					debug_log_print("Directory = %ls.", directory);
-					debug_log_print("SecureDirectories = %ls.", secure_directories);
 
 					size_t num_cache_directories = wcslen(secure_directories) / NUM_CACHE_DIRECTORY_NAME_CHARS;
 					wchar_t cache_directory_names[MAX_NUM_CACHE_DIRECTORIES][NUM_CACHE_DIRECTORY_NAME_CHARS + 1];
@@ -1283,10 +1266,33 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									StringCchCopyW(short_file_path, MAX_PATH_CHARS, cache_directory);
 									PathAppendW(short_file_path, decorated_filename);
 
-									wchar_t full_file_path[MAX_PATH_CHARS];
-									StringCchCopyW(full_file_path, MAX_PATH_CHARS, directory);
-									PathAppendW(full_file_path, short_file_path);
+									// @Format: 
+									wchar_t full_file_path[MAX_PATH_CHARS] = L"";
 
+									if(exporter->is_exporting_from_default_locations)
+									{
+										StringCchCopyW(full_file_path, MAX_PATH_CHARS, directory);
+									}
+									else
+									{
+										if(!set_original_database_path)
+										{
+											StringCchCopyW(original_database_path, MAX_PATH_CHARS, directory);
+											PathAppendW(original_database_path, L"..\\..\\WebCache");
+											set_original_database_path = !is_string_empty(original_database_path);
+										}
+
+										wchar_t path_from_database_to_cache[MAX_PATH_CHARS] = L"";
+										PathRelativePathToW(path_from_database_to_cache,
+															original_database_path, FILE_ATTRIBUTE_DIRECTORY, // From this directory...
+															directory, FILE_ATTRIBUTE_DIRECTORY); // To this directory.
+
+										StringCchCopyW(full_file_path, MAX_PATH_CHARS, index_directory_path);
+										PathAppendW(full_file_path, path_from_database_to_cache);
+									}
+
+									PathAppendW(full_file_path, short_file_path);
+									
 									bool file_exists = does_file_exist(full_file_path);
 									wchar_t* is_file_missing = (file_exists) ? (L"No") : (L"Yes");
 
@@ -1299,14 +1305,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									{
 										copy_file_using_url_directory_structure(arena, full_file_path, exporter->output_copy_path, url, filename);
 									}
-
-									/*wchar_t relative_path[MAX_PATH_CHARS];
-									PathRelativePathToW(relative_path,
-														directory, FILE_ATTRIBUTE_DIRECTORY, // From this path...
-														database_path, FILE_ATTRIBUTE_DIRECTORY); // To this path.
-
-									StringCchCopyW(relative_path, MAX_PATH_CHARS, temporary_database_path);
-									PathAppendW(relative_path, L"..\\..\\..\\..\\..\\..\\..\\..\\..\\");*/
 
 									if(exporter->should_create_csv)
 									{

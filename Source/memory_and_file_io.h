@@ -61,7 +61,9 @@ struct Url_Parts
 
 bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
 bool decode_url(TCHAR* url);
+
 bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result = NULL);
+bool get_special_folder_path(int csidl, TCHAR* result_path);
 void create_directories(const TCHAR* path_to_create);
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
 
@@ -122,7 +124,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 	#define debug_log_print(...)
 #endif
 
-#define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n"), __VA_ARGS__)
+#define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n\n"), __VA_ARGS__)
 
 enum Csv_Type
 {
@@ -225,16 +227,46 @@ inline bool is_string_empty(const wchar_t* str)
 	return str[0] == L'\0';
 }
 
+inline bool string_starts_with_insensitive(const TCHAR* str, const TCHAR* prefix)
+{
+	return _tcsncicmp(str, prefix, _tcslen(prefix)) == 0;
+}
+
 /*
 _byteswap_ushort
 _byteswap_ulong
 _byteswap_uint64
 */
 
+#define GET_FUNCTION_ADDRESS(library, function_name, Function_Pointer_Type, function_pointer_variable)\
+{\
+	Function_Pointer_Type address = (Function_Pointer_Type) GetProcAddress(library, function_name);\
+	if(address != NULL)\
+	{\
+		function_pointer_variable = address;\
+	}\
+	else\
+	{\
+		log_print(LOG_ERROR, "Get Function Address: Failed to retrieve %hs's function address with error code %lu.", function_name, GetLastError());\
+	}\
+}
+
 #ifndef BUILD_9X
+	void windows_nt_load_ntdll_functions(void);
+	void windows_nt_free_ntdll_functions(void);
+
+	void windows_nt_load_kernel32_functions(void);
+	void windows_nt_free_kernel32_functions(void);
+	
 	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, const TCHAR* file_path);
 	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path);
 #else
+	#define windows_nt_load_ntdll_functions(...) _STATIC_ASSERT(false)
+	#define windows_nt_free_ntdll_functions(...) _STATIC_ASSERT(false)
+	
+	#define windows_nt_load_kernel32_functions(...) _STATIC_ASSERT(false)
+	#define windows_nt_free_kernel32_functions(...) _STATIC_ASSERT(false)
+
 	#define windows_nt_query_file_handle_from_file_path(...) _STATIC_ASSERT(false)
 	#define windows_nt_force_copy_open_file(...) _STATIC_ASSERT(false)
 #endif

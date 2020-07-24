@@ -37,6 +37,7 @@
 
 	#undef UNICODE
 	#undef _UNICODE
+	#undef _MBCS
 	#define WINVER 0x0410
 	#define _WIN32_WINDOWS 0x0410
 	#define _WIN32_WINNT 0
@@ -53,6 +54,7 @@
 	// Minimum Internet Explorer Version: IE 5 (0x0500, which corresponds to version 5.0 of both Shell32.dll and Shlwapi.dll).
 	#define UNICODE
 	#define _UNICODE
+	#undef _MBCS
 	#define WINVER 0x0500
 	#define _WIN32_WINNT 0x0500 // Checks done for some version of _WIN32_WINDOWS are also done first for the same version of _WIN32_WINNT.
 	#define _WIN32_IE 0x0500
@@ -127,6 +129,13 @@ struct Exporter
 	bool was_temporary_directory_created;
 	TCHAR temporary_path[MAX_PATH_CHARS];
 	TCHAR executable_path[MAX_PATH_CHARS];
+
+	TCHAR roaming_appdata_path[MAX_PATH_CHARS];
+	TCHAR local_appdata_path[MAX_PATH_CHARS];
+	TCHAR local_low_appdata_path[MAX_PATH_CHARS];
+
+	bool should_use_ie_hint;
+	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
 	u32 cache_version;
 	TCHAR output_copy_path[MAX_PATH_CHARS];

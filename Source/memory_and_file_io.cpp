@@ -529,6 +529,15 @@ bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result)
 	return GetLastError() != ERROR_SUCCESS;
 }
 
+bool get_special_folder_path(int csidl, TCHAR* result_path)
+{
+	#ifdef BUILD_9X
+		return SHGetSpecialFolderPathA(NULL, result_path, csidl, FALSE) == TRUE;
+	#else
+		return SUCCEEDED(SHGetFolderPathW(NULL, csidl, NULL, SHGFP_TYPE_CURRENT, result_path));
+	#endif
+}
+
 bool create_empty_file(const TCHAR* file_path)
 {
 	DWORD error_code;
@@ -1400,22 +1409,18 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	Nt_Query_Object* dll_nt_query_object = stub_nt_query_object;
 	#define NtQueryObject dll_nt_query_object
 
-	#define GET_FUNCTION_ADDRESS(library, function_name, Function_Pointer_Type, function_pointer_variable)\
-	{\
-		Function_Pointer_Type address = (Function_Pointer_Type) GetProcAddress(library, function_name);\
-		if(address != NULL)\
-		{\
-			function_pointer_variable = address;\
-		}\
-		else\
-		{\
-			log_print(LOG_ERROR, "Get Function Address: Failed to retrieve %hs's function address with error code %lu.", function_name, GetLastError());\
-		}\
-	}
+	static HMODULE ntdll_library = NULL;
 
 	void windows_nt_load_ntdll_functions(void)
 	{
-		HMODULE ntdll_library = LoadLibraryA("Ntdll.dll");
+		if(ntdll_library != NULL)
+		{
+			log_print(LOG_WARNING, "Load Ntdll Functions: The library was already loaded.");
+			_ASSERT(false);
+			return;
+		}
+
+		ntdll_library = LoadLibraryA("Ntdll.dll");
 		if(ntdll_library != NULL)
 		{
 			GET_FUNCTION_ADDRESS(ntdll_library, "NtQuerySystemInformation", Nt_Query_System_Information*, NtQuerySystemInformation);
@@ -1424,41 +1429,84 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 		else
 		{
 			log_print(LOG_ERROR, "Load Ntdll Functions: Failed to load the library with error code %lu.", GetLastError());
+			_ASSERT(false);
 		}
 	}
 
-	bool convert_full_path_to_dos_path(const wchar_t* full_path, wchar_t* result_dos_path)
+	void windows_nt_free_ntdll_functions(void)
 	{
-		wchar_t full_long_path[MAX_PATH_CHARS] = L"";
-		if(GetLongPathNameW(full_path, full_long_path, MAX_PATH_CHARS) == 0)
+		if(ntdll_library == NULL)
 		{
-			// log
-			return false;
+			log_print(LOG_ERROR, "Free Ntdll: Failed to free the library since it wasn't previously loaded.");
+			return;
 		}
 
-		int drive_number = PathGetDriveNumberW(full_long_path);
-		if(drive_number == -1)
+		if(FreeLibrary(ntdll_library))
 		{
-			// log
-			return false;
+			ntdll_library = NULL;
+			NtQuerySystemInformation = stub_nt_query_system_information;
+			NtQueryObject = stub_nt_query_object;
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Free Ntdll: Failed to free the library with the error code %lu.", GetLastError());
+			_ASSERT(false);
+		}
+	}
+
+	#define GET_OVERLAPPED_RESULT_EX(function_name) BOOL __stdcall function_name(HANDLE hFile, LPOVERLAPPED lpOverlapped, LPDWORD lpNumberOfBytesTransferred, DWORD dwMilliseconds, BOOL bAlertable)
+	GET_OVERLAPPED_RESULT_EX(stub_get_overlapped_result_ex)
+	{
+		log_print(LOG_WARNING, "GetOverlappedResultEx: Calling the stub version of this function. The timeout and alertable arguments will be ignored. These were set to %lu and %d.", dwMilliseconds, bAlertable);
+		_ASSERT(false);
+		BOOL bWait = (dwMilliseconds > 0) ? (TRUE) : (FALSE);
+		return GetOverlappedResult(hFile, lpOverlapped, lpNumberOfBytesTransferred, bWait);
+	}
+	typedef GET_OVERLAPPED_RESULT_EX(Get_Overlapped_Result_Ex);
+	Get_Overlapped_Result_Ex* dll_get_overlapped_result_ex = stub_get_overlapped_result_ex;
+	#define GetOverlappedResultEx dll_get_overlapped_result_ex
+
+	static HMODULE kernel32_library = NULL;
+
+	void windows_nt_load_kernel32_functions(void)
+	{
+		if(kernel32_library != NULL)
+		{
+			log_print(LOG_WARNING, "Load Kernel32 Functions: The library was already loaded.");
+			_ASSERT(false);
+			return;
 		}
 
-		wchar_t drive[3] = L"";
-		drive[0] = (wchar_t) drive_number + L'A';
-		drive[1] = L':';
-		drive[2] = L'\0';
-
-		if(QueryDosDeviceW(drive, result_dos_path, MAX_PATH_CHARS) == 0)
+		kernel32_library = LoadLibraryA("Kernel32.dll");
+		if(kernel32_library != NULL)
 		{
-			return false;
+			GET_FUNCTION_ADDRESS(kernel32_library, "GetOverlappedResultEx", Get_Overlapped_Result_Ex*, GetOverlappedResultEx);
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Load Kernel32 Functions: Failed to load the library with error code %lu.", GetLastError());
+			_ASSERT(false);
+		}
+	}
+
+	void windows_nt_free_kernel32_functions(void)
+	{
+		if(kernel32_library == NULL)
+		{
+			log_print(LOG_ERROR, "Free Kernel32: Failed to free the library since it wasn't previously loaded.");
+			return;
 		}
 
-		if(!PathAppendW(result_dos_path, full_long_path + 3))
+		if(FreeLibrary(kernel32_library))
 		{
-			return false;
+			kernel32_library = NULL;
+			GetOverlappedResultEx = stub_get_overlapped_result_ex;
 		}
-
-		return true;
+		else
+		{
+			log_print(LOG_ERROR, "Free Kernel32: Failed to free the library with the error code %lu.", GetLastError());
+			_ASSERT(false);
+		}
 	}
 
 	static bool do_handles_refer_to_the_same_file(HANDLE file_handle_1, HANDLE file_handle_2)
@@ -1481,38 +1529,26 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	{
 		*result_file_handle = INVALID_HANDLE_VALUE;
 
-		windows_nt_load_ntdll_functions();
-
 		ULONG handle_info_size = (ULONG) megabytes_to_bytes(1);
 		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
 		ULONG actual_handle_info_size = 0;
 		
+		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+		while(error_code == STATUS_INFO_LENGTH_MISMATCH)
 		{
-			NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
-			while(error_code == STATUS_INFO_LENGTH_MISMATCH)
-			{
-				ULONG extra_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(5);
-				push_arena(arena, extra_size, u8);
-				handle_info_size += extra_size;
+			ULONG extra_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(5);
+			push_arena(arena, extra_size, u8);
+			handle_info_size += extra_size;
 
-				log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query system information. Expanding the buffer to %lu bytes.", handle_info_size);
-				error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
-			}
-
-			if(!NT_SUCCESS(error_code))
-			{
-				log_print(LOG_ERROR, "Query File Handle: Failed to query system information with error code %ld.", error_code);
-				return false;
-			}
+			log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query system information. Expanding the buffer to %lu bytes.", handle_info_size);
+			error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
 		}
 
-		// @TODO: compare using the handles instead (read attributes only) - GetFileInformationByHandle
-		/*wchar_t dos_file_path[MAX_PATH_CHARS] = L"";
-		if(!convert_full_path_to_dos_path(full_file_path, dos_file_path))
+		if(!NT_SUCCESS(error_code))
 		{
-
-			return result_file_handle;
-		}*/
+			log_print(LOG_ERROR, "Query File Handle: Failed to query system information with error code %ld.", error_code);
+			return false;
+		}
 
 		HANDLE read_attributes_file_handle = CreateFileW(	full_file_path,
 															FILE_READ_ATTRIBUTES,
@@ -1527,12 +1563,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 			return false;
 		}
 
-		ULONG object_info_size = (ULONG) kilobytes_to_bytes(2);
-		OBJECT_NAME_INFORMATION* object_info = push_arena(arena, object_info_size, OBJECT_NAME_INFORMATION);
-		ULONG actual_object_info_size = 0;
-
 		DWORD current_process_id = GetCurrentProcessId();
 		HANDLE current_process_handle = GetCurrentProcess();
+		// This pseudo handle doesn't have to be closed.
 
 		bool success = false;
 
@@ -1551,145 +1584,28 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 
 			if(DuplicateHandle(	process_handle, file_handle,
 								current_process_handle, &duplicated_file_handle,
-								0, FALSE, DUPLICATE_SAME_ACCESS)
-				&& GetFileType(duplicated_file_handle) == FILE_TYPE_DISK)
+								0, FALSE, DUPLICATE_SAME_ACCESS))
 			{
-				NTSTATUS error_code = NtQueryObject(duplicated_file_handle, ObjectNameInformation, object_info, object_info_size, &actual_object_info_size);
-
-				while(error_code == STATUS_INFO_LENGTH_MISMATCH)
-				{
-					ULONG extra_size = actual_object_info_size + (ULONG) kilobytes_to_bytes(1);
-					push_arena(arena, extra_size, u8);
-					object_info_size += extra_size;
-
-					log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query object information. Expanding the buffer to %lu bytes.", object_info_size);
-					error_code = NtQueryObject(duplicated_file_handle, ObjectNameInformation, object_info, object_info_size, &actual_object_info_size);
-				}
-
-				if(do_handles_refer_to_the_same_file(read_attributes_file_handle, duplicated_file_handle))
+				// Check if the handle belongs to a file object and if it refers to the file we're looking for.
+				if(GetFileType(duplicated_file_handle) == FILE_TYPE_DISK
+					&& do_handles_refer_to_the_same_file(read_attributes_file_handle, duplicated_file_handle))
 				{
 					success = true;
 					*result_file_handle = duplicated_file_handle;
 					safe_close_handle(&process_handle);
-					debug_log_print("Query File Handle: Found handle with attributes 0x%02X and granted access 0x%08X.", handle_entry.HandleAttributes, handle_entry.GrantedAccess);
+					log_print(LOG_INFO, "Query File Handle: Found handle with attributes 0x%02X and granted access 0x%08X.", handle_entry.HandleAttributes, handle_entry.GrantedAccess);
 					break;
 				}
 
-				/*UNICODE_STRING filename = object_info->Name;
-
-				if(filename.Length > 0 && filename.Buffer != NULL)
-				{
-					_ASSERT(NT_SUCCESS(error_code));
-
-					//size_t num_filename_chars = filename.Length / sizeof(wchar_t);
-					//if(wcsncmp(dos_file_path, filename.Buffer, num_filename_chars) == 0)
-					if(wcscmp(dos_file_path, filename.Buffer) == 0)
-					{
-						result_file_handle = duplicated_file_handle;
-						safe_close_handle(&process_handle);
-						break;
-					}
-				}
-				else
-				{
-
-				}*/
-
 				safe_close_handle(&duplicated_file_handle);
-			}
-			else
-			{
-				// Failed to duplicate
 			}
 
 			safe_close_handle(&process_handle);
 		}
 
+		safe_close_handle(&read_attributes_file_handle);
+
 		return success;
-
-
-		/*ULONG handle_info_size = (ULONG) (arena->total_size - arena->used_size) / 2;
-		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
-		ULONG actual_handle_info_size;
-		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
-		
-		if(!NT_SUCCESS(error_code))
-		{
-			log_print(LOG_ERROR, "Error %ld while running NtQuerySystemInformation.", error_code);
-			return result_file_handle;
-		}
-
-		ULONG object_info_size = (ULONG) (arena->total_size - arena->used_size);
-		OBJECT_NAME_INFORMATION* object_info = push_arena(arena, object_info_size, OBJECT_NAME_INFORMATION);
-		object_info;
-
-		HANDLE current_process_handle = GetCurrentProcess();
-		wchar_t wide_file_path[MAX_PATH_CHARS];
-		MultiByteToWideChar(CP_ACP, 0, full_file_path, -1, wide_file_path, MAX_PATH_CHARS);
-
-		for(ULONG i = 0; i < handle_info->NumberOfHandles; ++i)
-		{
-			SYSTEM_HANDLE_TABLE_ENTRY_INFO handle_entry = handle_info->Handles[i];
-			bool foo = true;
-
-			if(foo)
-			{
-				HANDLE process_handle = OpenProcess(PROCESS_DUP_HANDLE, FALSE, handle_entry.UniqueProcessId);
-				HANDLE file_handle = (HANDLE) handle_entry.HandleValue;
-
-				HANDLE duplicated_file_handle;
-				if(	process_handle != NULL &&
-					DuplicateHandle(process_handle, file_handle,
-									current_process_handle, &duplicated_file_handle,
-									0, FALSE, DUPLICATE_SAME_ACCESS))
-				{
-					//DWORD bar = GetFileType(duplicated_file_handle); bar;
-
-					SecureZeroMemory(object_info, object_info_size);
-					ULONG actual_object_info_size;
-					NTSTATUS error_code_2 = NtQueryObject(duplicated_file_handle, ObjectNameInformation, object_info, object_info_size, &actual_object_info_size);
-					
-					if(NT_SUCCESS(error_code_2))
-					{
-						//OBJECT_NAME_INFORMATION local_object_info = *object_info; local_object_info;
-						UNICODE_STRING filename = object_info->Name;
-
-						log_print(LOG_INFO, "Process %hu has handle %hu of type %hhu with access rights 0x%08X. Name is '%S'.",
-						handle_entry.UniqueProcessId, handle_entry.HandleValue,
-						handle_entry.ObjectTypeIndex, handle_entry.GrantedAccess,
-						filename.Buffer);
-
-						_ASSERT(NT_SUCCESS(error_code_2));
-
-						size_t num_filename_chars = filename.Length / sizeof(wchar_t);
-						if(wcsncmp(wide_file_path, filename.Buffer, num_filename_chars) == 0)
-						{
-							result_file_handle = duplicated_file_handle;
-							break;
-						}
-					}
-					else
-					{
-						_ASSERT(!NT_SUCCESS(error_code_2));
-					}
-
-					//CloseHandle(duplicated_file_handle);
-					duplicated_file_handle = INVALID_HANDLE_VALUE;
-				}
-
-				if(process_handle != NULL)
-				{
-					//CloseHandle(process_handle);
-					process_handle = INVALID_HANDLE_VALUE;
-				}
-			}
-		}
-
-		full_file_path;
-
-		clear_arena(arena);
-
-		return result_file_handle;*/
 	}
 
 	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
@@ -1727,6 +1643,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 				OVERLAPPED overlapped = {};
 				
 				bool reached_end_of_file = false;
+				u32 num_read_retry_attempts = 0;
+
 				do
 				{
 					DWORD num_bytes_read = 0;
@@ -1742,12 +1660,39 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 							//const DWORD TIMEOUT = 10 * 1000;
 							//if(GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT, FALSE) == 0)
 							//  || overlapped_result_error_code == WAIT_TIMEOUT
-							if(GetOverlappedResult(source_file_handle, &overlapped, &num_bytes_read, TRUE) == 0)
+							//if(GetOverlappedResult(source_file_handle, &overlapped, &num_bytes_read, TRUE) == 0)
+							const DWORD TIMEOUT_IN_SECONDS = 5;
+							const DWORD TIMEOUT_IN_MILLISECONDS = TIMEOUT_IN_SECONDS * 1000;
+							if(!GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT_IN_MILLISECONDS, FALSE))
 							{
 								DWORD overlapped_result_error_code = GetLastError();
 								if(overlapped_result_error_code == ERROR_HANDLE_EOF)
 								{
 									reached_end_of_file = true;
+								}
+								else if(overlapped_result_error_code == WAIT_TIMEOUT)
+								{
+									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Cancelling all pending I/O operations and retrying. Read %I64u and wrote %I64u bytes so far.", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written);
+									
+									// Cancel all pending I/O operations issued for the file.
+									// See: https://docs.microsoft.com/en-us/windows/win32/fileio/canceling-pending-i-o-operations
+									if(CancelIo(source_file_handle))
+									{
+										/*// Wait for the I/O subsystem to acknowledge our cancellation.
+										if(!GetOverlappedResult(source_file_handle, &overlapped, &num_bytes_read, TRUE))
+										{
+											log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result after canceling all pending I/O operatiosn with the the error code %lu.", GetLastError());
+											_ASSERT(false);
+										}*/
+									}
+									else
+									{
+										log_print(LOG_ERROR, "Force Copy Open File: Failed to cancel all pending I/O operation before retrying with the error code %lu.", GetLastError());
+										_ASSERT(false);
+									}
+
+									++num_read_retry_attempts;
+									continue;
 								}
 								else
 								{
@@ -1790,6 +1735,11 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 				} while(!reached_end_of_file);
 
 				clear_arena(arena);
+
+				if(num_read_retry_attempts > 0)
+				{
+					log_print(LOG_INFO, "Force Copy Open File: Retried read operations %I32u times before reaching the end of file.", num_read_retry_attempts);
+				}
 
 				copy_success = (total_bytes_read == total_bytes_written);
 

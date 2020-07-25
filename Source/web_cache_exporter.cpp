@@ -73,6 +73,9 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	bool success = true;
 	bool seen_export_option = false;
 
+	exporter->should_copy_files = true;
+	exporter->should_create_csv = true;
+
 	for(int i = 1; i < num_arguments; ++i)
 	{
 		TCHAR* option = arguments[i];
@@ -194,6 +197,43 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	return success;
 }
 
+static size_t get_startup_memory_size(Exporter* exporter)
+{
+	OSVERSIONINFO os_version = exporter->os_version;
+	size_t size_for_os_version = 0;
+
+	// Windows 98 (4.10)
+	if(os_version.dwMajorVersion <= 4 && os_version.dwMinorVersion <= 10)
+	{
+		size_for_os_version = kilobytes_to_bytes(512); // x1 for char
+	}
+	// Windows 2000 (5.0) and ME (4.90)
+	else if( 	(os_version.dwMajorVersion <= 5 && os_version.dwMinorVersion <= 0)
+			|| 	(os_version.dwMajorVersion <= 4 && os_version.dwMinorVersion <= 90))
+	{
+		size_for_os_version = megabytes_to_bytes(1); // x1 for char (ME) and x2 for wchar_t (2000)
+	}
+	// Windows XP (5.1)
+	else if(os_version.dwMajorVersion <= 5 && os_version.dwMinorVersion <= 1)
+	{
+		size_for_os_version = megabytes_to_bytes(2); // x2 for wchar_t
+	}
+	// Windows Vista (6.0), 7 (6.1), 8.1 (6.3), and 10 (10.0).
+	else if(os_version.dwMajorVersion >= 6)
+	{
+		size_for_os_version = megabytes_to_bytes(4); // x2 for wchar_t
+	}
+	else
+	{
+		size_for_os_version = megabytes_to_bytes(2); // x1 or x2 for TCHAR
+		log_print(LOG_WARNING, "Get Startup Memory Size: Using %Iu bytes for unhandled Windows version %lu.%lu.",
+								size_for_os_version, os_version.dwMajorVersion, os_version.dwMinorVersion);
+		_ASSERT(false);
+	}
+
+	return size_for_os_version * sizeof(TCHAR);
+}
+
 static void clean_up(Exporter* exporter)
 {
 	if(exporter->was_temporary_directory_created)
@@ -204,6 +244,7 @@ static void clean_up(Exporter* exporter)
 	#ifndef BUILD_9X
 		if( (exporter->cache_type == CACHE_INTERNET_EXPLORER) || (exporter->cache_type == CACHE_ALL) )
 		{
+			windows_nt_free_esent_functions();
 			windows_nt_free_ntdll_functions();
 			windows_nt_free_kernel32_functions();
 		}
@@ -216,40 +257,10 @@ static void clean_up(Exporter* exporter)
 int _tmain(int argc, TCHAR* argv[])
 {
 	Exporter exporter;
-	exporter.should_copy_files = true;
-	exporter.should_create_csv = true;
-	exporter.should_merge_copied_files = false;
-	exporter.cache_type = CACHE_UNKNOWN;
-	exporter.cache_path[0] = TEXT('\0');
-	exporter.output_path[0] = TEXT('\0');
-	exporter.is_exporting_from_default_locations = false;
-
-	exporter.arena = NULL_ARENA;
-
-	exporter.was_temporary_directory_created = false;
-	exporter.temporary_path[0] = TEXT('\0');
-	exporter.executable_path[0] = TEXT('\0');
-
-	exporter.roaming_appdata_path[0] = TEXT('\0');
-	exporter.local_appdata_path[0] = TEXT('\0');
-	exporter.local_low_appdata_path[0] = TEXT('\0');
-
-	exporter.should_use_ie_hint = false;
-	exporter.ie_hint_path[0] = TEXT('\0');
-	
-	exporter.cache_version = 0;
-	exporter.output_copy_path[0] = TEXT('\0');
-	exporter.output_csv_path[0] = TEXT('\0');
-	exporter.index_path[0] = TEXT('\0');
+	SecureZeroMemory(&exporter, sizeof(exporter));	
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
-	{
-		const size_t ie_version_size = 32;
-		TCHAR ie_version[ie_version_size] = TEXT("");
-		find_internet_explorer_version(ie_version, ie_version_size);
-		log_print(LOG_INFO, "Startup: Running Internet Explorer version '%s'.", ie_version);		
-	}
 
 	log_print(LOG_INFO, "foo is %d", foo);
 
@@ -274,12 +285,33 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
-	size_t memory_to_use = megabytes_to_bytes(4) * sizeof(TCHAR);
-	debug_log_print("Startup: Allocating %Iu bytes for the temporary memory arena.", memory_to_use);
+	exporter.os_version.dwOSVersionInfoSize = sizeof(exporter.os_version);
+	if(GetVersionEx(&exporter.os_version))
+	{
+		log_print(LOG_INFO, "Startup: Running Windows version %lu.%lu '%s' build %lu in platform %lu.",
+								exporter.os_version.dwMajorVersion, exporter.os_version.dwMinorVersion,
+								exporter.os_version.szCSDVersion, exporter.os_version.dwBuildNumber,
+								exporter.os_version.dwPlatformId);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the current Windows version with the error code %lu.", GetLastError());
+	}
+
+	{
+		const size_t ie_version_size = 32;
+		TCHAR ie_version[ie_version_size] = TEXT("");
+		find_internet_explorer_version(ie_version, ie_version_size);
+		log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);		
+	}
+
+	size_t memory_to_use = get_startup_memory_size(&exporter);
+	log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", memory_to_use);
 
 	if(!create_arena(&exporter.arena, memory_to_use))
 	{
-		log_print(LOG_ERROR, "Startup: Could not allocate enough memory to run the program.");
+		console_print("Could not allocate enough memory to run the program.");
+		log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", memory_to_use);
 		clean_up(&exporter);
 		return 1;
 	}
@@ -287,8 +319,9 @@ int _tmain(int argc, TCHAR* argv[])
 	#ifndef BUILD_9X
 		if( (exporter.cache_type == CACHE_INTERNET_EXPLORER) || (exporter.cache_type == CACHE_ALL) )
 		{
-			windows_nt_load_ntdll_functions();
 			windows_nt_load_kernel32_functions();
+			windows_nt_load_ntdll_functions();
+			windows_nt_load_esent_functions();
 		}
 	#endif
 
@@ -325,7 +358,7 @@ int _tmain(int argc, TCHAR* argv[])
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
 	}
 
 	/*

@@ -124,6 +124,8 @@ struct Exporter
 	TCHAR output_path[MAX_PATH_CHARS];
 	bool is_exporting_from_default_locations;
 
+	OSVERSIONINFO os_version;
+
 	Arena arena;
 
 	bool was_temporary_directory_created;

@@ -53,6 +53,16 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 
 	arena->available_memory = advance_bytes(arena->available_memory, aligned_push_size);
 	arena->used_size += aligned_push_size;
+
+	#ifdef DEBUG
+		static size_t max_used_size = kilobytes_to_bytes(64);
+		if(arena->used_size > max_used_size)
+		{
+			max_used_size = arena->used_size;
+			debug_log_print("Aligned Push Arena: Increased the maximum used size to %Iu after pushing %Iu bytes.", max_used_size, aligned_push_size);
+		}
+	#endif
+
 	return aligned_address;
 }
 
@@ -614,11 +624,11 @@ static void convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* path)
 		_ASSERT(url_parts.path != NULL);
 
 		correct_url_path_separators(url_parts.path);
-		// Remove the resource's filename so it's not part of the final path.
-		TCHAR* last_separator = _tcsrchr(url_parts.path, TEXT('\\'));
-		if(last_separator != NULL) *last_separator = TEXT('\0');
-		
 		PathAppend(path, url_parts.path);
+
+		// Remove the resource's filename so it's not part of the final path.
+		TCHAR* last_separator = _tcsrchr(path, TEXT('\\'));
+		if(last_separator != NULL) *last_separator = TEXT('\0');
 	}
 }
 
@@ -642,23 +652,27 @@ static void convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* path)
 
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename)
 {
-	TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
-	if(url != NULL) convert_url_to_path(arena, url, url_path);
-
 	TCHAR full_copy_target_path[MAX_PATH_CHARS] = TEXT("");
 	get_full_path_name((TCHAR*) base_destination_path, full_copy_target_path);
-	bool path_append_success = PathAppend(full_copy_target_path, url_path) == TRUE;
-	if(is_string_empty(url_path) || !path_append_success)
+	
+	if(url != NULL)
 	{
-		console_print("The website directory structure for the file '%s' could not be created because it's too long. This file will be copied to the base export destination instead: '%s'.\n", filename, base_destination_path);
-		log_print(LOG_WARNING, "Copy File Using URL Structure: Failed to build the website directory structure for the file '%s' because its URL is too long. This file will be copied to the base export destination instead: '%s'.", filename, base_destination_path);
-		get_full_path_name((TCHAR*) base_destination_path, full_copy_target_path);
+		TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
+		convert_url_to_path(arena, url, url_path);
+
+		bool path_append_success = PathAppend(full_copy_target_path, url_path) == TRUE;
+		if(is_string_empty(url_path) || !path_append_success)
+		{
+			console_print("The website directory structure for the file '%s' could not be created because it's too long. This file will be copied to the base export destination instead: '%s'.\n", filename, base_destination_path);
+			log_print(LOG_WARNING, "Copy File Using URL Structure: Failed to build the website directory structure for the file '%s' because its URL is too long. This file will be copied to the base export destination instead: '%s'.", filename, base_destination_path);
+			get_full_path_name((TCHAR*) base_destination_path, full_copy_target_path);
+		}		
 	}
 
 	_ASSERT(!is_string_empty(full_copy_target_path));
 	
 	create_directories(full_copy_target_path);
-	path_append_success = PathAppend(full_copy_target_path, filename) == TRUE;
+	bool path_append_success = PathAppend(full_copy_target_path, filename) == TRUE;
 	if(!path_append_success)
 	{
 		console_print("An error occurred while building the final output copy path for the file '%s'. This file will not be copied.\n", filename);
@@ -1381,7 +1395,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 		ULONG Reserved[22]; // reserved for internal use
 	};
 
-	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS __stdcall function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
+	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS WINAPI function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
 	#pragma warning(push)
 	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
 	NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
@@ -1395,7 +1409,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 	Nt_Query_System_Information* dll_nt_query_system_information = stub_nt_query_system_information;
 	#define NtQuerySystemInformation dll_nt_query_system_information
 
-	#define NT_QUERY_OBJECT(function_name) NTSTATUS __stdcall function_name(HANDLE Handle, OBJECT_INFORMATION_CLASS ObjectInformationClass, PVOID ObjectInformation, ULONG ObjectInformationLength, PULONG ReturnLength)
+	#define NT_QUERY_OBJECT(function_name) NTSTATUS WINAPI function_name(HANDLE Handle, OBJECT_INFORMATION_CLASS ObjectInformationClass, PVOID ObjectInformation, ULONG ObjectInformationLength, PULONG ReturnLength)
 	#pragma warning(push)
 	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
 	NT_QUERY_OBJECT(stub_nt_query_object)
@@ -1454,7 +1468,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Cs
 		}
 	}
 
-	#define GET_OVERLAPPED_RESULT_EX(function_name) BOOL __stdcall function_name(HANDLE hFile, LPOVERLAPPED lpOverlapped, LPDWORD lpNumberOfBytesTransferred, DWORD dwMilliseconds, BOOL bAlertable)
+	#define GET_OVERLAPPED_RESULT_EX(function_name) BOOL WINAPI function_name(HANDLE hFile, LPOVERLAPPED lpOverlapped, LPDWORD lpNumberOfBytesTransferred, DWORD dwMilliseconds, BOOL bAlertable)
 	GET_OVERLAPPED_RESULT_EX(stub_get_overlapped_result_ex)
 	{
 		log_print(LOG_WARNING, "GetOverlappedResultEx: Calling the stub version of this function. The timeout and alertable arguments will be ignored. These were set to %lu and %d.", dwMilliseconds, bAlertable);

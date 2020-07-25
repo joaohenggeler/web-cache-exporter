@@ -741,6 +741,432 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 
 #ifndef BUILD_9X
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_GET_DATABASE_FILE_INFO_W(function_name) JET_ERR JET_API function_name(JET_PCWSTR szDatabaseName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_GET_DATABASE_FILE_INFO_W(stub_jet_get_database_file_info_w)
+	{
+		log_print(LOG_WARNING, "JetGetDatabaseFileInfoW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_GET_DATABASE_FILE_INFO_W(Jet_Get_Database_File_Info_W);
+	Jet_Get_Database_File_Info_W* dll_jet_get_database_file_info_w = stub_jet_get_database_file_info_w;
+	#define JetGetDatabaseFileInfoW dll_jet_get_database_file_info_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_GET_SYSTEM_PARAMETER_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance, JET_SESID sesid, unsigned long paramid, JET_API_PTR* plParam, JET_PWSTR szParam, unsigned long cbMax)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_GET_SYSTEM_PARAMETER_W(stub_jet_get_system_parameter_w)
+	{
+		log_print(LOG_WARNING, "JetGetSystemParameterW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_GET_SYSTEM_PARAMETER_W(Jet_Get_System_Parameter_W);
+	Jet_Get_System_Parameter_W* dll_jet_get_system_parameter_w = stub_jet_get_system_parameter_w;
+	#define JetGetSystemParameterW dll_jet_get_system_parameter_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_SET_SYSTEM_PARAMETER_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance, JET_SESID sesid, unsigned long paramid, JET_API_PTR lParam, JET_PCWSTR szParam)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_SET_SYSTEM_PARAMETER_W(stub_jet_set_system_parameter_w)
+	{
+		log_print(LOG_WARNING, "JetSetSystemParameterW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_SET_SYSTEM_PARAMETER_W(Jet_Set_System_Parameter_W);
+	Jet_Set_System_Parameter_W* dll_jet_set_system_parameter_w = stub_jet_set_system_parameter_w;
+	#define JetSetSystemParameterW dll_jet_set_system_parameter_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_CREATE_INSTANCE_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance, JET_PCWSTR szInstanceName)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_CREATE_INSTANCE_W(stub_jet_create_instance_w)
+	{
+		log_print(LOG_WARNING, "JetCreateInstanceW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_CREATE_INSTANCE_W(Jet_Create_Instance_W);
+	Jet_Create_Instance_W* dll_jet_create_instance_w = stub_jet_create_instance_w;
+	#define JetCreateInstanceW dll_jet_create_instance_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_INIT(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_INIT(stub_jet_init)
+	{
+		log_print(LOG_WARNING, "JetInit: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_INIT(Jet_Init);
+	Jet_Init* dll_jet_init = stub_jet_init;
+	#define JetInit dll_jet_init
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_TERM(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_TERM(stub_jet_term)
+	{
+		log_print(LOG_WARNING, "JetTerm: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_TERM(Jet_Term);
+	Jet_Term* dll_jet_term = stub_jet_term;
+	#define JetTerm dll_jet_term
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_BEGIN_SESSION_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance, JET_SESID* psesid, JET_PCWSTR szUserName, JET_PCWSTR szPassword)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_BEGIN_SESSION_W(stub_jet_begin_session_w)
+	{
+		log_print(LOG_WARNING, "JetBeginSessionW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_BEGIN_SESSION_W(Jet_Begin_Session_W);
+	Jet_Begin_Session_W* dll_jet_begin_session_w = stub_jet_begin_session_w;
+	#define JetBeginSessionW dll_jet_begin_session_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_END_SESSION(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_GRBIT grbit)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_END_SESSION(stub_jet_end_session)
+	{
+		log_print(LOG_WARNING, "JetEndSession: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_END_SESSION(Jet_End_Session);
+	Jet_End_Session* dll_jet_end_session = stub_jet_end_session;
+	#define JetEndSession dll_jet_end_session
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_ATTACH_DATABASE_2_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename, const unsigned long cpgDatabaseSizeMax, JET_GRBIT grbit)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_ATTACH_DATABASE_2_W(stub_jet_attach_database_2_w)
+	{
+		log_print(LOG_WARNING, "JetAttachDatabase2W: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_ATTACH_DATABASE_2_W(Jet_Attach_Database_2_W);
+	Jet_Attach_Database_2_W* dll_jet_attach_database_2_w = stub_jet_attach_database_2_w;
+	#define JetAttachDatabase2W dll_jet_attach_database_2_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_DETACH_DATABASE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_DETACH_DATABASE_W(stub_jet_detach_database_w)
+	{
+		log_print(LOG_WARNING, "JetDetachDatabaseW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_DETACH_DATABASE_W(Jet_Detach_Database_W);
+	Jet_Detach_Database_W* dll_jet_detach_database_w = stub_jet_detach_database_w;
+	#define JetDetachDatabaseW dll_jet_detach_database_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_OPEN_DATABASE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename, JET_PCWSTR szConnect, JET_DBID* pdbid, JET_GRBIT grbit)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_OPEN_DATABASE_W(stub_jet_open_database_w)
+	{
+		log_print(LOG_WARNING, "JetOpenDatabaseW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_OPEN_DATABASE_W(Jet_Open_Database_W);
+	Jet_Open_Database_W* dll_jet_open_database_w = stub_jet_open_database_w;
+	#define JetOpenDatabaseW dll_jet_open_database_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_CLOSE_DATABASE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_DBID dbid, JET_GRBIT grbit)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_CLOSE_DATABASE(stub_jet_close_database)
+	{
+		log_print(LOG_WARNING, "JetCloseDatabase: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_CLOSE_DATABASE(Jet_Close_Database);
+	Jet_Close_Database* dll_jet_close_database = stub_jet_close_database;
+	#define JetCloseDatabase dll_jet_close_database
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_OPEN_TABLE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_DBID dbid, JET_PCWSTR szTableName, const void* pvParameters, unsigned long cbParameters, JET_GRBIT grbit, JET_TABLEID* ptableid)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_OPEN_TABLE_W(stub_jet_open_table_w)
+	{
+		log_print(LOG_WARNING, "JetOpenTableW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_OPEN_TABLE_W(Jet_Open_Table_W);
+	Jet_Open_Table_W* dll_jet_open_table_w = stub_jet_open_table_w;
+	#define JetOpenTableW dll_jet_open_table_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_CLOSE_TABLE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_CLOSE_TABLE(stub_jet_close_table)
+	{
+		log_print(LOG_WARNING, "JetCloseTable: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_CLOSE_TABLE(Jet_Close_Table);
+	Jet_Close_Table* dll_jet_close_table = stub_jet_close_table;
+	#define JetCloseTable dll_jet_close_table
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_GET_TABLE_COLUMN_INFO_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_PCWSTR szColumnName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_GET_TABLE_COLUMN_INFO_W(stub_jet_get_table_column_info_w)
+	{
+		log_print(LOG_WARNING, "JetGetTableColumnInfoW: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_GET_TABLE_COLUMN_INFO_W(Jet_Get_Table_Column_Info_W);
+	Jet_Get_Table_Column_Info_W* dll_jet_get_table_column_info_w = stub_jet_get_table_column_info_w;
+	#define JetGetTableColumnInfoW dll_jet_get_table_column_info_w
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_RETRIEVE_COLUMN(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_COLUMNID columnid, void* pvData, unsigned long cbData, unsigned long* pcbActual, JET_GRBIT grbit, JET_RETINFO* pretinfo)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_RETRIEVE_COLUMN(stub_jet_retrieve_column)
+	{
+		log_print(LOG_WARNING, "JetRetrieveColumn: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_RETRIEVE_COLUMN(Jet_Retrieve_Column);
+	Jet_Retrieve_Column* dll_jet_retrieve_column = stub_jet_retrieve_column;
+	#define JetRetrieveColumn dll_jet_retrieve_column
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_RETRIEVE_COLUMNS(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_RETRIEVECOLUMN* pretrievecolumn, unsigned long cretrievecolumn)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_RETRIEVE_COLUMNS(stub_jet_retrieve_columns)
+	{
+		log_print(LOG_WARNING, "JetRetrieveColumns: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_RETRIEVE_COLUMNS(Jet_Retrieve_Columns);
+	Jet_Retrieve_Columns* dll_jet_retrieve_columns = stub_jet_retrieve_columns;
+	#define JetRetrieveColumns dll_jet_retrieve_columns
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_GET_RECORD_POSITION(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_RECPOS* precpos, unsigned long cbRecpos)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_GET_RECORD_POSITION(stub_jet_get_record_position)
+	{
+		log_print(LOG_WARNING, "JetGetRecordPosition: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_GET_RECORD_POSITION(Jet_Get_Record_Position);
+	Jet_Get_Record_Position* dll_jet_get_record_position = stub_jet_get_record_position;
+	#define JetGetRecordPosition dll_jet_get_record_position
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	#define JET_MOVE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, long cRow, JET_GRBIT grbit)
+	#pragma warning(push)
+	#pragma warning(disable : 4100)
+	JET_MOVE(stub_jet_move)
+	{
+		log_print(LOG_WARNING, "JetMove: Calling the stub version of this function.");
+		_ASSERT(false);
+		return JET_wrnNyi;
+	}
+	#pragma warning(pop)
+	typedef JET_MOVE(Jet_Move);
+	Jet_Move* dll_jet_move = stub_jet_move;
+	#define JetMove dll_jet_move
+
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+	// ----------------------------------------------------------------------
+
+	static HMODULE esent_library = NULL;
+
+	void windows_nt_load_esent_functions(void)
+	{
+		if(esent_library != NULL)
+		{
+			log_print(LOG_WARNING, "Load ESENT Functions: The library was already loaded.");
+			_ASSERT(false);
+			return;
+		}
+
+		esent_library = LoadLibraryA("ESENT.dll");
+		if(esent_library != NULL)
+		{
+			GET_FUNCTION_ADDRESS(esent_library, "JetGetDatabaseFileInfoW", Jet_Get_Database_File_Info_W*, JetGetDatabaseFileInfoW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetGetSystemParameterW", Jet_Get_System_Parameter_W*, JetGetSystemParameterW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetSetSystemParameterW", Jet_Set_System_Parameter_W*, JetSetSystemParameterW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetCreateInstanceW", Jet_Create_Instance_W*, JetCreateInstanceW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetInit", Jet_Init*, JetInit);
+			GET_FUNCTION_ADDRESS(esent_library, "JetTerm", Jet_Term*, JetTerm);
+			GET_FUNCTION_ADDRESS(esent_library, "JetBeginSessionW", Jet_Begin_Session_W*, JetBeginSessionW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetEndSession", Jet_End_Session*, JetEndSession);
+			GET_FUNCTION_ADDRESS(esent_library, "JetAttachDatabase2W", Jet_Attach_Database_2_W*, JetAttachDatabase2W);
+			GET_FUNCTION_ADDRESS(esent_library, "JetDetachDatabaseW", Jet_Detach_Database_W*, JetDetachDatabaseW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetOpenDatabaseW", Jet_Open_Database_W*, JetOpenDatabaseW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetCloseDatabase", Jet_Close_Database*, JetCloseDatabase);
+			GET_FUNCTION_ADDRESS(esent_library, "JetOpenTableW", Jet_Open_Table_W*, JetOpenTableW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetCloseTable", Jet_Close_Table*, JetCloseTable);
+			GET_FUNCTION_ADDRESS(esent_library, "JetGetTableColumnInfoW", Jet_Get_Table_Column_Info_W*, JetGetTableColumnInfoW);
+			GET_FUNCTION_ADDRESS(esent_library, "JetRetrieveColumn", Jet_Retrieve_Column*, JetRetrieveColumn);
+			GET_FUNCTION_ADDRESS(esent_library, "JetRetrieveColumns", Jet_Retrieve_Columns*, JetRetrieveColumns);
+			GET_FUNCTION_ADDRESS(esent_library, "JetGetRecordPosition", Jet_Get_Record_Position*, JetGetRecordPosition);
+			GET_FUNCTION_ADDRESS(esent_library, "JetMove", Jet_Move*, JetMove);
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Load ESENT Functions: Failed to load the library with error code %lu.", GetLastError());
+			_ASSERT(false);
+		}
+	}
+
+	void windows_nt_free_esent_functions(void)
+	{
+		if(esent_library == NULL)
+		{
+			log_print(LOG_ERROR, "Free ESENT: Failed to free the library since it wasn't previously loaded.");
+			return;
+		}
+
+		if(FreeLibrary(esent_library))
+		{
+			esent_library = NULL;
+			JetGetDatabaseFileInfoW = stub_jet_get_database_file_info_w;
+			JetGetSystemParameterW = stub_jet_get_system_parameter_w;
+			JetSetSystemParameterW = stub_jet_set_system_parameter_w;
+			JetCreateInstanceW = stub_jet_create_instance_w;
+			JetInit = stub_jet_init;
+			JetTerm = stub_jet_term;
+			JetBeginSessionW = stub_jet_begin_session_w;
+			JetEndSession = stub_jet_end_session;
+			JetAttachDatabase2W = stub_jet_attach_database_2_w;
+			JetDetachDatabaseW = stub_jet_detach_database_w;
+			JetOpenDatabaseW = stub_jet_open_database_w;
+			JetCloseDatabase = stub_jet_close_database;
+			JetOpenTableW = stub_jet_open_table_w;
+			JetCloseTable = stub_jet_close_table;
+			JetGetTableColumnInfoW = stub_jet_get_table_column_info_w;
+			JetRetrieveColumn = stub_jet_retrieve_column;
+			JetRetrieveColumns = stub_jet_retrieve_columns;
+			JetGetRecordPosition = stub_jet_get_record_position;
+			JetMove = stub_jet_move;
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Free ESENT: Failed to free the library with the error code %lu.", GetLastError());
+			_ASSERT(false);
+		}
+	}
+
 	static void windows_nt_ese_clean_up(TCHAR* temporary_directory_path,
 										JET_INSTANCE* instance, JET_SESID* session_id,
 										JET_DBID* database_id, JET_TABLEID* containers_table_id)

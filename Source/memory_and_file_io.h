@@ -1,8 +1,6 @@
 #ifndef MEMORY_AND_FILE_IO_H
 #define MEMORY_AND_FILE_IO_H
 
-extern const int foo;
-
 struct Arena
 {
 	size_t used_size;
@@ -14,8 +12,9 @@ const Arena NULL_ARENA = {0, 0, NULL};
 bool create_arena(Arena* arena, size_t total_size);
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size);
 void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alignment_size, const void* data, size_t data_size);
-#define push_arena(arena, push_size, type) ((type*) aligned_push_arena(arena, push_size, __alignof(type)))
-#define push_and_copy_to_arena(arena, push_size, type, data, data_size) ((type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(type), data, data_size))
+#define push_arena(arena, push_size, Type) ((Type*) aligned_push_arena(arena, push_size, __alignof(Type)))
+#define push_and_copy_to_arena(arena, push_size, Type, data, data_size) ((Type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(Type), data, data_size))
+TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy);
 void clear_arena(Arena* arena);
 bool destroy_arena(Arena* arena);
 
@@ -40,7 +39,6 @@ bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
-TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string, size_t num_chars);
 
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
@@ -60,9 +58,11 @@ struct Url_Parts
 };
 
 bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
+bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
 bool decode_url(TCHAR* url);
 
-bool get_full_path_name(TCHAR* path, TCHAR* optional_full_path_result = NULL);
+bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path);
+bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
 void create_directories(const TCHAR* path_to_create);
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
@@ -93,12 +93,11 @@ void safe_close_handle(HANDLE* handle);
 	}\
 }
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result);
-void* memory_map_entire_file(TCHAR* file_path, HANDLE* result_file_handle, u64* file_size_result);
-bool mark_file_for_deletion(const TCHAR* file_path, DWORD desired_access, DWORD share_mode, HANDLE* result_doomed_handle);
+void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size);
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
 bool delete_directory_and_contents(const TCHAR* directory_path);
-bool read_first_file_bytes(TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
+bool read_first_file_bytes(const TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, DWORD value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
 
@@ -113,7 +112,7 @@ enum Log_Type
 };
 const TCHAR* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {TEXT(""), TEXT("[INFO] "), TEXT("[WARNING] "), TEXT("[ERROR] "), TEXT("[DEBUG] ")};
 
-bool create_log_file(const TCHAR* filename);
+bool create_log_file(const TCHAR* log_file_path);
 void close_log_file(void);
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 #define log_print(log_type, string_format, ...) tchar_log_print(log_type, TEXT(string_format), __VA_ARGS__)
@@ -153,7 +152,7 @@ enum Csv_Type
 	
 	// Internet Explorer specific.
 	CSV_HITS = 18,
-	CSV_LEAK_ENTRY = 19,
+	CSV_LEAK_ENTRY = 19, // @TODO: remove this one
 	
 	// Shockwave Plugin specific.
 	CSV_DIRECTOR_FILE_TYPE = 20,
@@ -177,8 +176,8 @@ struct Csv_Entry
 	wchar_t* utf_16_value; // Helper variable to convert each value to UTF-8 in Windows 98 and ME.
 };
 
-HANDLE create_csv_file(const TCHAR* file_path);
-void close_csv_file(HANDLE* csv_file);
+bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
+void close_csv_file(HANDLE* csv_file_handle);
 void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);
 void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Csv_Entry row[], size_t num_columns);
 
@@ -247,7 +246,7 @@ _byteswap_uint64
 	}\
 	else\
 	{\
-		log_print(LOG_ERROR, "Get Function Address: Failed to retrieve %hs's function address with error code %lu.", function_name, GetLastError());\
+		log_print(LOG_ERROR, "Get Function Address: Failed to retrieve the function address for '%hs' with the error code %lu.", function_name, GetLastError());\
 	}\
 }
 
@@ -258,7 +257,7 @@ _byteswap_uint64
 	void windows_nt_load_kernel32_functions(void);
 	void windows_nt_free_kernel32_functions(void);
 	
-	HANDLE windows_nt_query_file_handle_from_file_path(Arena* arena, const TCHAR* file_path);
+	bool windows_nt_query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle);
 	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path);
 #else
 	#define windows_nt_load_ntdll_functions(...) _STATIC_ASSERT(false)

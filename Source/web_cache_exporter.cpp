@@ -262,8 +262,6 @@ int _tmain(int argc, TCHAR* argv[])
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
 
-	log_print(LOG_INFO, "foo is %d", foo);
-
 	if(argc <= 1)
 	{
 		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and exit.");
@@ -297,6 +295,8 @@ int _tmain(int argc, TCHAR* argv[])
 	{
 		log_print(LOG_ERROR, "Startup: Failed to get the current Windows version with the error code %lu.", GetLastError());
 	}
+
+	log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
 
 	{
 		const size_t ie_version_size = 32;

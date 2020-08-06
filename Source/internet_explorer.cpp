@@ -317,47 +317,15 @@ void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_t heade
 
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
-	/*TCHAR test_1[MAX_PATH_CHARS];
-	TCHAR test_2[MAX_PATH_CHARS];
-	TCHAR* test_strings[27] =
-	{
-		TEXT(""),
-		TEXT("C:\\Path\\File[5].txt"),
-		TEXT("C:\\Path\\File[12]"),
-		TEXT("C:\\Path\\File.txt"),
-		TEXT("C:\\Path\\[3].txt"),
-		TEXT("C:\\Path\\[3]"),
-		TEXT("C:\\Path\\a[3].txt"),
-		TEXT("C:\\Path\\a[3]"),
-		TEXT("C:\\Path\\[[3].txt"),
-		TEXT("C:\\Path\\[[3]"),
-		TEXT("C:\\Path\\[3][1].txt"),
-		TEXT("C:\\Path\\[3][2][1].txt"),
-		TEXT("C:\\Path\\"),
-		TEXT("C:\\Path"),
-		TEXT("C:\\Path\\abc.txt[3]"),
-		TEXT("C:\\Path\\.txt[3]"),
-		TEXT("C:\\Path\\.txt[3].gz"),
-		TEXT("C:\\Path\\.txt[3][4].gz"),
-		TEXT("C:\\Path\\[10].txt[20].gz[30].ext"),
-		TEXT("C:\\Path\\File[5.txt"),
-		TEXT("C:\\Path\\File[].txt"),
-		TEXT("C:\\Path\\File[][].txt"),
-		TEXT("C:\\Path\\File[12][34].txt"),
-		TEXT("C:\\Path\\File[12][34][56].txt"),
-		TEXT("C:\\Path\\File[1234567890].txt"),
-		TEXT("C:\\Path\\File[5a].txt"),
-		TEXT("C:\\Path\\File[5")
-	};
-
-	for(int i = 0; i < 27; ++i)
-	{
-		StringCchCopy(test_1, MAX_PATH_CHARS, test_strings[i]);
-		StringCchCopy(test_2, MAX_PATH_CHARS, test_strings[i]);
-		PathUndecorate(test_1);
-		undecorate_path(test_2);
-		_ASSERT(lstrcmp(test_1, test_2) == 0);
-	}*/
+	// Url_Parts url_parts;
+	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html"), &url_parts);
+	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html?query"), &url_parts);
+	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html#fragment"), &url_parts);
+	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html?query#fragment"), &url_parts);
+	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html#fragment_with_?_foo"), &url_parts);
+	//partition_url(&exporter->arena, TEXT("http://john.doe:hunter2@www.example.com:123/path/index.html?foo=1&bar=2#top"), &url_parts);
+	//partition_url(&exporter->arena, TEXT("file://C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
+	//partition_url(&exporter->arena, TEXT("file:///C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
 
 	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, exporter->cache_path))
 	{
@@ -504,7 +472,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	HANDLE csv_file = INVALID_HANDLE_VALUE;
 	if(exporter->should_create_csv)
 	{
-		csv_file = create_csv_file(exporter->output_csv_path);
+		create_csv_file(exporter->output_csv_path, &csv_file);
 		csv_print_header(arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
 		clear_arena(arena);
 	}
@@ -1416,7 +1384,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		HANDLE csv_file = INVALID_HANDLE_VALUE;
 		if(exporter->should_create_csv)
 		{
-			csv_file = create_csv_file(exporter->output_csv_path);
+			create_csv_file(exporter->output_csv_path, &csv_file);
 			csv_print_header(arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
 			clear_arena(arena);
 		}
@@ -1721,11 +1689,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									
 									bool file_exists = does_file_exist(full_file_path);
 									wchar_t* is_file_missing = (file_exists) ? (L"No") : (L"Yes");
-
-									Url_Parts url_parts;
-									partition_url(arena, TEXT("http://john.doe:hunter2@www.example.com:123/path/index.html?foo=1&bar=2#top"), &url_parts);
-									partition_url(arena, TEXT("file://C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
-									partition_url(arena, TEXT("file:///C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
 
 									if(file_exists && exporter->should_copy_files)
 									{

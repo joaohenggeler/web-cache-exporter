@@ -104,7 +104,7 @@ void export_shockwave_plugin_cache(Exporter* exporter)
 	HANDLE csv_file = INVALID_HANDLE_VALUE;
 	if(exporter->should_create_csv)
 	{
-		csv_file = create_csv_file(exporter->output_csv_path);
+		create_csv_file(exporter->output_csv_path, &csv_file);
 		csv_print_header(arena, csv_file, csv_header, CSV_NUM_COLUMNS);
 		clear_arena(arena);
 	}

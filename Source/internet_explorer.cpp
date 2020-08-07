@@ -513,6 +513,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					// Helper macro function used to access a given field in the two types of URL entries (versions 4 and 5).
 					// These two structs are very similar but still differ in how they're laid out.
 					#define GET_URL_ENTRY_FIELD(variable_name, field_name)\
+					do\
 					{\
 						if(major_version == '4')\
 						{\
@@ -522,7 +523,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{\
 							variable_name = url_entry_5_to_9->field_name;\
 						}\
-					}
+					}\
+					while(false, false)
 
 					u32 entry_offset_to_filename;
 					GET_URL_ENTRY_FIELD(entry_offset_to_filename, entry_offset_to_filename);

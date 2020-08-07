@@ -2,19 +2,17 @@
 #include "memory_and_file_io.h"
 
 /*
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>> TABLE OF CONTENTS
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>> MEMORY ALLOCATION
-	>>>>>>>>>> DATE AND TIME FORMATTING
-	>>>>>>>>>> STRING MANIPULATION
-	>>>>>>>>>> URL MANIPULATION
-	>>>>>>>>>> PATH MANIPULATION AND FILE I/O
-	>>>>>>>>>> LOGGING
-	>>>>>>>>>> COMMA SEPARATED VALUES
-	>>>>>>>>>> FILE I/O TRICKERY (WINDOWS NT ONLY)
+	TABLE OF CONTENTS:
 
-	Find @NextHeader to navigate through each one.
+	1. MEMORY ALLOCATION
+	2. BASIC OPERATIONS
+	3. DATE AND TIME FORMATTING
+	4. STRING MANIPULATION
+	5. URL MANIPULATION
+	6. PATH MANIPULATION
+	7. FILE I/O
+
+	Find @NextSection to navigate through each one.
 */
 
 /*
@@ -24,7 +22,7 @@
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
 
-	@NextHeader
+	@NextSection
 */
 
 // Base addresses that are used by the create_arena() and memory_map_entire_file() functions
@@ -73,6 +71,17 @@ bool create_arena(Arena* arena, size_t total_size)
 	return success;
 }
 
+// Checks if a number is a power of two.
+//
+// @Parameters:
+// 1. value - The non-negative value to check.
+//
+// @Returns: True if the value is a power of two. Otherwise, false.
+static bool is_power_of_two(size_t value)
+{
+	return (value & (value - 1)) == 0;
+}
+
 // Moves an arena's available memory pointer by a certain number, giving back the aligned address to a memory location
 // where you can write at least that number of bytes.
 // This function is usually called by using the macro push_arena(arena, push_size, Type), which determines the alignment of
@@ -87,12 +96,6 @@ bool create_arena(Arena* arena, size_t total_size)
 // @Returns: The aligned memory address capable of holding the requested amount of bytes, if it succeeds. Otherwise, it
 // returns NULL and the arena's available_memory and used_size members are not modified. This function fails if there's not
 // enough memory to push the requested size.
-
-static bool is_power_of_two(size_t value)
-{
-	return (value & (value - 1)) == 0;
-}
-
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 {
 	if(arena->available_memory == NULL)
@@ -137,7 +140,7 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 	}
 
 	// Set the requested bytes to FF so it's easier to keep track of in the debugger's Memory Window.
-	// These are initially set to zero by VirtualAlloc().
+	// These are initially set to zero in create_arena().
 	#ifdef DEBUG
 		FillMemory(aligned_address, aligned_push_size, 0xFF);
 	#endif
@@ -180,6 +183,13 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 	return copy_address;
 }
 
+// A helper function that copies a string to an arena.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the string.
+// 2. string_to_copy - The string to copy.
+//
+// @Returns: The copied string's address in the arena if it succeeds. Otherwise, this function returns NULL.
 TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy)
 {
 	size_t size = string_size(string_to_copy);
@@ -203,7 +213,8 @@ void clear_arena(Arena* arena)
 	}
 
 	arena->available_memory = retreat_bytes(arena->available_memory, arena->used_size);
-	// 
+	// Set all the bytes to zero so it's easier to keep track of in the debugger's Memory Window.
+	// These are initially set to zero in create_arena() and to FF in the push_arena() functions.
 	#ifdef DEBUG
 		SecureZeroMemory(arena->available_memory, arena->used_size);
 	#endif
@@ -238,11 +249,105 @@ bool destroy_arena(Arena* arena)
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
+	>>>>>>>>>>>>>>>>>>>> BASIC OPERATIONS
+	>>>>>>>>>>>>>>>>>>>>
+	>>>>>>>>>>>>>>>>>>>>
+
+	@NextSection
+*/
+
+// Combines the high and low 32-bit parts of an unsigned 64-bit integer.
+//
+// @Parameters:
+// 1. high - The high 32 bits of a 64-bit integer.
+// 2. low - The low 32 bits of a 64-bit integer.
+//
+// @Returns: The combined 64-bit integer.
+u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low)
+{
+	return (((u64) high) << 32) | low;
+}
+
+// Separates an unsigned 64-bit integer into its high and low 32-bit parts.
+//
+// @Parameters:
+// 1. value - The 64-bit value to separate into two 32-bit integers.
+// 2. high - The resulting high 32 bits of the 64-bit value.
+// 3. low - The resulting low 32 bits of the 64-bit value.
+//
+// @Returns: Nothing.
+void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low)
+{
+	*low = (u32) (value & 0xFFFFFFFF);
+	*high = (u32) (value >> 32);
+}
+
+// Advances a pointer by a given number of bytes.
+//
+// @Parameters:
+// 1. pointer - The pointer to move forward.
+// 2. num_bytes - The number of bytes to move.
+//
+// @Returns: The moved pointer value.
+void* advance_bytes(void* pointer, size_t num_bytes)
+{
+	return ((char*) pointer) + num_bytes;
+}
+
+// Retreats a pointer by a given number of bytes.
+//
+// @Parameters:
+// 1. pointer - The pointer to move backwards.
+// 2. num_bytes - The number of bytes to move.
+//
+// @Returns: The moved pointer value.
+void* retreat_bytes(void* pointer, size_t num_bytes)
+{
+	return ((char*) pointer) - num_bytes;
+}
+
+// Subtracts two pointers.
+//
+// @Parameters:
+// 1. a - The left pointer operand.
+// 2. b - The right pointer operand.
+//
+// @Returns: The subtraction result in bytes.
+ptrdiff_t pointer_difference(void* a, void* b)
+{
+	return ((char*) a) - ((char*) b);
+}
+
+// Converts a value in kilobytes to bytes.
+//
+// @Parameters:
+// 1. kilobytes - The value in kilobytes.
+//
+// @Returns: The value in bytes.
+size_t kilobytes_to_bytes(size_t kilobytes)
+{
+	return kilobytes * 1024;
+}
+
+// Converts a value in megabytes to bytes.
+//
+// @Parameters:
+// 1. megabytes - The value in megabytes.
+//
+// @Returns: The value in bytes.
+size_t megabytes_to_bytes(size_t megabytes)
+{
+	return megabytes * 1024 * 1024;
+}
+
+/*
+	>>>>>>>>>>>>>>>>>>>>
+	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>> DATE AND TIME FORMATTING
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
 
-	@NextHeader
+	@NextSection
 */
 
 // Converts a datetime value to a string with the format "YYYY-MM-DD hh:mm:ss".
@@ -305,68 +410,48 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
 
-	@NextHeader
+	@NextSection
 */
 
-// Converts an integer of a given size in base 10 to a string.
-// Supported integer sizes: u32, u64, and s64.
+// Gets the size of a string in bytes, including the null terminator.
+// These are split into two functions (instead of using the TCHAR macro) so we can use it on an ANSI string even
+// in the Windows 2000 through 10 (Unicode) builds. For example, when reading ANSI strings from some file format.
 //
 // @Parameters:
-// 1. value - The integer value to convert.
-// 2. result_string - The resulting string conversion.
+// 1. str - The string.
 //
-// @Returns: True if the integer was converted correctly. Otherwise, it returns false.
-
-static const size_t INT_FORMAT_RADIX = 10;
-bool convert_u32_to_string(u32 value, TCHAR* result_string)
+// @Returns: The number of bytes the string occupies in memory.
+size_t string_size(const char* str)
 {
-	return _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) != 0;
-}
-bool convert_u64_to_string(u64 value, TCHAR* result_string)
-{
-	return _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) != 0;
-}
-bool convert_s64_to_string(s64 value, TCHAR* result_string)
-{
-	return _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) != 0;
+	return (strlen(str) + 1) * sizeof(char);
 }
 
-// Converts an ANSI string to a TCHAR one and copies it to an arena.
+size_t string_size(const wchar_t* str)
+{
+	return (wcslen(str) + 1) * sizeof(wchar_t);
+}
+
+// Checks if a string is empty.
 //
 // @Parameters:
-// 1. arena - The Arena structure that will receive the converted TCHAR string.
-// 2. ansi_string - The ANSI string to convert and copy to the arena.
+// 1. str - The string to check.
 //
-// @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
-TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
+// @Returns: True if the string is empty. Otherwise, false.
+bool is_string_empty(const TCHAR* str)
 {
-	#ifdef BUILD_9X
-		// In Windows 98 and ME, the resulting TCHAR string is also an ANSI string.
-		return push_string_to_arena(arena, ansi_string);
-	#else
-		// In Windows 2000 onwards, we'll have to find how much space we need and then convert
-		// the ANSI string to a Wide one.
-		int num_chars_required = MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, NULL, 0);
+	return str[0] == TEXT('\0');
+}
 
-		if(num_chars_required == 0)
-		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a Wide string with the error code %lu.", ansi_string, GetLastError());
-			_ASSERT(false);
-			return NULL;
-		}
-
-		int size_required = num_chars_required * sizeof(wchar_t);
-		wchar_t* wide_string = push_arena(arena, size_required, wchar_t);
-
-		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, wide_string, num_chars_required) == 0)
-		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a Wide string with the error code %lu.", ansi_string, GetLastError());
-			_ASSERT(false);
-			return NULL;
-		}
-
-		return wide_string;
-	#endif
+// Checks if a string begins with a given prefix. This check is case insensitive.
+//
+// @Parameters:
+// 1. str - The string to check.
+// 2. prefix - The prefix string to use.
+//
+// @Returns: True if the string begins with that prefix. Otherwise, false.
+bool string_starts_with_insensitive(const TCHAR* str, const TCHAR* prefix)
+{
+	return _tcsncicmp(str, prefix, _tcslen(prefix)) == 0;
 }
 
 // Skips the leading whitespace (spaces and tabs) in a string.
@@ -399,37 +484,27 @@ wchar_t* skip_leading_whitespace(wchar_t* str)
 	return str;
 }
 
-
-// Skips to the file extension in a filename string. This function considers the substring after the first period
-// character to be the file extension. This is useful so we can define what we consider a file extension instead
-// of relying on the PathFindExtension in the Shell API. For example:
-// 1. "file.ext" 		-> "ext"
-// 2. "file.ext.gz" 	-> "ext.gz"
-// 3. "file." 			-> ""
-// 4. "file"			-> ""
+// Converts an integer of a given size in base 10 to a string.
+// Supported integer sizes: u32, u64, and s64.
 //
 // @Parameters:
-// 1. str - The filename whose characters will be skipped until the file extension is found.
+// 1. value - The integer value to convert.
+// 2. result_string - The resulting string conversion.
 //
-// @Returns: The address of the character after the first period in the filename. If the filename is NULL, this
-// function returns NULL.
-TCHAR* skip_to_file_extension(TCHAR* str)
+// @Returns: True if the integer was converted correctly. Otherwise, it returns false.
+
+static const size_t INT_FORMAT_RADIX = 10;
+bool convert_u32_to_string(u32 value, TCHAR* result_string)
 {
-	TCHAR* file_extension = NULL;
-
-	if(str != NULL)
-	{
-		while(*str != TEXT('\0') && *str != TEXT('.'))
-		{
-			++str;
-		}
-
-		// If we didn't reach the end of the string, then we found the period and the file extension starts
-		// on the next character. Otherwise, the file extension is an empty string.
-		file_extension = (*str != TEXT('\0')) ? (str + 1) : (str);
-	}
-
-	return file_extension;
+	return _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) != 0;
+}
+bool convert_u64_to_string(u64 value, TCHAR* result_string)
+{
+	return _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) != 0;
+}
+bool convert_s64_to_string(s64 value, TCHAR* result_string)
+{
+	return _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) != 0;
 }
 
 // Converts a single hexadecimal character to an integer.
@@ -501,6 +576,76 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 	return success;
 }
 
+// Skips to the file extension in a filename string. This function considers the substring after the first period
+// character to be the file extension. This is useful so we can define what we consider a file extension instead
+// of relying on the PathFindExtension in the Shell API. For example:
+// 1. "file.ext" 		-> "ext"
+// 2. "file.ext.gz" 	-> "ext.gz"
+// 3. "file." 			-> ""
+// 4. "file"			-> ""
+//
+// @Parameters:
+// 1. str - The filename whose characters will be skipped until the file extension is found.
+//
+// @Returns: The address of the character after the first period in the filename. If the filename is NULL, this
+// function returns NULL.
+TCHAR* skip_to_file_extension(TCHAR* str)
+{
+	TCHAR* file_extension = NULL;
+
+	if(str != NULL)
+	{
+		while(*str != TEXT('\0') && *str != TEXT('.'))
+		{
+			++str;
+		}
+
+		// If we didn't reach the end of the string, then we found the period and the file extension starts
+		// on the next character. Otherwise, the file extension is an empty string.
+		file_extension = (*str != TEXT('\0')) ? (str + 1) : (str);
+	}
+
+	return file_extension;
+}
+
+// Converts an ANSI string to a TCHAR one and copies it to an arena.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the converted TCHAR string.
+// 2. ansi_string - The ANSI string to convert and copy to the arena.
+//
+// @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
+TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
+{
+	#ifdef BUILD_9X
+		// In Windows 98 and ME, the resulting TCHAR string is also an ANSI string.
+		return push_string_to_arena(arena, ansi_string);
+	#else
+		// In Windows 2000 onwards, we'll have to find how much space we need and then convert
+		// the ANSI string to a Wide one.
+		int num_chars_required = MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, NULL, 0);
+
+		if(num_chars_required == 0)
+		{
+			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a Wide string with the error code %lu.", ansi_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		int size_required = num_chars_required * sizeof(wchar_t);
+		wchar_t* wide_string = push_arena(arena, size_required, wchar_t);
+
+		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, wide_string, num_chars_required) == 0)
+		{
+			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a Wide string with the error code %lu.", ansi_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		return wide_string;
+	#endif
+}
+
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
@@ -508,62 +653,8 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
 
-	@NextHeader
+	@NextSection
 */
-
-// Decodes a percent-encoded URL. It does not validate or perform any other checks on the URL.
-//
-// @Parameters:
-// 1. url - The URL string to decode.
-//
-// @Returns: True unless one of the percent-encoded characters can't be decoded correctly. If it fails on an encoded character,
-// any remaining ones are unchanged. This function succeeds if the URL is NULL.
-bool decode_url(TCHAR* url)
-{
-	bool success = true;
-
-	if(url != NULL)
-	{
-		while(*url != TEXT('\0'))
-		{
-			// Decode percent-encoded characters.
-			// @Docs: https://tools.ietf.org/html/rfc3986#section-2.1
-			if(*url == TEXT('%'))
-			{
-				TCHAR* after_percent_sign = url + 1;
-				u8 decoded_char = 0;
-
-				if(convert_hexadecimal_string_to_byte(after_percent_sign, &decoded_char))
-				{
-					TCHAR* url_end_of_encoded_char = url + 2;
-					MoveMemory(url, url_end_of_encoded_char, string_size(url_end_of_encoded_char));
-					*url = decoded_char;
-				}
-				else
-				{
-					// If the percent sign isn't followed by two characters or if the characters
-					// don't represent a valid hexadecimal value.
-					success = false;
-					break;
-				}
-			}
-			else if(*url == TEXT('+'))
-			{
-				*url = TEXT(' ');
-			}
-			
-			++url;
-		}
-	}
-
-	if(!success)
-	{
-		log_print(LOG_ERROR, "Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
-		_ASSERT(false);
-	}
-
-	return success;
-}
 
 // Partitions a URL into specific components using the following syntax:
 // - URL = scheme:[//authority]path[?query][#fragment]
@@ -679,14 +770,144 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	return true;
 }
 
+// Decodes a percent-encoded URL. It does not validate or perform any other checks on the URL.
+//
+// @Parameters:
+// 1. url - The URL string to decode.
+//
+// @Returns: True unless one of the percent-encoded characters can't be decoded correctly. If it fails on an encoded character,
+// any remaining ones are unchanged. This function succeeds if the URL is NULL.
+bool decode_url(TCHAR* url)
+{
+	bool success = true;
+
+	if(url != NULL)
+	{
+		while(*url != TEXT('\0'))
+		{
+			// Decode percent-encoded characters.
+			// @Docs: https://tools.ietf.org/html/rfc3986#section-2.1
+			if(*url == TEXT('%'))
+			{
+				TCHAR* after_percent_sign = url + 1;
+				u8 decoded_char = 0;
+
+				if(convert_hexadecimal_string_to_byte(after_percent_sign, &decoded_char))
+				{
+					TCHAR* url_end_of_encoded_char = url + 2;
+					MoveMemory(url, url_end_of_encoded_char, string_size(url_end_of_encoded_char));
+					*url = decoded_char;
+				}
+				else
+				{
+					// If the percent sign isn't followed by two characters or if the characters
+					// don't represent a valid hexadecimal value.
+					success = false;
+					break;
+				}
+			}
+			else if(*url == TEXT('+'))
+			{
+				*url = TEXT(' ');
+			}
+			
+			++url;
+		}
+	}
+
+	if(!success)
+	{
+		log_print(LOG_ERROR, "Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
+		_ASSERT(false);
+	}
+
+	return success;
+}
+
+// Replaces any forward slashes in a path with backslashes, and any reserved characters with underscores.
+//
+// @Parameters:
+// 1. path - The path to modify.
+//
+// @Returns: Nothing.
+static void correct_url_path_characters(TCHAR* path)
+{
+	if(path != NULL)
+	{
+		while(*path != TEXT('\0'))
+		{
+			switch(*path)
+			{
+				case(TEXT('/')):
+				{
+					*path = TEXT('\\');
+				} break;
+
+				case(TEXT('<')):
+				case(TEXT('>')):
+				case(TEXT(':')):
+				case(TEXT('\"')):
+				case(TEXT('|')):
+				case(TEXT('?')):
+				case(TEXT('*')):
+				{
+					*path = TEXT('_');
+				} break;
+			}
+
+			++path;
+		}
+	}
+}
+
+// Converts the host and path in a URL into a Windows directory path.
+// For example: "http://www.example.com:80/path1/path2/file.ext?id=1#top" -> "www.example.com\path1\path2"
+//
+// @Parameters:
+// 1. arena - The Arena structure where any intermediary strings are stored.
+// 2. url - The URL to convert into a path.
+// 3. path - The buffer which receives the converted path.  This buffer must be MAX_PATH characters in size.
+//
+// @Returns: True if it succeeds. Otherwise, false.
+static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* path)
+{
+	bool success = true;
+
+	Url_Parts url_parts = {};
+	if(partition_url(arena, url, &url_parts))
+	{
+		path[0] = TEXT('\0');
+		if(url_parts.host != NULL)
+		{
+			success = success && (PathAppend(path, url_parts.host) == TRUE);
+		}
+		
+		_ASSERT(url_parts.path != NULL);
+
+		correct_url_path_characters(url_parts.path);
+		success = success && (PathAppend(path, url_parts.path) == TRUE);
+
+		// Remove the resource's filename so it's not part of the final path.
+		// Because of the replacement above, we know that the path separator is a backslash.
+		TCHAR* last_separator = _tcsrchr(path, TEXT('\\'));
+		if(last_separator != NULL) *last_separator = TEXT('\0');
+	}
+	else
+	{
+		success = false;
+	}
+
+	return success;
+}
+
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>> PATH MANIPULATION AND FILE I/O
+	>>>>>>>>>>>>>>>>>>>> PATH MANIPULATION
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
 
-	@NextHeader
+	@NextSection
 */
 
 // Retrieves the absolute version of a specified path. This path must be at most MAX_PATH characters long.
@@ -741,26 +962,65 @@ bool get_special_folder_path(int csidl, TCHAR* result_path)
 	#endif
 }
 
+/*
+	>>>>>>>>>>>>>>>>>>>>
+	>>>>>>>>>>>>>>>>>>>>
+	>>>>>>>>>>>>>>>>>>>> FILE I/O
+	>>>>>>>>>>>>>>>>>>>>
+	>>>>>>>>>>>>>>>>>>>>
 
-// Creates an empty file with normal attributes.
+	@NextSection
+*/
+
+// Determines whether or not a file exists given its path.
 //
 // @Parameters:
-// 1. file_path - The path where the file will be created.
+// 1. file_path - The path to the file.
 //
-// @Returns: True if the file was created successfully. Otherwise, false. This function fails if the file in the specified
-// path already exists. In this case, GetLastError() returns ERROR_FILE_EXISTS.
-bool create_empty_file(const TCHAR* file_path)
+// @Returns: True if the function succeeds. Otherwise, false. This function returns false if the path points to a directory.
+// This function fails if the file's attributes cannot be determined.
+bool does_file_exist(const TCHAR* file_path)
 {
-	HANDLE empty_file = CreateFile(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-	DWORD error_code = GetLastError();
-	
-	bool success = empty_file != INVALID_HANDLE_VALUE;
-	safe_close_handle(&empty_file);
+	DWORD attributes = GetFileAttributes(file_path);
+	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
+}
 
-	// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
-	// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
-	SetLastError(error_code);
-	return success;
+// Determines the size in bytes of a file from its handle.
+//
+// @Parameters:
+// 1. file_handle - The handle of the file whose size is of interest.
+// 2. result_file_size - The resulting file size in bytes.
+//
+// @Returns: True if the function succeeds. Otherwise, it returns false and the resulting file size is undefined.
+bool get_file_size(HANDLE file_handle, u64* result_file_size)
+{
+	#ifdef BUILD_9X
+		DWORD file_size_high;
+		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
+		bool success = GetLastError() == NO_ERROR;
+		if(success) *result_file_size = combine_high_and_low_u32s_into_u64(file_size_high, file_size_low);
+		return success;
+	#else
+		LARGE_INTEGER file_size;
+		bool success = GetFileSizeEx(file_handle, &file_size) == TRUE;
+		if(success) *result_file_size = file_size.QuadPart;
+		return success;
+	#endif
+}
+
+// Closes a handle and sets its value to INVALID_HANDLE_VALUE.
+//
+// @Parameters:
+// 1. handle - The address of the handle to close.
+//
+// @Returns: Nothing.
+void safe_close_handle(HANDLE* handle)
+{
+	if(*handle != INVALID_HANDLE_VALUE && *handle != NULL)
+	{
+		CloseHandle(*handle);
+		*handle = INVALID_HANDLE_VALUE;
+	}
 }
 
 // Creates a directory given its path, and any intermediate directories that don't exist.
@@ -805,82 +1065,144 @@ void create_directories(const TCHAR* path_to_create)
 	}
 }
 
-// Replaces any forward slashes in a path with backslashes, and any reserved characters with underscores.
+// Deletes a directory and all the files and subdirectories inside it.
 //
 // @Parameters:
-// 1. path - The path to modify.
-//
-// @Returns: Nothing.
-static void correct_url_path_characters(TCHAR* path)
+// 1. directory_path - The path to the directory to delete.
+// 
+// @Returns: True if the directory was deleted successfully. Otherwise, false.
+bool delete_directory_and_contents(const TCHAR* directory_path)
 {
-	if(path != NULL)
+	if(is_string_empty(directory_path))
 	{
-		while(*path != TEXT('\0'))
-		{
-			switch(*path)
-			{
-				case(TEXT('/')):
-				{
-					*path = TEXT('\\');
-				} break;
-
-				case(TEXT('<')):
-				case(TEXT('>')):
-				case(TEXT(':')):
-				case(TEXT('\"')):
-				case(TEXT('|')):
-				case(TEXT('?')):
-				case(TEXT('*')):
-				{
-					*path = TEXT('_');
-				} break;
-			}
-
-			++path;
-		}		
+		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory since its path was empty.");
+		_ASSERT(false);
+		return false;
 	}
+
+	// Ensure that we have the fully qualified path since its required by SHFileOperation().
+	TCHAR path_to_delete[MAX_PATH_CHARS + 1] = TEXT("");
+	if(!get_full_path_name(directory_path, path_to_delete))
+	{
+		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' since its fully qualified path couldn't be determined.", directory_path);
+		_ASSERT(false);
+		return false;
+	}
+
+	// Ensure that the path has two null terminators since its required by SHFileOperation().
+	// Remember that MAX_PATH_CHARS already includes the first null terminator.
+	size_t num_path_chars = _tcslen(path_to_delete);
+	path_to_delete[num_path_chars + 1] = TEXT('\0');
+
+	SHFILEOPSTRUCT file_operation = {};
+	file_operation.wFunc = FO_DELETE;
+	file_operation.pFrom = path_to_delete;
+	// Perform the operation silently, presenting no UI to the user.
+	file_operation.fFlags = FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_SILENT;
+
+	int error_code = SHFileOperation(&file_operation);
+	if(error_code != 0)
+	{
+		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' and its contents with error code %d.", directory_path, error_code);
+		_ASSERT(false);
+	}
+
+	return error_code == 0;
 }
 
-// Converts the host and path in a URL into a Windows directory path.
-// For example: "http://www.example.com:80/path1/path2/file.ext?id=1#top" -> "www.example.com\path1\path2"
+// Creates a directory with a unique name and returns its path.
 //
 // @Parameters:
-// 1. arena - The Arena structure where any intermediary strings are stored.
-// 2. url - The URL to convert into a path.
-// 3. path - The buffer which receives the converted path.  This buffer must be MAX_PATH characters in size.
-//
-// @Returns: True if it succeeds. Otherwise, false.
-static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* path)
-{
-	bool success = true;
+// 1. base_temporary_path - The base path where the directory will be created.
+// 2. result_directory_path - The resulting directory's path.
+// 
+// @Returns: True if the directory was created successfully. Otherwise, false.
+bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path)
+{	
+	*result_directory_path = TEXT('\0');
 
-	Url_Parts url_parts = {};
-	if(partition_url(arena, url, &url_parts))
+	bool create_success = false;
+	// We'll use this value to generate the directory's name since GetTempFileName() creates a file if we let it
+	// generate the name. This isn't a robust way to generate unique names, but it works for our use case.
+	u32 unique_id = GetTickCount();
+	do
 	{
-		path[0] = TEXT('\0');
-		if(url_parts.host != NULL)
-		{
-			success = success && (PathAppend(path, url_parts.host) == TRUE);
-		}
+		create_success = GetTempFileName(base_temporary_path, TEXT("WCE"), unique_id, result_directory_path) != 0
+						&& CreateDirectory(result_directory_path, NULL) == TRUE;
+		++unique_id;
+	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
+
+	return create_success;
+}
+
+
+// Copies a file to a temporary location with a unique name, and returns the destination path and file handle.
+// The file is deleted when this handle is closed. This ensures that, even if the program crashes, Windows closes the handle
+// and the file is deleted.
+//
+// @Parameters:
+// 1. file_source_path - The source path of the file to copy.
+// 2. base_temporary_path - The base path where the file will be copied to.
+// 3. result_file_destination_path - The resulting destination path for the temporary file.
+// 4. result_handle - The resulting handle for the temporary file. This handle has the FILE_FLAG_DELETE_ON_CLOSE flag set.
+//
+// @Returns: True if the file was copied and its handle was retrieved successfully. Otherwise, false.
+// If it fails to retrieve the handle, this function will delete the copied file and return false.
+bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path,
+							TCHAR* result_file_destination_path, HANDLE* result_handle)
+{
+	*result_file_destination_path = TEXT('\0');
+	*result_handle = INVALID_HANDLE_VALUE;
+
+	bool copy_success = false;
+	bool get_handle_success = false;
+
+	copy_success = GetTempFileName(base_temporary_path, TEXT("WCE"), 0, result_file_destination_path) != 0
+					&& CopyFile(file_source_path, result_file_destination_path, FALSE) == TRUE;
+
+	if(copy_success)
+	{
+		*result_handle = CreateFile(result_file_destination_path,
+									GENERIC_READ,
+									0,
+									NULL,
+									OPEN_EXISTING,
+									FILE_FLAG_DELETE_ON_CLOSE,
+									NULL);
+
+		get_handle_success = *result_handle != INVALID_HANDLE_VALUE;
+
+		// If we couldn't get the handle, the function will fail, so we'll make sure to delete the file.
+		if(!get_handle_success) DeleteFile(result_file_destination_path);
+	}
+
+	return copy_success && get_handle_success;
+}
+
+// Creates an empty file with normal attributes.
+//
+// @Parameters:
+// 1. file_path - The path where the file will be created.
+//
+// @Returns: True if the file was created successfully. Otherwise, false. This function fails if the file in the specified
+// path already exists. In this case, GetLastError() returns ERROR_FILE_EXISTS.
+#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
+	static bool create_empty_file(const TCHAR* file_path)
+	{
+		HANDLE empty_file = CreateFile(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+		DWORD error_code = GetLastError();
 		
-		_ASSERT(url_parts.path != NULL);
+		bool success = empty_file != INVALID_HANDLE_VALUE;
+		safe_close_handle(&empty_file);
 
-		correct_url_path_characters(url_parts.path);
-		success = success && (PathAppend(path, url_parts.path) == TRUE);
-
-		// Remove the resource's filename so it's not part of the final path.
-		// Because of the replacement above, we know that the path separator is a backslash.
-		TCHAR* last_separator = _tcsrchr(path, TEXT('\\'));
-		if(last_separator != NULL) *last_separator = TEXT('\0');
+		// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
+		// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
+		SetLastError(error_code);
+		return success;
 	}
-	else
-	{
-		success = false;
-	}
+#endif
 
-	return success;
-}
-
+// @TODO: No path limits.
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename)
 {
 	// Copy Target = Base Destination Path
@@ -912,7 +1234,7 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 	{
 		console_print("An error occurred while building the final output copy path for the file '%s'. This file will not be copied.\n", filename);
 		log_print(LOG_ERROR, "Copy File Using URL Structure: Failed to append the filename '%s' to the output copy path '%s'. This file will not be copied.", filename, full_copy_target_path);
-		_ASSERT(false);
+		//_ASSERT(false);
 		return false;
 	}
 
@@ -943,83 +1265,6 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 	}
 	
 	return copy_success;
-}
-
-// Combines the high and low 32-bit parts of an unsigned 64-bit integer.
-//
-// @Parameters:
-// 1. high - The high 32 bits of a 64-bit integer.
-// 2. low - The low 32 bits of a 64-bit integer.
-//
-// @Returns: The combined 64-bit integer.
-u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low)
-{
-	return (((u64) high) << 32) | low;
-}
-
-// Separates an unsigned 64-bit integer into its high and low 32-bit parts.
-//
-// @Parameters:
-// 1. value - The 64-bit value to separate into two 32-bit integers.
-// 2. high - The resulting high 32 bits of the 64-bit value.
-// 3. low - The resulting low 32 bits of the 64-bit value.
-//
-// @Returns: Nothing.
-void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low)
-{
-	*low = (u32) (value & 0xFFFFFFFF);
-	*high = (u32) (value >> 32);
-}
-
-// Determines the size in bytes of a file from its handle.
-//
-// @Parameters:
-// 1. file_handle - The handle of the file whose size is of interest.
-// 2. result_file_size - The resulting file size in bytes.
-//
-// @Returns: True if the function succeeds. Otherwise, it returns false and the resulting file size is undefined.
-bool get_file_size(HANDLE file_handle, u64* result_file_size)
-{
-	#ifdef BUILD_9X
-		DWORD file_size_high;
-		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
-		bool success = GetLastError() == NO_ERROR;
-		if(success) *result_file_size = combine_high_and_low_u32s_into_u64(file_size_high, file_size_low);
-		return success;
-	#else
-		LARGE_INTEGER file_size;
-		bool success = GetFileSizeEx(file_handle, &file_size) == TRUE;
-		if(success) *result_file_size = file_size.QuadPart;
-		return success;
-	#endif
-}
-
-// Determines whether or not a file exists given its path.
-//
-// @Parameters:
-// 1. file_path - The path to the file.
-//
-// @Returns: True if the function succeeds. Otherwise, false. This function returns false if the path points to a directory.
-// This function fails if the file's attributes cannot be determined.
-bool does_file_exist(const TCHAR* file_path)
-{
-	DWORD attributes = GetFileAttributes(file_path);
-	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
-}
-
-// Closes a handle and sets it value to INVALID_HANDLE_VALUE.
-//
-// @Parameters:
-// 1. handle - The address of the handle to close.
-//
-// @Returns: Nothing.
-void safe_close_handle(HANDLE* handle)
-{
-	if(*handle != INVALID_HANDLE_VALUE && *handle != NULL)
-	{
-		CloseHandle(*handle);
-		*handle = INVALID_HANDLE_VALUE;
-	}
 }
 
 // Maps an entire file into memory from its handle.
@@ -1114,119 +1359,6 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 	*result_file_handle = file_handle;
 
 	return memory_map_entire_file(file_handle, result_file_size);
-}
-
-// Copies a file to a temporary location with a unique name, and returns the destination path and file handle.
-// The file is deleted when this handle is closed. This ensures that, even if the program crashes, Windows closes the handle
-// and the file is deleted.
-//
-// @Parameters:
-// 1. file_source_path - The source path of the file to copy.
-// 2. base_temporary_path - The base path where the file will be copied to.
-// 3. result_file_destination_path - The resulting destination path for the temporary file.
-// 4. result_handle - The resulting handle for the temporary file. This handle has the FILE_FLAG_DELETE_ON_CLOSE flag set.
-//
-// @Returns: True if the file was copied and its handle was retrieved successfully. Otherwise, false.
-// If it fails to retrieve the handle, this function will delete the copied file and return false.
-bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path,
-							TCHAR* result_file_destination_path, HANDLE* result_handle)
-{
-	*result_file_destination_path = TEXT('\0');
-	*result_handle = INVALID_HANDLE_VALUE;
-
-	bool copy_success = false;
-	bool get_handle_success = false;
-
-	copy_success = GetTempFileName(base_temporary_path, TEXT("WCE"), 0, result_file_destination_path) != 0
-					&& CopyFile(file_source_path, result_file_destination_path, FALSE) == TRUE;
-
-	if(copy_success)
-	{
-		*result_handle = CreateFile(result_file_destination_path,
-									GENERIC_READ,
-									0,
-									NULL,
-									OPEN_EXISTING,
-									FILE_FLAG_DELETE_ON_CLOSE,
-									NULL);
-
-		get_handle_success = *result_handle != INVALID_HANDLE_VALUE;
-
-		// If we couldn't get the handle, the function will fail, so we'll make sure to delete the file.
-		if(!get_handle_success) DeleteFile(result_file_destination_path);
-	}
-
-	return copy_success && get_handle_success;
-}
-
-// Creates a directory with a unique name and returns its path.
-//
-// @Parameters:
-// 1. base_temporary_path - The base path where the directory will be created.
-// 2. result_directory_path - The resulting directory's path.
-// 
-// @Returns: True if the directory was created successfully. Otherwise, false.
-bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path)
-{	
-	*result_directory_path = TEXT('\0');
-
-	bool create_success = false;
-	// We'll use this value to generate the directory's name since GetTempFileName() creates a file if we let it
-	// generate the name. This isn't a robust way to generate unique names, but it works for our use case.
-	u32 unique_id = GetTickCount();
-	do
-	{
-		create_success = GetTempFileName(base_temporary_path, TEXT("WCE"), unique_id, result_directory_path) != 0
-						&& CreateDirectory(result_directory_path, NULL) == TRUE;
-		++unique_id;
-	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
-
-	return create_success;
-}
-
-// Deletes a directory and all the files and subdirectories inside it.
-//
-// @Parameters:
-// 1. directory_path - The path to the directory to delete.
-// 
-// @Returns: True if the directory was deleted successfully. Otherwise, false.
-bool delete_directory_and_contents(const TCHAR* directory_path)
-{
-	if(is_string_empty(directory_path))
-	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory since its path was empty.");
-		_ASSERT(false);
-		return false;
-	}
-
-	// Ensure that we have the fully qualified path since its required by SHFileOperation().
-	TCHAR path_to_delete[MAX_PATH_CHARS + 1] = TEXT("");
-	if(!get_full_path_name(directory_path, path_to_delete))
-	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' since its fully qualified path couldn't be determined.", directory_path);
-		_ASSERT(false);
-		return false;
-	}
-
-	// Ensure that the path has two null terminators since its required by SHFileOperation().
-	// Remember that MAX_PATH_CHARS already includes the first null terminator.
-	size_t num_path_chars = _tcslen(path_to_delete);
-	path_to_delete[num_path_chars + 1] = TEXT('\0');
-
-	SHFILEOPSTRUCT file_operation = {};
-	file_operation.wFunc = FO_DELETE;
-	file_operation.pFrom = path_to_delete;
-	// Perform the operation silently, presenting no UI to the user.
-	file_operation.fFlags = FOF_NOCONFIRMATION | FOF_NOCONFIRMMKDIR | FOF_NOERRORUI | FOF_SILENT;
-
-	int error_code = SHFileOperation(&file_operation);
-	if(error_code != 0)
-	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' and its contents with error code %d.", directory_path, error_code);
-		_ASSERT(false);
-	}
-
-	return error_code == 0;
 }
 
 // Reads a given number of bytes from the beginning of a file.
@@ -1337,16 +1469,6 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 	return success;
 }
 
-/*
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>> LOGGING
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>
-
-	@NextHeader
-*/
-
 // Creates the global log file and any missing intermediate directories in its path. After being created, you can append lines
 // to this file by calling log_print().
 //
@@ -1409,8 +1531,8 @@ void close_log_file(void)
 // - LOG_WARNING
 // - LOG_ERROR
 // For LOG_DEBUG, use debug_log_print() instead. LOG_NONE is used by log_print_newline() and shouldn't be passed directly to log_print().
-// 2. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide
-// Unicode strings, and %s for TCHAR strings (ANSI or Wide depending on the build target).
+// 2. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide Unicode strings, and %s for TCHAR
+// strings (ANSI or Wide depending on the build target).
 // 3. ... - Zero or more arguments to be inserted in the format string.
 //
 // @Returns: Nothing.
@@ -1456,16 +1578,6 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 	DWORD num_bytes_written = 0;
 	WriteFile(GLOBAL_LOG_FILE_HANDLE, utf_8_log_buffer, (DWORD) num_bytes_to_write, &num_bytes_written, NULL);
 }
-
-/*
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>> COMMA SEPARATED VALUES
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>
-
-	@NextHeader
-*/
 
 // Checks if a CSV string needs to be escaped, and returns the number of bytes that are necessary to store the escaped string
 // (including the null terminator). A CSV string is escaped by using the following rules:
@@ -1780,17 +1892,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 	WriteFile(csv_file_handle, csv_row, (DWORD) csv_row_size, &num_bytes_written, NULL);
 }
 
-/*
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>> FILE I/O TRICKERY (WINDOWS NT ONLY)
-	>>>>>>>>>>>>>>>>>>>>
-	>>>>>>>>>>>>>>>>>>>>
-
-	@NextHeader
-*/
-
 #ifndef BUILD_9X
+
+	// Define some undocumented structures and constants for NtQuerySystemInformation().
+	// @Resources:
+	// - https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/handle_table_entry.htm
+	// - https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/handle.htm
+	// - https://www.geoffchappell.com/studies/windows/km/ntoskrnl/api/ex/sysinfo/class.htm
 
 	struct SYSTEM_HANDLE_TABLE_ENTRY_INFO
 	{
@@ -1823,10 +1931,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 
 	const SYSTEM_INFORMATION_CLASS SystemHandleInformation = (SYSTEM_INFORMATION_CLASS) 0x10;
 
+	// Define a stub version of the function we want to dynamically load, and a variable that will either contain the pointer to
+	// this loaded function or to the stub version (if we can't load the real one).
 	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS WINAPI function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
 	#pragma warning(push)
-	#pragma warning(disable : 4100) // Disable warnings for the unused stub function parameters.
-	NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
+	#pragma warning(disable : 4100)
+	static NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
 	{
 		log_print(LOG_WARNING, "NtQuerySystemInformation: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -1834,11 +1944,16 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 	}
 	#pragma warning(pop)
 	typedef NT_QUERY_SYSTEM_INFORMATION(Nt_Query_System_Information);
-	Nt_Query_System_Information* dll_nt_query_system_information = stub_nt_query_system_information;
+	static Nt_Query_System_Information* dll_nt_query_system_information = stub_nt_query_system_information;
 	#define NtQuerySystemInformation dll_nt_query_system_information
 
+	// Dynamically load any necessary functions from Ntdll.dll. After being called, the following functions may used:
+	// - NtQuerySystemInformation()
+	//
+	// @Parameters: None.
+	// 
+	// @Returns: Nothing.
 	static HMODULE ntdll_library = NULL;
-
 	void windows_nt_load_ntdll_functions(void)
 	{
 		if(ntdll_library != NULL)
@@ -1860,6 +1975,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		}
 	}
 
+	// Free any functions that were previously dynamically loaded from Ntdll.dll. After being called, these functions should
+	// no longer be called.
+	//
+	// @Parameters: None.
+	// 
+	// @Returns: Nothing.
 	void windows_nt_free_ntdll_functions(void)
 	{
 		if(ntdll_library == NULL)
@@ -1880,20 +2001,29 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		}
 	}
 
+	// Define a stub version of the function we want to dynamically load, and a variable that will either contain the pointer to
+	// this loaded function or to the stub version (if we can't load the real one).
+	// This function was added in Windows 8 (Kernel32.dll version 6.2), but in practice it may end up being called on Windows 7.
+	// The stub version of this function will call GetOverlappedResult() which doesn't time out, and instead blocks until the
+	// operation is finished (if the number of milliseconds if greater than zero).
 	#define GET_OVERLAPPED_RESULT_EX(function_name) BOOL WINAPI function_name(HANDLE hFile, LPOVERLAPPED lpOverlapped, LPDWORD lpNumberOfBytesTransferred, DWORD dwMilliseconds, BOOL bAlertable)
-	GET_OVERLAPPED_RESULT_EX(stub_get_overlapped_result_ex)
+	static GET_OVERLAPPED_RESULT_EX(stub_get_overlapped_result_ex)
 	{
 		log_print(LOG_WARNING, "GetOverlappedResultEx: Calling the stub version of this function. The timeout and alertable arguments will be ignored. These were set to %lu and %d.", dwMilliseconds, bAlertable);
-		_ASSERT(false);
 		BOOL bWait = (dwMilliseconds > 0) ? (TRUE) : (FALSE);
 		return GetOverlappedResult(hFile, lpOverlapped, lpNumberOfBytesTransferred, bWait);
 	}
 	typedef GET_OVERLAPPED_RESULT_EX(Get_Overlapped_Result_Ex);
-	Get_Overlapped_Result_Ex* dll_get_overlapped_result_ex = stub_get_overlapped_result_ex;
+	static Get_Overlapped_Result_Ex* dll_get_overlapped_result_ex = stub_get_overlapped_result_ex;
 	#define GetOverlappedResultEx dll_get_overlapped_result_ex
 
+	// Dynamically load any necessary functions from Kernel32.dll. After being called, the following functions may used:
+	// - GetOverlappedResultEx()
+	//
+	// @Parameters: None.
+	// 
+	// @Returns: Nothing.
 	static HMODULE kernel32_library = NULL;
-
 	void windows_nt_load_kernel32_functions(void)
 	{
 		if(kernel32_library != NULL)
@@ -1915,6 +2045,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		}
 	}
 
+	// Free any functions that were previously dynamically loaded from Kernel32.dll. After being called, these functions should
+	// no longer be called.
+	//
+	// @Parameters: None.
+	// 
+	// @Returns: Nothing.
 	void windows_nt_free_kernel32_functions(void)
 	{
 		if(kernel32_library == NULL)
@@ -1935,26 +2071,53 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		}
 	}
 
+	// Checks if two file handles refer to the same file
+	//
+	// @Parameters:
+	// 1. file_handle_1 - The first file handle.
+	// 2. file_handle_2 - The second file handle.
+	// 
+	// @Returns: True if the file handles refer to the same file. Otherwise, false. This function also returns false if it's unable
+	// to retrieve the handles' information.
 	static bool do_handles_refer_to_the_same_file(HANDLE file_handle_1, HANDLE file_handle_2)
 	{
-		BY_HANDLE_FILE_INFORMATION handle_info_1 = {};
-		BY_HANDLE_FILE_INFORMATION handle_info_2 = {};
+		BY_HANDLE_FILE_INFORMATION handle_1_info = {};
+		BY_HANDLE_FILE_INFORMATION handle_2_info = {};
 
-		if(		GetFileInformationByHandle(file_handle_1, &handle_info_1) != 0
-			&& 	GetFileInformationByHandle(file_handle_2, &handle_info_2) != 0)
+		// @Docs: "The identifier (low and high parts) and the volume serial number uniquely identify a file on a single computer.
+		// To determine whether two open handles represent the same file, combine the identifier and the volume serial number for
+		// each file and compare them." - Win32 API reference.
+		if(		GetFileInformationByHandle(file_handle_1, &handle_1_info) != 0
+			&& 	GetFileInformationByHandle(file_handle_2, &handle_2_info) != 0)
 		{
-			return 		handle_info_1.nFileIndexHigh == handle_info_2.nFileIndexHigh
-					&&	handle_info_1.nFileIndexLow == handle_info_2.nFileIndexLow
-					&&	handle_info_1.dwVolumeSerialNumber == handle_info_2.dwVolumeSerialNumber;
+			return 		handle_1_info.nFileIndexHigh == handle_2_info.nFileIndexHigh
+					&&	handle_1_info.nFileIndexLow == handle_2_info.nFileIndexLow
+					&&	handle_1_info.dwVolumeSerialNumber == handle_2_info.dwVolumeSerialNumber;
 		}
 
 		return false;
 	}
 
-	bool windows_nt_query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle)
+	// Finds and creates a duplicated handle for a file that was opened by another process given its path on disk.
+	//
+	// @Parameters:
+	// 1. arena - The Arena structure where any intermediary information about the currently opened handles is stored.
+	// Note that this function does not clear this arena. Use clear_arena() after calling this function.
+	// 2. full_file_path - The full path to the file of interest.
+	// 3. result_file_handle - The address to the variable that receives the resulting duplicated handle.
+	// 
+	// @Returns: True if it succeeds. Otherwise, false. This function fails under the following scenarios:
+	// 1. If the file of interest is not opened by another process.
+	// 2. If the file's handle cannot be duplicated.
+	// 3. If it's not possible to get a handle with read attributes only access for the file. 
+	// 4. If it couldn't query the system for information on all opened handles.
+	static bool windows_nt_query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle)
 	{
 		*result_file_handle = INVALID_HANDLE_VALUE;
 
+		// List all opened handles. We may have to increase the size of the Arena structure to receive all the necessary handle
+		// information.
+		// Note that, even if it succeeds, this information may already be stale...
 		ULONG handle_info_size = (ULONG) megabytes_to_bytes(1);
 		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
 		ULONG actual_handle_info_size = 0;
@@ -1962,6 +2125,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
 		while(error_code == STATUS_INFO_LENGTH_MISMATCH)
 		{
+			// On the next attempt, the overall size of this information may have changed (new handles could have been created),
+			// so we'll go the extra mile and add the current size plus an extra bit.
 			ULONG extra_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(5);
 			push_arena(arena, extra_size, u8);
 			handle_info_size += extra_size;
@@ -1976,6 +2141,11 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 			return false;
 		}
 
+		// When we iterate over these handles, we'll want to check which one corresponds to the desired file path.
+		// To do this robustly, we'll need another handle for this file. Since the whole point of this function is
+		// getting a handle for a file that's being used by another process, we'll want to avoid asking for any
+		// access rights  that result in a sharing violation. Because of this, we'll ask for the right to read the
+		// file's attributes.
 		HANDLE read_attributes_file_handle = CreateFileW(	full_file_path,
 															FILE_READ_ATTRIBUTES,
 															FILE_SHARE_READ,
@@ -1999,15 +2169,20 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		{
 			SYSTEM_HANDLE_TABLE_ENTRY_INFO handle_entry = handle_info->Handles[i];
 
+			// Skip handles from this process. Otherwise, we'd duplicate the read attributes handle we got above.
 			DWORD process_id = handle_entry.UniqueProcessId;
 			if(process_id == current_process_id) continue;
 
+			// @Note: The PROCESS_DUP_HANDLE access right is required for DuplicateHandle().
 			HANDLE process_handle = OpenProcess(PROCESS_DUP_HANDLE, FALSE, process_id);
 			if(process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) continue;
 
 			HANDLE file_handle = (HANDLE) handle_entry.HandleValue;
 			HANDLE duplicated_file_handle = INVALID_HANDLE_VALUE;
 
+			// @TODO: Do we want to use a different desired access? What if it the original handle didn't have
+			// an access right that allows reading from the file? Should we use GENERIC_READ or just FILE_READ_DATA,
+			// and change DUPLICATE_SAME_ACCESS to 0?
 			if(DuplicateHandle(	process_handle, file_handle,
 								current_process_handle, &duplicated_file_handle,
 								0, FALSE, DUPLICATE_SAME_ACCESS))
@@ -2034,13 +2209,27 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 		return success;
 	}
 
+	// Forcibly copies a file that was opened by another process. This function is used to bypass sharing violation errors when
+	// trying to read a file that is being used by another process.
+	//
+	// @Parameters:
+	// 1. arena - The Arena structure where the file buffer and any intermediary information about the currently opened handles
+	// is stored.
+	// 2. copy_source_path - The full path to the source file.
+	// 3. copy_destination_path - The destination path where the file will be copied to.
+	// 
+	// @Returns: True if the file was copied sucessfully. Otherwise, false. The copy operation is considered successfully if all
+	// of the following conditions are true:
+	// 1. The file specified in copy_source_path exists and is currently open in another process.
+	// 2. The number of bytes written to disk matches the number of bytes read using the duplicated file handle.
+	// 3. The number of bytes written to disk matches the source file's real size.
 	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
 	{
+		bool copy_success = false;
+
 		HANDLE source_file_handle = INVALID_HANDLE_VALUE;
 		bool was_source_handle_found = windows_nt_query_file_handle_from_file_path(arena, copy_source_path, &source_file_handle);
 		clear_arena(arena);
-
-		bool copy_success = false;
 
 		if(was_source_handle_found)
 		{
@@ -2054,15 +2243,26 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 
 			if(destination_file_handle != INVALID_HANDLE_VALUE)
 			{
-				/*void* file_buffer = memory_map_entire_file(source_file_handle, &file_size);
-				WriteFile(destination_file_handle, file_buffer, (DWORD) file_size, &num_bytes_written, NULL);
-				safe_unmap_view_of_file(file_buffer);*/
-
+				// The handle we duplicated above may have been created with certain flags like FILE_FLAG_OVERLAPPED
+				// or FILE_FLAG_NO_BUFFERING, which change how we should read the file's contents. We'll try to copy
+				// the file in a way that addresses these. We'll handle both synchronous and asynchronous reads using
+				// the OVERLAPPED structure, and align our file buffer's size and address to the current page size.
+				//
+				// @Docs:
+				// "File access sizes, including the optional file offset in the OVERLAPPED structure, if specified,
+				// must be for a number of bytes that is an integer multiple of the volume sector size."
+				// "File access buffer addresses for read and write operations should be physical sector-aligned,
+				// which means aligned on addresses in memory that are integer multiples of the volume's physical
+				// sector size."
+				// "Therefore, in most situations, page-aligned memory will also be sector-aligned, because the
+				// case where the sector size is larger than the page size is rare."
+				// - File Buffering - Win32 API Reference.
 				SYSTEM_INFO system_info = {};
 				GetSystemInfo(&system_info);
 
-				const size_t FILE_BUFFER_SIZE = 32768;
+				const size_t FILE_BUFFER_SIZE = 32768; // @TODO
 				void* file_buffer = aligned_push_arena(arena, FILE_BUFFER_SIZE, system_info.dwPageSize);
+				_ASSERT(FILE_BUFFER_SIZE % system_info.dwPageSize == 0);
 
 				u64 total_bytes_read = 0;
 				u64 total_bytes_written = 0;
@@ -2079,15 +2279,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 					if(!read_success)
 					{
 						DWORD read_error_code = GetLastError();
+
+						// Asynchronous read.
 						if(read_error_code == ERROR_IO_PENDING)
 						{
-							// This should timeout otherwise it might hang the exporter forever.
-							// We should make GetOverlappedResult the stub function and try to load GetOverlappedResultEx at startup.
-							//const DWORD TIMEOUT = 10 * 1000;
-							//if(GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT, FALSE) == 0)
-							//  || overlapped_result_error_code == WAIT_TIMEOUT
-							//if(GetOverlappedResult(source_file_handle, &overlapped, &num_bytes_read, TRUE) == 0)
-							const DWORD TIMEOUT_IN_SECONDS = 5;
+							// Get the bytes that were read by this asynchronous operation. This call will block until this data is
+							// read or the function times out.
+							const DWORD TIMEOUT_IN_SECONDS = 3;
 							const DWORD TIMEOUT_IN_MILLISECONDS = TIMEOUT_IN_SECONDS * 1000;
 							if(!GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT_IN_MILLISECONDS, FALSE))
 							{
@@ -2100,16 +2298,22 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 								{
 									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Cancelling all pending I/O operations and retrying. Read %I64u and wrote %I64u bytes so far.", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written);
 									
-									// Cancel all pending I/O operations issued for the file.
+									// If the function timed out, we'll cancel all pending I/O operations issued by us and then
+									// try to read the data again.
 									// See: https://docs.microsoft.com/en-us/windows/win32/fileio/canceling-pending-i-o-operations
 									if(CancelIo(source_file_handle))
 									{
-										#if 0
+										// @TODO: Use GetOverlappedResultEx() here?
+										#if 1
 										// Wait for the I/O subsystem to acknowledge our cancellation.
-										if(!GetOverlappedResult(source_file_handle, &overlapped, &num_bytes_read, TRUE))
+										if(!GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT_IN_MILLISECONDS, FALSE))
 										{
-											log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result after canceling all pending I/O operatiosn with the the error code %lu.", GetLastError());
-											_ASSERT(false);
+											overlapped_result_error_code = GetLastError();
+											if(overlapped_result_error_code != WAIT_TIMEOUT)
+											{
+												log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result after canceling all pending I/O operatiosn with the the error code %lu.", overlapped_result_error_code);
+												_ASSERT(false);												
+											}
 										}
 										#endif
 									}
@@ -2129,6 +2333,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 								}
 							}
 						}
+						// Synchronous read.
 						else if(read_error_code == ERROR_HANDLE_EOF)
 						{
 							reached_end_of_file = true;
@@ -2150,7 +2355,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 							total_bytes_written += num_bytes_written;
 						}
 
-						u32 offset_high, offset_low;
+						// Move to the next offset in the file.
+						u32 offset_high = 0;
+						u32 offset_low = 0;
 						separate_u64_into_high_and_low_u32s(total_bytes_read, &offset_high, &offset_low);					
 						overlapped.OffsetHigh = (DWORD) offset_high;
 						overlapped.Offset = (DWORD) offset_low;
@@ -2166,9 +2373,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 
 				if(num_read_retry_attempts > 0)
 				{
-					log_print(LOG_INFO, "Force Copy Open File: Retried read operations %I32u times before reaching the end of file.", num_read_retry_attempts);
+					log_print(LOG_INFO, "Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
 				}
 
+				// This isn't a great way to verify if we copied everything successfully but it works for now...
 				copy_success = (total_bytes_read == total_bytes_written);
 
 				u64 file_size = 0;

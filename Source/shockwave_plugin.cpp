@@ -2,17 +2,13 @@
 #include "memory_and_file_io.h"
 #include "shockwave_plugin.h"
 
-enum Shockwave_Plugin_Cache_Version
+static const Csv_Type CSV_COLUMN_TYPES[] =
 {
-	SHOCKWAVE_CACHE_UNKNOWN = 0,
-	SHOCKWAVE_CACHE = 1,
-	NUM_SHOCKWAVE_CACHE_VERSIONS = 2
+	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
+	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_DIRECTOR_FILE_TYPE
 };
-TCHAR* SHOCKWAVE_CACHE_CACHE_VERSION_TO_STRING[NUM_SHOCKWAVE_CACHE_VERSIONS] =
-{
-	TEXT("Shockwave-Plugin-Unknown"),
-	TEXT("Shockwave-Plugin")
-};
+static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 #pragma pack(push, 1)
 struct Partial_Director_Rifx_Chunk
@@ -38,7 +34,7 @@ enum Director_Codec
 
 static TCHAR* get_director_file_type(TCHAR* file_path)
 {
-	Partial_Director_Rifx_Chunk chunk;
+	Partial_Director_Rifx_Chunk chunk = {};
 
 	if(read_first_file_bytes(file_path, &chunk, sizeof(Partial_Director_Rifx_Chunk)))
 	{
@@ -84,31 +80,14 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 	get_full_path_name(exporter->cache_path);
 	log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", exporter->cache_path);
 
-	resolve_cache_version_output_paths(exporter, SHOCKWAVE_CACHE, SHOCKWAVE_CACHE_CACHE_VERSION_TO_STRING);
+	resolve_exporter_output_paths_and_create_csv_file(exporter, TEXT("SW"), CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	export_shockwave_plugin_cache(exporter);
+	close_exporter_csv_file(exporter);
 	log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");
 }
 
 void export_shockwave_plugin_cache(Exporter* exporter)
 {
-	Arena* arena = &(exporter->arena);
-
-	const size_t CSV_NUM_COLUMNS = 7;
-	const Csv_Type csv_header[CSV_NUM_COLUMNS] =
-	{
-		CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-		CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
-		CSV_DIRECTOR_FILE_TYPE
-	};
-
-	HANDLE csv_file = INVALID_HANDLE_VALUE;
-	if(exporter->should_create_csv)
-	{
-		create_csv_file(exporter->output_csv_path, &csv_file);
-		csv_print_header(arena, csv_file, csv_header, CSV_NUM_COLUMNS);
-		clear_arena(arena);
-	}
-
 	TCHAR search_cache_path[MAX_PATH_CHARS];
 	StringCchCopy(search_cache_path, MAX_PATH_CHARS, exporter->cache_path);
 	PathAppend(search_cache_path, TEXT("mp*"));
@@ -128,51 +107,40 @@ void export_shockwave_plugin_cache(Exporter* exporter)
 		TCHAR* filename = file_find_data.cFileName;
 		_ASSERT(filename != NULL);
 
+		TCHAR* file_extension = skip_to_file_extension(filename);
+
+		u64 file_size = combine_high_and_low_u32s_into_u64(file_find_data.nFileSizeHigh, file_find_data.nFileSizeLow);
+		TCHAR file_size_string[MAX_INT64_CHARS];
+		convert_u64_to_string(file_size, file_size_string);
+
+		TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS];
+		format_filetime_date_time(file_find_data.ftLastWriteTime, last_write_time);
+
+		TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
+		format_filetime_date_time(file_find_data.ftCreationTime, creation_time);
+		
+		TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
+		format_filetime_date_time(file_find_data.ftLastAccessTime, last_access_time);
+
 		TCHAR full_file_path[MAX_PATH_CHARS];
 		StringCchCopy(full_file_path, MAX_PATH_CHARS, exporter->cache_path);
 		PathAppend(full_file_path, filename);
 
-		if(exporter->should_create_csv)
+		TCHAR* director_file_type = get_director_file_type(full_file_path);
+
+		Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 		{
-			TCHAR* file_extension = skip_to_file_extension(filename);
+			{filename}, {file_extension}, {file_size_string},
+			{last_write_time}, {last_access_time}, {creation_time},
+			{director_file_type}
+		};
 
-			u64 file_size = combine_high_and_low_u32s_into_u64(file_find_data.nFileSizeHigh, file_find_data.nFileSizeLow);
-			TCHAR file_size_string[MAX_INT64_CHARS];
-			convert_u64_to_string(file_size, file_size_string);
-
-			TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS];
-			format_filetime_date_time(file_find_data.ftLastWriteTime, last_write_time);
-
-			TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
-			format_filetime_date_time(file_find_data.ftCreationTime, creation_time);
-			
-			TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
-			format_filetime_date_time(file_find_data.ftLastAccessTime, last_access_time);
-
-			TCHAR* director_file_type = get_director_file_type(full_file_path);
-
-			Csv_Entry csv_row[CSV_NUM_COLUMNS] =
-			{
-				{filename}, {file_extension}, {file_size_string},
-				{last_write_time}, {last_access_time}, {creation_time},
-				{director_file_type}
-			};
-
-			csv_print_row(arena, csv_file, csv_header, csv_row, CSV_NUM_COLUMNS);
-		}
-
-		if(exporter->should_copy_files)
-		{
-			copy_file_using_url_directory_structure(arena, full_file_path, exporter->output_copy_path, NULL, filename);
-		}
-
-		clear_arena(arena);
+		export_cache_entry(	exporter,
+							CSV_COLUMN_TYPES, csv_row, CSV_NUM_COLUMNS,
+							full_file_path, NULL, filename);
 
 		found_file = FindNextFile(search_handle, &file_find_data) == TRUE;
 	}
 
-	FindClose(search_handle);
-	search_handle = INVALID_HANDLE_VALUE;
-
-	close_csv_file(&csv_file);
+	safe_find_close(&search_handle);
 }

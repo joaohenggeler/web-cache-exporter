@@ -61,7 +61,7 @@
 	#define NTDDI_VERSION 0x05000000 // NTDDI_WIN2K
 #endif
 
-// To avoid preprocessor redefinition warnings when including both windows.h and ntstatus.h.
+// Avoid preprocessor redefinition warnings when including both windows.h and ntstatus.h.
 #define WIN32_NO_STATUS
 	#include <windows.h>
 #undef WIN32_NO_STATUS
@@ -75,8 +75,9 @@
 #include <stdarg.h>
 
 #include <shlobj.h>
+// Disable the deprecation warnings for the following functions: StrNCatA, StrNCatW, StrCatW, and StrCpyW.
 #pragma warning(push)
-#pragma warning(disable : 4995) // To disable the deprecation warnings of StrNCatA, StrNCatW, StrCatW, and StrCpyW.
+#pragma warning(disable : 4995)
 	#include <shlwapi.h>
 #pragma warning(pop)
 
@@ -126,7 +127,8 @@ struct Exporter
 
 	OSVERSIONINFO os_version;
 
-	Arena arena;
+	Arena permanent_arena;
+	Arena temporary_arena;
 
 	bool was_temporary_directory_created;
 	TCHAR temporary_path[MAX_PATH_CHARS];
@@ -140,11 +142,17 @@ struct Exporter
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
 	u32 cache_version;
+	HANDLE csv_file_handle;
 	TCHAR output_copy_path[MAX_PATH_CHARS];
 	TCHAR output_csv_path[MAX_PATH_CHARS];
 	TCHAR index_path[MAX_PATH_CHARS];
 };
 
-void resolve_cache_version_output_paths(Exporter* exporter, u32 cache_version, TCHAR* cache_version_to_string[]);
+void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,
+												const Csv_Type column_types[], size_t num_columns);
+void export_cache_entry(Exporter* exporter,
+						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
+						const TCHAR* full_entry_path, const TCHAR* entry_url, const TCHAR* entry_filename);
+void close_exporter_csv_file(Exporter* exporter);
 
 #endif

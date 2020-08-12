@@ -2,46 +2,79 @@
 #include "memory_and_file_io.h"
 #include "internet_explorer.h"
 #ifndef BUILD_9X
-	// Minimum supported version:
+	// Minimum supported version for the JET Blue / ESE API used by the Internet Explorer 10 and 11's exporter:
 	// 0x0500  - Windows 2000
 	// 0x0501  - Windows XP
 	// 0x0502  - Windows 2003
 	// 0x0600  - Windows Vista
+	// We'll use Windows Vista since Windows 7 is the earliest version that supports IE 10.
 	#define JET_VERSION 0x0600
 	#include <esent.h>
+	// @Note: The Web Cache Exporter is built using Visual Studio 2005 Professional to target Windows 98 and ME.
+	// This version doesn't include the ESENT header file, so we got it from the Windows Vista SDK:
+	// - Download Page: https://www.microsoft.com/en-eg/download/details.aspx?id=1919
+	// - Download Link: http://go.microsoft.com/fwlink/?LinkId=82431
+	// - Titled: Microsoft® Windows® Software Development Kit (SDK) for Windows Vista™.
+	// - Check this option when installing: Install the Windows Vista Headers and Libraries.
+	// - Installs to: C:\Program Files\Microsoft SDKs\Windows\v6.0
+	// Newer Visual Studio versions already include this file.
 #endif
 
 /*
-	File Format Documentation:
-	- http://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm
-	- https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20(index.dat)%20format.asciidoc
-	- https://github.com/csuft/QIECacheViewer/blob/master/README.md
-	- http://en.verysource.com/code/4134901_1/cachedef.h.html
+	This file defines how the exporter processes Internet Explorer (IE)'s cache. Although we use the term "Internet Explorer",
+	this actually represents the WinINet (Windows Internet)'s cache database, which will contain more files than the ones cached
+	by the IE browser. This database also holds the cache for other web browsers (like Microsoft Edge) and web plugins (like 3DVIA).
+
+	This cache container is the most important one when it comes to recovering lost web media (games, animations, 3D virtual worlds,
+	etc) for a few reasons:
+	1. Internet Explorer had a large market share in late 1990s and early 2000s, meaning it's more likely that an older web game was
+	played in this browser. See: https://en.wikipedia.org/wiki/Usage_share_of_web_browsers#Summary_tables
+	2. In practice, Internet Explorer's maximum cache size could hold a number of complete web games (which were sometimes distributed
+	across multiple files) since the file formats used by web plugins (like Flash, Shockwave, etc) were often compressed.
+
+	@SupportedFormats:
+	- Internet Explorer 4 (index.dat)
+	- Internet Explorer 5 to 9 (Content.IE5\index.dat)
+	- Internet Explorer 10 and 11 (WebCacheV01.dat and WebCacheV24.dat - JET Blue / ESE databases)
+
+	@Resources: Previous reverse engineering efforts that specify how the INDEX.DAT file format (IE 4 to 9) should be processed.
+	
+	[GC] "The INDEX.DAT File Format"
+	--> http://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm
+	
+	[JM] "MSIE Cache File (index.dat) format specification"
+	--> https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20(index.dat)%20format.asciidoc
+	
+	[NS-B1] "A few words about the cache / history on Internet Explorer 10"
+	--> https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/
+	
+	[NS-B2] "Improved solution for reading the history of Internet Explorer 10"
+	--> https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/
+
+	@Tools: Existing software that also reads IE's cache.
+	
+	[NS-T1] "IECacheView v1.58 - Internet Explorer Cache Viewer"
+	--> https://www.nirsoft.net/utils/ie_cache_viewer.html
+	--> Used to validate the output of this application for IE 5 to 11.
+	
+	[NS-T2] "ESEDatabaseView v1.65"
+	--> https://www.nirsoft.net/utils/ese_database_view.html
+	--> Used to explore an existing JET Blue / ESE database in order to figure out how to process the cache for IE 10 and 11.
 */
 
-enum Internet_Explorer_Cache_Version
-{
-	IE_CACHE_UNKNOWN = 0,
-	IE_CACHE_4 = 1, // <cache_path>\index.dat
-	IE_CACHE_5_TO_9 = 2, // <cache_path>\Content.IE5\index.dat
-	IE_CACHE_10_TO_11 = 3, // <cache_path>\..\WebCache\WebCacheV01.dat or WebCacheV24.dat
-	NUM_IE_CACHE_VERSIONS = 4
-};
-TCHAR* IE_CACHE_VERSION_TO_STRING[NUM_IE_CACHE_VERSIONS] =
-{
-	TEXT("IE-UNKNOWN"),
-	TEXT("IE-4"), TEXT("IE-5-9"), TEXT("IE-10-11")
-};
-
-const size_t CSV_NUM_COLUMNS = 18;
-const Csv_Type CSV_HEADER[CSV_NUM_COLUMNS] =
+// The order and type of each column in the CSV file. This applies to all supported cache database file format versions.
+static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
 	CSV_SERVER_RESPONSE, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
-	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE, CSV_LEAK_ENTRY
+	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE
 };
+static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
+// ----------------------------------------------------------------------------------------------------
+
+// @Format: Various constants for index.dat.
 static const size_t NUM_SIGNATURE_CHARS = 28;
 static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
 static const size_t MAX_NUM_CACHE_DIRECTORIES = 32;
@@ -49,6 +82,8 @@ static const size_t HEADER_DATA_LENGTH = 32;
 static const size_t BLOCK_SIZE = 128;
 static const size_t ALLOCATION_BITMAP_SIZE = 0x3DB0;
 
+// @Format: The signature that identifies each entry in index.dat.
+// We must be aware of all of them to properly traverse the allocated blocks.
 enum Internet_Explorer_Index_Entry_Signature
 {
 	ENTRY_URL = 0x204C5255, // "URL "
@@ -64,11 +99,14 @@ enum Internet_Explorer_Index_Entry_Signature
 	ENTRY_DEALLOCATED = 0x0BADF00D
 };
 
+// We'll tightly pack the structures that represent different parts of the index.dat file and then access each member directly after
+// mapping it into memory. Due to the way the file is designed, there shouldn't be any memory alignment problems when accessing them. 
 #pragma pack(push, 1)
 
+// @Format: The header for the index.dat file.
 struct Internet_Explorer_Index_Header
 {
-	s8 signature[NUM_SIGNATURE_CHARS]; // Including null terminator.
+	s8 signature[NUM_SIGNATURE_CHARS]; // Including the null terminator.
 	u32 file_size;
 	u32 file_offset_to_first_hash_table_page;
 
@@ -95,12 +133,14 @@ struct Internet_Explorer_Index_Header
 	u32 _reserved_5;
 };
 
+// @Format: The beginning of each entry in the index.dat file.
 struct Internet_Explorer_Index_File_Map_Entry
 {
 	u32 signature;
 	u32 num_allocated_blocks;
 };
 
+// @Format: The body of a URL entry in the index.dat file (IE 4, format version 4.7).
 struct Internet_Explorer_4_Index_Url_Entry
 {
 	FILETIME last_modified_time;
@@ -141,6 +181,7 @@ struct Internet_Explorer_4_Index_Url_Entry
 	u32 _reserved_7;
 };
 
+// @Format: The body of a URL entry in the index.dat file (IE 5 to 9, format version 5.2).
 struct Internet_Explorer_5_To_9_Index_Url_Entry
 {
 	FILETIME last_modified_time;
@@ -191,13 +232,40 @@ _STATIC_ASSERT(sizeof(Internet_Explorer_5_To_9_Index_Url_Entry) == 0x60);
 
 // ----------------------------------------------------------------------------------------------------
 
+// Finds the current Internet Explorer version by querying the registry. This method is recommended in the following Windows
+// documentation page, @Docs: https://docs.microsoft.com/en-us/troubleshoot/browsers/information-about-ie-version
+//
+// @Parameters:
+// 1. ie_version - The buffer that receives the string with Internet Explorer's version in the form of:
+// <major version>.<minor version>.<build number>.<subbuild number>
+// 2. ie_version_size - The size of the buffer in bytes.
+//
+// @Returns: True if it's able to find Internet Explorer's version in the registry. Otherwise, false.
 bool find_internet_explorer_version(TCHAR* ie_version, DWORD ie_version_size)
 {
+	// We'll try "svcVersion" first since that one contains the correct value for the newer IE versions. In older versions this would
+	// fails and we would resot to the "Version" key.
 	return query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "svcVersion", ie_version, ie_version_size)
 		|| query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ie_version, ie_version_size);
 }
 
-void undecorate_path(TCHAR* path)
+// Removes the decoration from a path string. A decoration consists of the last pair square brackets with zero or more digits in
+// between them that appear before the (last) file extension, or before the end of the filename if there's no extension.
+//
+// For example:
+// C:\Path\File[5].txt 	-> C:\Path\File.txt
+// C:\Path\File[12] 	-> C:\Path\File
+// C:\Path\File.txt 	-> C:\Path\File.txt
+// C:\Path\[3].txt 		-> C:\Path\[3].txt
+//
+// This function was created to replace PathUndecorate() from the Shell API since it was only available from version 5.0
+// onwards (IE 5.0, Windows 98SE and 2000, or later).
+//
+// @Parameters:
+// 1. path - The path to modify.
+//
+// @Returns: True if it's able to find Internet Explorer's version in the registry. Otherwise, false.
+static void undecorate_path(TCHAR* path)
 {
 	TCHAR* filename = PathFindFileName(path);
 	// PathFindExtension returns the address of the last file extension. E.g: "file.ext1.ext2" -> ".ext2"
@@ -241,6 +309,8 @@ void undecorate_path(TCHAR* path)
 			}
 		}
 
+		// Check if it's different than NUL for the case where the decoration isn't closed (e.g. "C:\path\file[1"),
+		// meaning 'filename' would already point to the end of the string.
 		if(*filename != TEXT('\0')) ++filename;
 		is_first_char = false;
 	}
@@ -253,7 +323,25 @@ void undecorate_path(TCHAR* path)
 	}
 }
 
-void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_t headers_size,
+// 
+//
+// This function is used when processing both index.dat and the ESE databases.
+//
+// @Parameters:
+// 1. arena -  The Arena structure that receives the various headers' values as TCHAR (ANSI or Wide) strings.
+// 2. headers_to_copy - A narrow string that contains the HTTP headers. This string isn't necessarily null terminated.
+// 3. headers_size - The size of the headers string in bytes.
+// The remaining parameters contain the address of the string in the Arena structure that contains the value of their respective
+// header value:
+// 4. server_response - The first line in the server's response (e.g. "HTTP/1.1 200 OK").
+// 5. cache_control - The "Cache-Control" header.
+// 6. pragma - The "Pragma" header.
+// 7. content_type - The "Content-Type" header.
+// 8. content_length - The "Content-Length" header.
+// 9. content_encoding - The "Content-Encoding" header.
+//
+// @Returns: Nothing.
+static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_t headers_size,
 								TCHAR** server_response, TCHAR** cache_control, TCHAR** pragma,
 								TCHAR** content_type, TCHAR** content_length, TCHAR** content_encoding)
 {
@@ -315,18 +403,16 @@ void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_t heade
 	}
 }
 
+// Exports the cache from all supported file formats used by Internet Explorer.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
+// If the path to this location isn't defined, this function will try to locate it using the CSIDL value for the Temporary
+// Internet Files directory.
+//
+// @Returns: Nothing.
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
-	// Url_Parts url_parts;
-	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html"), &url_parts);
-	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html?query"), &url_parts);
-	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html#fragment"), &url_parts);
-	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html?query#fragment"), &url_parts);
-	// partition_url(&exporter->arena, TEXT("http://www.example.com/path/index.html#fragment_with_?_foo"), &url_parts);
-	//partition_url(&exporter->arena, TEXT("http://john.doe:hunter2@www.example.com:123/path/index.html?foo=1&bar=2#top"), &url_parts);
-	//partition_url(&exporter->arena, TEXT("file://C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
-	//partition_url(&exporter->arena, TEXT("file:///C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\_Misc\\search::index.html?foo=1&bar=2#top"), &url_parts);
-
 	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, exporter->cache_path))
 	{
 		log_print(LOG_ERROR, "Internet Explorer: Failed to get the current Temporary Internet Files cache directory path. No files will be exported.");
@@ -336,18 +422,21 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	get_full_path_name(exporter->cache_path);
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 
-	resolve_cache_version_output_paths(exporter, IE_CACHE_4, IE_CACHE_VERSION_TO_STRING);
+	resolve_exporter_output_paths_and_create_csv_file(exporter, TEXT("IE"), CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+
 	log_print_newline();
 	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
 	PathAppend(exporter->index_path, TEXT("index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
-	// Low\Content.IE5\index.dat
-
-	resolve_cache_version_output_paths(exporter, IE_CACHE_5_TO_9, IE_CACHE_VERSION_TO_STRING);
 	log_print_newline();
 	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
 	PathAppend(exporter->index_path, TEXT("Content.IE5\\index.dat"));
+	export_internet_explorer_4_to_9_cache(exporter);
+
+	log_print_newline();
+	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
+	PathAppend(exporter->index_path, TEXT("Low\\Content.IE5\\index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	#ifndef BUILD_9X
@@ -359,8 +448,6 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		}
 
 		log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
-
-		resolve_cache_version_output_paths(exporter, IE_CACHE_10_TO_11, IE_CACHE_VERSION_TO_STRING);
 
 		log_print_newline();
 		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
@@ -374,12 +461,20 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		
 	#endif
 
+	close_exporter_csv_file(exporter);
+
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
 }
 
+// Exports the cache from Internet Explorer 4 through 9.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
+//
+// @Returns: Nothing.
 void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 {
-	Arena* arena = &(exporter->arena);
+	Arena* arena = &(exporter->temporary_arena);
 
 	HANDLE index_handle = INVALID_HANDLE_VALUE;
 	u64 index_file_size = 0;
@@ -469,14 +564,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_5: 0x%08X", header->_reserved_5);
 	#endif
 	
-	HANDLE csv_file = INVALID_HANDLE_VALUE;
-	if(exporter->should_create_csv)
-	{
-		create_csv_file(exporter->output_csv_path, &csv_file);
-		csv_print_header(arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
-		clear_arena(arena);
-	}
-
 	// Go through each bit to check if a particular block was allocated. If so, we'll skip to that block and handle
 	// that specific entry type. If not, we'll ignore it and move to the next one.
 	unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
@@ -597,6 +684,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 					
 					TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+					TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 					bool file_exists = false;
 
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
@@ -620,19 +708,11 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 						// Build the absolute file path to the cache file. The cache directories are next to the index file
 						// in this version of Internet Explorer. Here, exporter->index_path is already a full path.
-						TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 						StringCchCopy(full_file_path, MAX_PATH_CHARS, exporter->index_path);
 						PathAppend(full_file_path, TEXT(".."));
 						PathAppend(full_file_path, short_file_path);
 
 						file_exists = does_file_exist(full_file_path);
-
-						// Build the absolute file path to the destination file. The directory structure will be the same as
-						// the path on the original website.
-						if(file_exists && exporter->should_copy_files)
-						{
-							copy_file_using_url_directory_structure(arena, full_file_path, exporter->output_copy_path, url, filename);
-						}
 					}
 					else if(cache_directory_index == CHANNEL_DEFINITION_FORMAT_INDEX)
 					{
@@ -656,22 +736,19 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					convert_u32_to_string(num_entry_locks, num_hits);
 
 					TCHAR* is_file_missing = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
-					TCHAR* is_leak_entry = (entry->signature == ENTRY_LEAK) ? (TEXT("Yes")) : (TEXT("No"));
 
-					if(exporter->should_create_csv)
+					Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 					{
-						Csv_Entry csv_row[CSV_NUM_COLUMNS] =
-						{
-							{filename}, {url}, {file_extension}, {cached_file_size},
-							{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
-							{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-							{num_hits}, {short_file_path}, {is_file_missing}, {is_leak_entry}
-						};
+						{filename}, {url}, {file_extension}, {cached_file_size},
+						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
+						{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
+						{num_hits}, {short_file_path}, {is_file_missing}
+					};
 
-						csv_print_row(arena, csv_file, CSV_HEADER, csv_row, CSV_NUM_COLUMNS);
-					}
+					export_cache_entry(	exporter,
+										CSV_COLUMN_TYPES, csv_row, CSV_NUM_COLUMNS,
+										full_file_path, url, filename);
 
-					clear_arena(arena);
 				} // Intentional fallthrough.
 
 				// We won't handle these specific entry types, so we'll always skip them.
@@ -701,9 +778,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
-	close_csv_file(&csv_file);
-
-	safe_unmap_view_of_file(index_file);
+	SAFE_UNMAP_VIEW_OF_FILE(index_file);
 	safe_close_handle(&index_handle);
 
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Finished exporting the cache.");
@@ -719,7 +794,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_GET_DATABASE_FILE_INFO_W(function_name) JET_ERR JET_API function_name(JET_PCWSTR szDatabaseName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_GET_DATABASE_FILE_INFO_W(stub_jet_get_database_file_info_w)
+	static JET_GET_DATABASE_FILE_INFO_W(stub_jet_get_database_file_info_w)
 	{
 		log_print(LOG_WARNING, "JetGetDatabaseFileInfoW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -727,7 +802,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_GET_DATABASE_FILE_INFO_W(Jet_Get_Database_File_Info_W);
-	Jet_Get_Database_File_Info_W* dll_jet_get_database_file_info_w = stub_jet_get_database_file_info_w;
+	static Jet_Get_Database_File_Info_W* dll_jet_get_database_file_info_w = stub_jet_get_database_file_info_w;
 	#define JetGetDatabaseFileInfoW dll_jet_get_database_file_info_w
 
 	// ----------------------------------------------------------------------
@@ -737,7 +812,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_GET_SYSTEM_PARAMETER_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance, JET_SESID sesid, unsigned long paramid, JET_API_PTR* plParam, JET_PWSTR szParam, unsigned long cbMax)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_GET_SYSTEM_PARAMETER_W(stub_jet_get_system_parameter_w)
+	static JET_GET_SYSTEM_PARAMETER_W(stub_jet_get_system_parameter_w)
 	{
 		log_print(LOG_WARNING, "JetGetSystemParameterW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -745,7 +820,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_GET_SYSTEM_PARAMETER_W(Jet_Get_System_Parameter_W);
-	Jet_Get_System_Parameter_W* dll_jet_get_system_parameter_w = stub_jet_get_system_parameter_w;
+	static Jet_Get_System_Parameter_W* dll_jet_get_system_parameter_w = stub_jet_get_system_parameter_w;
 	#define JetGetSystemParameterW dll_jet_get_system_parameter_w
 
 	// ----------------------------------------------------------------------
@@ -755,7 +830,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_SET_SYSTEM_PARAMETER_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance, JET_SESID sesid, unsigned long paramid, JET_API_PTR lParam, JET_PCWSTR szParam)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_SET_SYSTEM_PARAMETER_W(stub_jet_set_system_parameter_w)
+	static JET_SET_SYSTEM_PARAMETER_W(stub_jet_set_system_parameter_w)
 	{
 		log_print(LOG_WARNING, "JetSetSystemParameterW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -763,7 +838,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_SET_SYSTEM_PARAMETER_W(Jet_Set_System_Parameter_W);
-	Jet_Set_System_Parameter_W* dll_jet_set_system_parameter_w = stub_jet_set_system_parameter_w;
+	static Jet_Set_System_Parameter_W* dll_jet_set_system_parameter_w = stub_jet_set_system_parameter_w;
 	#define JetSetSystemParameterW dll_jet_set_system_parameter_w
 
 	// ----------------------------------------------------------------------
@@ -773,7 +848,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_CREATE_INSTANCE_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance, JET_PCWSTR szInstanceName)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_CREATE_INSTANCE_W(stub_jet_create_instance_w)
+	static JET_CREATE_INSTANCE_W(stub_jet_create_instance_w)
 	{
 		log_print(LOG_WARNING, "JetCreateInstanceW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -781,7 +856,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_CREATE_INSTANCE_W(Jet_Create_Instance_W);
-	Jet_Create_Instance_W* dll_jet_create_instance_w = stub_jet_create_instance_w;
+	static Jet_Create_Instance_W* dll_jet_create_instance_w = stub_jet_create_instance_w;
 	#define JetCreateInstanceW dll_jet_create_instance_w
 
 	// ----------------------------------------------------------------------
@@ -791,7 +866,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_INIT(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_INIT(stub_jet_init)
+	static JET_INIT(stub_jet_init)
 	{
 		log_print(LOG_WARNING, "JetInit: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -799,7 +874,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_INIT(Jet_Init);
-	Jet_Init* dll_jet_init = stub_jet_init;
+	static Jet_Init* dll_jet_init = stub_jet_init;
 	#define JetInit dll_jet_init
 
 	// ----------------------------------------------------------------------
@@ -809,7 +884,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_TERM(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_TERM(stub_jet_term)
+	static JET_TERM(stub_jet_term)
 	{
 		log_print(LOG_WARNING, "JetTerm: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -817,7 +892,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_TERM(Jet_Term);
-	Jet_Term* dll_jet_term = stub_jet_term;
+	static Jet_Term* dll_jet_term = stub_jet_term;
 	#define JetTerm dll_jet_term
 
 	// ----------------------------------------------------------------------
@@ -827,7 +902,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_BEGIN_SESSION_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance, JET_SESID* psesid, JET_PCWSTR szUserName, JET_PCWSTR szPassword)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_BEGIN_SESSION_W(stub_jet_begin_session_w)
+	static JET_BEGIN_SESSION_W(stub_jet_begin_session_w)
 	{
 		log_print(LOG_WARNING, "JetBeginSessionW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -835,7 +910,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_BEGIN_SESSION_W(Jet_Begin_Session_W);
-	Jet_Begin_Session_W* dll_jet_begin_session_w = stub_jet_begin_session_w;
+	static Jet_Begin_Session_W* dll_jet_begin_session_w = stub_jet_begin_session_w;
 	#define JetBeginSessionW dll_jet_begin_session_w
 
 	// ----------------------------------------------------------------------
@@ -845,7 +920,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_END_SESSION(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_GRBIT grbit)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_END_SESSION(stub_jet_end_session)
+	static JET_END_SESSION(stub_jet_end_session)
 	{
 		log_print(LOG_WARNING, "JetEndSession: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -853,7 +928,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_END_SESSION(Jet_End_Session);
-	Jet_End_Session* dll_jet_end_session = stub_jet_end_session;
+	static Jet_End_Session* dll_jet_end_session = stub_jet_end_session;
 	#define JetEndSession dll_jet_end_session
 
 	// ----------------------------------------------------------------------
@@ -863,7 +938,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_ATTACH_DATABASE_2_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename, const unsigned long cpgDatabaseSizeMax, JET_GRBIT grbit)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_ATTACH_DATABASE_2_W(stub_jet_attach_database_2_w)
+	static JET_ATTACH_DATABASE_2_W(stub_jet_attach_database_2_w)
 	{
 		log_print(LOG_WARNING, "JetAttachDatabase2W: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -871,7 +946,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_ATTACH_DATABASE_2_W(Jet_Attach_Database_2_W);
-	Jet_Attach_Database_2_W* dll_jet_attach_database_2_w = stub_jet_attach_database_2_w;
+	static Jet_Attach_Database_2_W* dll_jet_attach_database_2_w = stub_jet_attach_database_2_w;
 	#define JetAttachDatabase2W dll_jet_attach_database_2_w
 
 	// ----------------------------------------------------------------------
@@ -881,7 +956,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_DETACH_DATABASE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_DETACH_DATABASE_W(stub_jet_detach_database_w)
+	static JET_DETACH_DATABASE_W(stub_jet_detach_database_w)
 	{
 		log_print(LOG_WARNING, "JetDetachDatabaseW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -889,7 +964,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_DETACH_DATABASE_W(Jet_Detach_Database_W);
-	Jet_Detach_Database_W* dll_jet_detach_database_w = stub_jet_detach_database_w;
+	static Jet_Detach_Database_W* dll_jet_detach_database_w = stub_jet_detach_database_w;
 	#define JetDetachDatabaseW dll_jet_detach_database_w
 
 	// ----------------------------------------------------------------------
@@ -899,7 +974,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_OPEN_DATABASE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename, JET_PCWSTR szConnect, JET_DBID* pdbid, JET_GRBIT grbit)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_OPEN_DATABASE_W(stub_jet_open_database_w)
+	static JET_OPEN_DATABASE_W(stub_jet_open_database_w)
 	{
 		log_print(LOG_WARNING, "JetOpenDatabaseW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -907,7 +982,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_OPEN_DATABASE_W(Jet_Open_Database_W);
-	Jet_Open_Database_W* dll_jet_open_database_w = stub_jet_open_database_w;
+	static Jet_Open_Database_W* dll_jet_open_database_w = stub_jet_open_database_w;
 	#define JetOpenDatabaseW dll_jet_open_database_w
 
 	// ----------------------------------------------------------------------
@@ -917,7 +992,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_CLOSE_DATABASE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_DBID dbid, JET_GRBIT grbit)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_CLOSE_DATABASE(stub_jet_close_database)
+	static JET_CLOSE_DATABASE(stub_jet_close_database)
 	{
 		log_print(LOG_WARNING, "JetCloseDatabase: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -925,7 +1000,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_CLOSE_DATABASE(Jet_Close_Database);
-	Jet_Close_Database* dll_jet_close_database = stub_jet_close_database;
+	static Jet_Close_Database* dll_jet_close_database = stub_jet_close_database;
 	#define JetCloseDatabase dll_jet_close_database
 
 	// ----------------------------------------------------------------------
@@ -935,7 +1010,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_OPEN_TABLE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_DBID dbid, JET_PCWSTR szTableName, const void* pvParameters, unsigned long cbParameters, JET_GRBIT grbit, JET_TABLEID* ptableid)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_OPEN_TABLE_W(stub_jet_open_table_w)
+	static JET_OPEN_TABLE_W(stub_jet_open_table_w)
 	{
 		log_print(LOG_WARNING, "JetOpenTableW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -943,7 +1018,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_OPEN_TABLE_W(Jet_Open_Table_W);
-	Jet_Open_Table_W* dll_jet_open_table_w = stub_jet_open_table_w;
+	static Jet_Open_Table_W* dll_jet_open_table_w = stub_jet_open_table_w;
 	#define JetOpenTableW dll_jet_open_table_w
 
 	// ----------------------------------------------------------------------
@@ -953,7 +1028,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_CLOSE_TABLE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_CLOSE_TABLE(stub_jet_close_table)
+	static JET_CLOSE_TABLE(stub_jet_close_table)
 	{
 		log_print(LOG_WARNING, "JetCloseTable: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -961,7 +1036,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_CLOSE_TABLE(Jet_Close_Table);
-	Jet_Close_Table* dll_jet_close_table = stub_jet_close_table;
+	static Jet_Close_Table* dll_jet_close_table = stub_jet_close_table;
 	#define JetCloseTable dll_jet_close_table
 
 	// ----------------------------------------------------------------------
@@ -971,7 +1046,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_GET_TABLE_COLUMN_INFO_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_PCWSTR szColumnName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_GET_TABLE_COLUMN_INFO_W(stub_jet_get_table_column_info_w)
+	static JET_GET_TABLE_COLUMN_INFO_W(stub_jet_get_table_column_info_w)
 	{
 		log_print(LOG_WARNING, "JetGetTableColumnInfoW: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -979,7 +1054,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_GET_TABLE_COLUMN_INFO_W(Jet_Get_Table_Column_Info_W);
-	Jet_Get_Table_Column_Info_W* dll_jet_get_table_column_info_w = stub_jet_get_table_column_info_w;
+	static Jet_Get_Table_Column_Info_W* dll_jet_get_table_column_info_w = stub_jet_get_table_column_info_w;
 	#define JetGetTableColumnInfoW dll_jet_get_table_column_info_w
 
 	// ----------------------------------------------------------------------
@@ -989,7 +1064,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_RETRIEVE_COLUMN(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_COLUMNID columnid, void* pvData, unsigned long cbData, unsigned long* pcbActual, JET_GRBIT grbit, JET_RETINFO* pretinfo)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_RETRIEVE_COLUMN(stub_jet_retrieve_column)
+	static JET_RETRIEVE_COLUMN(stub_jet_retrieve_column)
 	{
 		log_print(LOG_WARNING, "JetRetrieveColumn: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -997,7 +1072,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_RETRIEVE_COLUMN(Jet_Retrieve_Column);
-	Jet_Retrieve_Column* dll_jet_retrieve_column = stub_jet_retrieve_column;
+	static Jet_Retrieve_Column* dll_jet_retrieve_column = stub_jet_retrieve_column;
 	#define JetRetrieveColumn dll_jet_retrieve_column
 
 	// ----------------------------------------------------------------------
@@ -1007,7 +1082,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_RETRIEVE_COLUMNS(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_RETRIEVECOLUMN* pretrievecolumn, unsigned long cretrievecolumn)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_RETRIEVE_COLUMNS(stub_jet_retrieve_columns)
+	static JET_RETRIEVE_COLUMNS(stub_jet_retrieve_columns)
 	{
 		log_print(LOG_WARNING, "JetRetrieveColumns: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -1015,7 +1090,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_RETRIEVE_COLUMNS(Jet_Retrieve_Columns);
-	Jet_Retrieve_Columns* dll_jet_retrieve_columns = stub_jet_retrieve_columns;
+	static Jet_Retrieve_Columns* dll_jet_retrieve_columns = stub_jet_retrieve_columns;
 	#define JetRetrieveColumns dll_jet_retrieve_columns
 
 	// ----------------------------------------------------------------------
@@ -1025,7 +1100,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_GET_RECORD_POSITION(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_RECPOS* precpos, unsigned long cbRecpos)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_GET_RECORD_POSITION(stub_jet_get_record_position)
+	static JET_GET_RECORD_POSITION(stub_jet_get_record_position)
 	{
 		log_print(LOG_WARNING, "JetGetRecordPosition: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -1033,7 +1108,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_GET_RECORD_POSITION(Jet_Get_Record_Position);
-	Jet_Get_Record_Position* dll_jet_get_record_position = stub_jet_get_record_position;
+	static Jet_Get_Record_Position* dll_jet_get_record_position = stub_jet_get_record_position;
 	#define JetGetRecordPosition dll_jet_get_record_position
 
 	// ----------------------------------------------------------------------
@@ -1043,7 +1118,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	#define JET_MOVE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, long cRow, JET_GRBIT grbit)
 	#pragma warning(push)
 	#pragma warning(disable : 4100)
-	JET_MOVE(stub_jet_move)
+	static JET_MOVE(stub_jet_move)
 	{
 		log_print(LOG_WARNING, "JetMove: Calling the stub version of this function.");
 		_ASSERT(false);
@@ -1051,7 +1126,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 	#pragma warning(pop)
 	typedef JET_MOVE(Jet_Move);
-	Jet_Move* dll_jet_move = stub_jet_move;
+	static Jet_Move* dll_jet_move = stub_jet_move;
 	#define JetMove dll_jet_move
 
 	// ----------------------------------------------------------------------
@@ -1193,9 +1268,17 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
+	// Exports the cache from Internet Explorer 10 and 11.
+	//
+	// @Parameters:
+	// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
+	// 2. ese_files_prefix - The three character prefix on the transaction logs and any other files that are next to the ESE
+	// database. This parameter is required to ensure that the data is recovered correctly.
+	//
+	// @Returns: Nothing.
 	void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
 	{
-		Arena* arena = &(exporter->arena);
+		Arena* arena = &(exporter->temporary_arena);
 		wchar_t* index_filename = PathFindFileNameW(exporter->index_path);
 
 		//windows_nt_force_copy_open_file(arena, L"C:\\NonASCIIHaven\\Flashpoint\\Devs\\wordfall.jar", L"C:\\NonASCIIHaven\\Flashpoint\\Devs\\wordfall_copy.jar");
@@ -1381,14 +1464,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the Containers table.", error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
-		}
-
-		HANDLE csv_file = INVALID_HANDLE_VALUE;
-		if(exporter->should_create_csv)
-		{
-			create_csv_file(exporter->output_csv_path, &csv_file);
-			csv_print_header(arena, csv_file, CSV_HEADER, CSV_NUM_COLUMNS);
-			clear_arena(arena);
 		}
 
 		// Empty or "C:\Users\<Username>\AppData\Local\Microsoft\Windows\WebCache"
@@ -1692,26 +1767,19 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									bool file_exists = does_file_exist(full_file_path);
 									wchar_t* is_file_missing = (file_exists) ? (L"No") : (L"Yes");
 
-									if(file_exists && exporter->should_copy_files)
+									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 									{
-										copy_file_using_url_directory_structure(arena, full_file_path, exporter->output_copy_path, url, filename);
-									}
+										{filename}, {url}, {file_extension}, {cached_file_size},
+										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
+										{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
+										{num_hits}, {short_file_path}, {is_file_missing}
+									};
 
-									if(exporter->should_create_csv)
-									{
-										Csv_Entry csv_row[CSV_NUM_COLUMNS] =
-										{
-											{filename}, {url}, {file_extension}, {cached_file_size},
-											{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
-											{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-											{num_hits}, {short_file_path}, {is_file_missing}, {NULL}
-										};
-
-										csv_print_row(arena, csv_file, CSV_HEADER, csv_row, CSV_NUM_COLUMNS);
-									}
+									export_cache_entry(	exporter,
+														CSV_COLUMN_TYPES, csv_row, CSV_NUM_COLUMNS,
+														full_file_path, url, filename);
 								}
 								
-								clear_arena(arena);
 								found_cache_record = (JetMove(session_id, cache_table_id, JET_MoveNext, 0) == JET_errSuccess);
 							}
 
@@ -1741,18 +1809,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			found_container_record = (JetMove(session_id, containers_table_id, JET_MoveNext, 0) == JET_errSuccess);
 		}
 
-		close_csv_file(&csv_file);
-
 		windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 	}
 
 #endif
-
-/*
-https://www.microsoft.com/en-eg/download/details.aspx?id=1919
-
-Setup: http://go.microsoft.com/fwlink/?LinkId=82431
-Says: Microsoft® Windows® Software Development Kit (SDK) for Windows Vista™.
-Installs to: C:\Program Files\Microsoft SDKs\Windows\v6.0
-Check this option: Install the Windows Vista Headers and Libraries.
-*/

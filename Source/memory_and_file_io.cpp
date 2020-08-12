@@ -962,6 +962,12 @@ bool get_special_folder_path(int csidl, TCHAR* result_path)
 	#endif
 }
 
+bool copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append)
+{
+	return SUCCEEDED(StringCchCopy(result_path, MAX_PATH_CHARS, path_to_copy))
+			&& (PathAppend(result_path, path_to_append) == TRUE);
+}
+
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
@@ -1023,9 +1029,25 @@ void safe_close_handle(HANDLE* handle)
 	}
 }
 
+// Closes a file search handle and sets its value to INVALID_HANDLE_VALUE.
+//
+// @Parameters:
+// 1. search_handle - The address of the handle to close.
+//
+// @Returns: Nothing.
+void safe_find_close(HANDLE* search_handle)
+{
+	if(*search_handle != INVALID_HANDLE_VALUE && *search_handle != NULL)
+	{
+		FindClose(*search_handle);
+		*search_handle = INVALID_HANDLE_VALUE;
+	}
+}
+
 // Creates a directory given its path, and any intermediate directories that don't exist.
+//
 // This function was created to replace SHCreateDirectoryEx() from the Shell API since it was only available from version 5.0
-// onwards.
+// onwards (Windows 2000 or later).
 //
 // @Parameters:
 // 1. path_to_create - The path of the directory to create.
@@ -1278,7 +1300,7 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 //
 // In the debug builds, this address is picked in relation to a base address (see the debug constants at the top of this file).
 //
-// After being done with the file, this memory is unmapped using safe_unmap_view_of_file().
+// After being done with the file, this memory is unmapped using SAFE_UNMAP_VIEW_OF_FILE().
 void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size)
 {
 	void* mapped_memory = NULL;
@@ -1344,7 +1366,7 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size)
 // 1. file_path - The path to the file to map into memory.
 // 2. result_file_handle - The address of a variable that receives the handle of the memory mapped file.
 // 
-// @Returns: See memory_map_entire_file(2). In addition to using the safe_unmap_view_of_file() function to unmap this memory,
+// @Returns: See memory_map_entire_file(2). In addition to using the SAFE_UNMAP_VIEW_OF_FILE() function to unmap this memory,
 // the resulting file handle should also be closed with safe_close_handle().
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size)
 {
@@ -1398,6 +1420,7 @@ bool read_first_file_bytes(const TCHAR* file_path, void* file_buffer, DWORD num_
 }
 
 // Retrieves the data of a specified registry value of type string (REG_SZ).
+//
 // This function was created to replace RegGetValue() from ADVAPI32.DLL since it was only available from version 5.2 onwards
 // (Windows Server 2003 or later).
 //

@@ -1,37 +1,10 @@
 #include "web_cache_exporter.h"
 #include "memory_and_file_io.h"
+#include "custom_groups.h"
 #include "internet_explorer.h"
 #include "shockwave_plugin.h"
 
-/*
-	char* 					= %hs
-	wchar_t*  				= %ls
-	TCHAR* 					= %s
-	void* / HANDLE 			= %p
-	char 					= %hc / %hhd
-	unsigned char 			= %hhu
-	wchar_t 				= %lc
-	TCHAR 					= %c
-
-	short / s16				= %hd
-	unsigned short / u16 	= %hu
-	long / LONG				= %ld
-	unsigned long / ULONG	= %lu
-	long long 				= %lld
-	u32						= %I32u
-	s32						= %I32d
-	u64						= %I64u
-	s64						= %I64d
-	WORD 					= %hu
-	DWORD 					= %lu
-	QWORD 					= %I64u
-	size_t 					= %Iu
-	ptrdiff_t				= %Id
-
-	uint in hexadecimal		= 0x%08X
-*/
-
-void resolve_cache_version_output_paths(Exporter* exporter, u32 cache_version, TCHAR* cache_version_to_string[])
+/*void resolve_cache_version_output_paths(Exporter* exporter, u32 cache_version, TCHAR* cache_version_to_string[])
 {
 	get_full_path_name(exporter->output_path);
 
@@ -42,6 +15,53 @@ void resolve_cache_version_output_paths(Exporter* exporter, u32 cache_version, T
 
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
 	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
+}*/
+
+void resolve_exporter_output_paths_and_create_csv_file(Exporter* exporter, const TCHAR* cache_identifier, const Csv_Type column_types[], size_t num_columns)
+{
+	Arena* arena = &(exporter->temporary_arena);
+
+	get_full_path_name(exporter->output_path);
+
+	StringCchCopy(exporter->output_copy_path, MAX_PATH_CHARS, exporter->output_path);
+	PathAppend(exporter->output_copy_path, cache_identifier);
+
+	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
+	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
+
+	if(exporter->should_create_csv)
+	{
+		create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle));
+		csv_print_header(arena, exporter->csv_file_handle, column_types, num_columns);
+		clear_arena(arena);
+	}
+}
+
+void export_cache_entry(Exporter* exporter,
+						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
+						const TCHAR* full_entry_path, const TCHAR* entry_url, const TCHAR* entry_filename)
+{
+	Arena* arena = &(exporter->temporary_arena);
+
+	// @TODO: File and URL groups - check column_types for CSV_CUSTOM_FILE_GROUP and CSV_CUSTOM_URL_GROUP
+	// and get the right group from the previously loaded files.
+
+	if(exporter->should_create_csv)
+	{
+		csv_print_row(arena, exporter->csv_file_handle, column_types, column_values, num_columns);
+	}
+
+	if(exporter->should_copy_files)
+	{
+		copy_file_using_url_directory_structure(arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename);
+	}
+
+	clear_arena(arena);
+}
+
+void close_exporter_csv_file(Exporter* exporter)
+{
+	safe_close_handle(&(exporter->csv_file_handle));
 }
 
 static TCHAR* skip_to_suboption(TCHAR* str)
@@ -75,7 +95,9 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 	exporter->should_copy_files = true;
 	exporter->should_create_csv = true;
+	exporter->csv_file_handle = INVALID_HANDLE_VALUE;
 
+	// Skip the first argument which contains the executable's name.
 	for(int i = 1; i < num_arguments; ++i)
 	{
 		TCHAR* option = arguments[i];
@@ -197,7 +219,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	return success;
 }
 
-static size_t get_startup_memory_size(Exporter* exporter)
+static size_t get_temporary_memory_size_for_os_version(Exporter* exporter)
 {
 	OSVERSIONINFO os_version = exporter->os_version;
 	size_t size_for_os_version = 0;
@@ -250,14 +272,16 @@ static void clean_up(Exporter* exporter)
 		}
 	#endif
 
-	destroy_arena( &(exporter->arena) );
+	destroy_arena( &(exporter->temporary_arena) );
+	destroy_arena( &(exporter->permanent_arena) );
+
 	close_log_file();
 }
 
 int _tmain(int argc, TCHAR* argv[])
 {
-	Exporter exporter;
-	SecureZeroMemory(&exporter, sizeof(exporter));	
+	Exporter exporter = {};
+	//SecureZeroMemory(&exporter, sizeof(exporter));	
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
@@ -296,24 +320,52 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to get the current Windows version with the error code %lu.", GetLastError());
 	}
 
-	log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
-
 	{
 		const size_t ie_version_size = 32;
 		TCHAR ie_version[ie_version_size] = TEXT("");
 		find_internet_explorer_version(ie_version, ie_version_size);
-		log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);		
+		log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);
+		log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
 	}
 
-	size_t memory_to_use = get_startup_memory_size(&exporter);
-	log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", memory_to_use);
-
-	if(!create_arena(&exporter.arena, memory_to_use))
 	{
-		console_print("Could not allocate enough memory to run the program.");
-		log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", memory_to_use);
-		clean_up(&exporter);
-		return 1;
+		if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) != 0)
+		{
+			// Remove the executable's name from the path.
+			PathAppend(exporter.executable_path, TEXT(".."));
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
+		}
+
+		size_t permanent_memory_size = get_total_group_files_size(&exporter);
+		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the permanent memory arena.", permanent_memory_size);
+
+		if(!create_arena(&exporter.permanent_arena, permanent_memory_size))
+		{
+			console_print("Could not allocate enough permanent memory to run the program.");
+			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", permanent_memory_size);
+			clean_up(&exporter);
+			return 1;
+		}
+
+		// ----------------------------------------------------------------------------------------------------
+
+		size_t temporary_memory_size = get_temporary_memory_size_for_os_version(&exporter);
+		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
+
+		if(!create_arena(&exporter.temporary_arena, temporary_memory_size))
+		{
+			console_print("Could not allocate enough temporary memory to run the program.");
+			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
+			clean_up(&exporter);
+			return 1;
+		}
+	}
+
+	{
+		load_all_group_files(&exporter);
 	}
 
 	#ifndef BUILD_9X
@@ -336,15 +388,6 @@ int _tmain(int argc, TCHAR* argv[])
 	{
 		log_print(LOG_ERROR, "Startup: Failed to create the temporary exporter directory with error code %lu.", GetLastError());
 	}
-
-	if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) != 0)
-	{
-		PathAppend(exporter.executable_path, TEXT(".."));
-	}
-	else
-	{
-		log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
-	}
 	
 	if(!get_special_folder_path(CSIDL_APPDATA, exporter.roaming_appdata_path))
 	{
@@ -361,31 +404,27 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
 	}
 
-	/*
-	char working_path[MAX_PATH_CHARS] = "";
-	GetCurrentDirectoryA(MAX_PATH_CHARS, working_path);
-	debug_log_print("Working Directory: %s", working_path);
-	*/
-
-	debug_log_print("Exporter Options:");
-	debug_log_print("- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
-	debug_log_print("- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
-	debug_log_print("- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
-	debug_log_print("- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("Yes") : ("No"));
-	debug_log_print("- Cache Path: '%s'", exporter.cache_path);
-	debug_log_print("- Output Path: '%s'", exporter.output_path);
-	debug_log_print("- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
-	debug_log_print("----------------------------------------");
-	debug_log_print("- Temporary Path: '%s'", exporter.temporary_path);
-	debug_log_print("- Executable Path: '%s'", exporter.executable_path);
-	debug_log_print("- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
-	debug_log_print("- Local AppData Path: '%s'", exporter.local_appdata_path);
-	debug_log_print("- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
-	debug_log_print("----------------------------------------");
-	debug_log_print("- Cache Version: %I32u", exporter.cache_version);
-	debug_log_print("- Output Copy Path: '%s'", exporter.output_copy_path);
-	debug_log_print("- Output CSV Path: '%s'", exporter.output_csv_path);
-	debug_log_print("- Index Path: '%s'", exporter.index_path);
+	log_print(LOG_INFO, "Exporter Options:");
+	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
+	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
+	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
+	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "- Temporary Path: '%s'", exporter.temporary_path);
+	log_print(LOG_NONE, "- Executable Path: '%s'", exporter.executable_path);
+	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
+	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
+	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
+	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "- Cache Version: %I32u", exporter.cache_version);
+	log_print(LOG_NONE, "- Output Copy Path: '%s'", exporter.output_copy_path);
+	log_print(LOG_NONE, "- Output CSV Path: '%s'", exporter.output_csv_path);
+	log_print(LOG_NONE, "- Index Path: '%s'", exporter.index_path);
+	log_print(LOG_NONE, "----------------------------------------");
 
 	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
 	{
@@ -426,6 +465,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 		default:
 		{
+			log_print(LOG_ERROR, "Startup: Attempted to export the cache from '%s' using the unhandled cache type %d.", exporter.cache_path, exporter.cache_type);
 			_ASSERT(false);
 		} break;
 	}

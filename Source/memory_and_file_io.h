@@ -146,6 +146,7 @@ const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
+bool copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -158,11 +159,12 @@ bool get_special_folder_path(int csidl, TCHAR* result_path);
 bool does_file_exist(const TCHAR* file_path);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
 void safe_close_handle(HANDLE* handle);
+void safe_find_close(HANDLE* search_handle);
 // Unmaps a mapped view of a file and sets its value to NULL.
 //
 // @Parameters:
 // 1. base_address - The address of the view to unmap.
-#define safe_unmap_view_of_file(base_address)\
+#define SAFE_UNMAP_VIEW_OF_FILE(base_address)\
 do\
 {\
 	if(base_address != NULL)\
@@ -225,6 +227,53 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 // 2. ... - Zero or more arguments to be inserted in the format string.
 #define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n\n"), __VA_ARGS__)
 
+/*
+	Format Specifiers For Printf Functions:
+	- e.g. StringCchPrintf(), log_print(), console_print(), etc.
+
+	char* 						= %hs
+	wchar_t*  					= %ls
+	TCHAR* 						= %s
+
+	char 						= %hc / %hhd (character / value)
+	s8							= %hhd
+	unsigned char / u8			= %hhu
+	wchar_t 					= %lc
+	TCHAR 						= %c
+
+	short / s16					= %hd
+	unsigned short / u16 		= %hu
+
+	long						= %ld
+	unsigned long				= %lu
+	long long 					= %lld
+	unsigned long long 			= %llu
+
+	int 						= %d
+	unsigned int 				= %u
+
+	size_t 						= %Iu
+	ptrdiff_t					= %Id
+
+	u32							= %I32u
+	s32							= %I32d
+	u64							= %I64u
+	s64							= %I64d
+
+	BYTE 						= %hhu
+	WORD 						= %hu
+	DWORD (GetLastError())		= %lu
+	QWORD 						= %I64u
+
+	u8 / BYTE in hexadecimal	= 0x%02X
+	u16 / WORD in hexadecimal	= 0x%04X
+	u32 / DWORD in hexadecimal	= 0x%08X
+
+	void* / HANDLE 				= %p
+	BOOL 						= %d
+	HRESULT / JET_ERR 			= %ld
+*/
+
 // The types of the various columns in the CSV files. These may be shared by all of them or only apply to one cache database file format.
 enum Csv_Type
 {
@@ -253,12 +302,11 @@ enum Csv_Type
 	
 	// Internet Explorer specific.
 	CSV_HITS = 18,
-	CSV_LEAK_ENTRY = 19, // @TODO: remove this one
 	
 	// Shockwave Plugin specific.
-	CSV_DIRECTOR_FILE_TYPE = 20,
+	CSV_DIRECTOR_FILE_TYPE = 19,
 
-	NUM_CSV_TYPES = 21
+	NUM_CSV_TYPES = 20
 };
 
 // An array that maps the previous values to ASCII strings.
@@ -272,7 +320,7 @@ const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
 	"Server Response", "Cache-Control", "Pragma", "Content-Type", "Content-Length", "Content-Encoding",
 	"Location On Cache", "Missing File",
-	"Hits", "Leak Entry",
+	"Hits",
 	"Director File Type"
 };
 

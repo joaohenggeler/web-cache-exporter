@@ -9,7 +9,7 @@ size_t get_total_group_files_size(Exporter* exporter)
 	size_t total_size = 0;
 
 	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
-	copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
+	simple_copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
 
 	WIN32_FIND_DATA file_find_data = {};
 	HANDLE search_handle = FindFirstFile(search_path, &file_find_data);
@@ -42,6 +42,7 @@ void load_group_file(Exporter* exporter, const TCHAR* file_path)
 	u64 group_file_size = 0;
 	// http://web.archive.org/web/20021222022224/http://msdn.microsoft.com/library/en-us/fileio/base/mapviewoffile.asp
 	// @TODO: FILE_MAP_COPY + PAGE_WRITECOPY. Boolean as a default argument? memory_map_entire_file(..., bool read_only = true)
+	// Also, should we change it to have exclusive read access when CreateFile is used?
 	char* group_file = (char*) memory_map_entire_file(file_path, &group_file_handle, &group_file_size);
 	
 	if(group_file == NULL)
@@ -57,7 +58,7 @@ void load_group_file(Exporter* exporter, const TCHAR* file_path)
 void load_all_group_files(Exporter* exporter)
 {
 	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
-	copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
+	simple_copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
 
 	WIN32_FIND_DATA file_find_data = {};
 	HANDLE search_handle = FindFirstFile(search_path, &file_find_data);
@@ -69,7 +70,7 @@ void load_all_group_files(Exporter* exporter)
 		if((file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
 		{
 			TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
-			copy_and_append_path(group_file_path, exporter->executable_path, GROUP_FILES_DIRECTORY);
+			simple_copy_and_append_path(group_file_path, exporter->executable_path, GROUP_FILES_DIRECTORY);
 			PathAppend(group_file_path, file_find_data.cFileName);
 
 			load_group_file(exporter, group_file_path);

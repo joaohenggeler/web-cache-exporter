@@ -241,7 +241,7 @@ _STATIC_ASSERT(sizeof(Internet_Explorer_5_To_9_Index_Url_Entry) == 0x60);
 // 2. ie_version_size - The size of the buffer in bytes.
 //
 // @Returns: True if it's able to find Internet Explorer's version in the registry. Otherwise, false.
-bool find_internet_explorer_version(TCHAR* ie_version, DWORD ie_version_size)
+bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size)
 {
 	// We'll try "svcVersion" first since that one contains the correct value for the newer IE versions. In older versions this would
 	// fails and we would resot to the "Version" key.
@@ -371,23 +371,23 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 			
 			if(key != NULL && value != NULL)
 			{
-				if(cache_control != NULL && lstrcmpiA(key, "cache-control") == 0)
+				if(cache_control != NULL && strings_are_equal(key, "cache-control", true))
 				{
 					*cache_control = copy_ansi_string_to_tchar(arena, value);
 				}
-				else if(pragma != NULL && lstrcmpiA(key, "pragma") == 0)
+				else if(pragma != NULL && strings_are_equal(key, "pragma", true))
 				{
 					*pragma = copy_ansi_string_to_tchar(arena, value);
 				}
-				else if(content_type != NULL && lstrcmpiA(key, "content-type") == 0)
+				else if(content_type != NULL && strings_are_equal(key, "content-type", true))
 				{
 					*content_type = copy_ansi_string_to_tchar(arena, value);
 				}
-				else if(content_length != NULL && lstrcmpiA(key, "content-length") == 0)
+				else if(content_length != NULL && strings_are_equal(key, "content-length", true))
 				{
 					*content_length = copy_ansi_string_to_tchar(arena, value);
 				}
-				else if(content_encoding != NULL && lstrcmpiA(key, "content-encoding") == 0)
+				else if(content_encoding != NULL && strings_are_equal(key, "content-encoding", true))
 				{
 					*content_encoding = copy_ansi_string_to_tchar(arena, value);
 				}
@@ -495,7 +495,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			// @TODO: Can we get a handle with CreateFile() that has the DELETE_ON_CLOSE flag set?
 			// We wouldn't need to explicitly delete the temporary file + it's deleted if the exporter crashes.
 			TCHAR temporary_index_path[MAX_PATH_CHARS] = TEXT("");
-			if(copy_to_temporary_file(exporter->index_path, exporter->temporary_path, temporary_index_path, &index_handle))
+			if(copy_to_temporary_file(exporter->index_path, exporter->exporter_temporary_path, temporary_index_path, &index_handle))
 			{
 				log_print(LOG_INFO, "Internet Explorer 4 to 9: Copied the index file to '%s'.", temporary_index_path);
 				index_file = memory_map_entire_file(index_handle, &index_file_size);
@@ -1248,7 +1248,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			*instance = JET_instanceNil;
 		}
 
-		if(!is_string_empty(temporary_directory_path) && !delete_directory_and_contents(temporary_directory_path))
+		if(!string_is_empty(temporary_directory_path) && !delete_directory_and_contents(temporary_directory_path))
 		{
 			log_print(LOG_WARNING, "Error %lu while trying to delete the temporary recovery directory and its contents.", GetLastError());
 			_ASSERT(false);
@@ -1318,7 +1318,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		PathAppendW(index_directory_path, TEXT(".."));
 
 		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
-		if(create_temporary_directory(exporter->temporary_path, temporary_directory_path))
+		if(create_temporary_directory(exporter->exporter_temporary_path, temporary_directory_path))
 		{
 			wchar_t search_path[MAX_PATH_CHARS] = L"";
 			StringCchCopyW(search_path, MAX_PATH_CHARS, index_directory_path);
@@ -1750,7 +1750,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 										{
 											StringCchCopyW(original_database_path, MAX_PATH_CHARS, directory);
 											PathAppendW(original_database_path, L"..\\..\\WebCache");
-											set_original_database_path = !is_string_empty(original_database_path);
+											set_original_database_path = !string_is_empty(original_database_path);
 										}
 
 										wchar_t path_from_database_to_cache[MAX_PATH_CHARS] = L"";

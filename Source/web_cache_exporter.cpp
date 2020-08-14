@@ -53,7 +53,10 @@ void export_cache_entry(Exporter* exporter,
 
 	if(exporter->should_copy_files)
 	{
-		copy_file_using_url_directory_structure(arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename);
+		if(copy_file_using_url_directory_structure(arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename))
+		{
+			++(exporter->num_copied_files);
+		}
 	}
 
 	clear_arena(arena);
@@ -102,33 +105,33 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	{
 		TCHAR* option = arguments[i];
 
-		if(lstrcmpi(option, TEXT("-no-copy-files")) == 0)
+		if(strings_are_equal(option, TEXT("-no-copy-files")))
 		{
 			exporter->should_copy_files = false;
 		}
-		else if(lstrcmpi(option, TEXT("-no-create-csv")) == 0)
+		else if(strings_are_equal(option, TEXT("-no-create-csv")))
 		{
 			exporter->should_create_csv = false;
 		}
-		else if(lstrcmpi(option, TEXT("-merge-copied-files")) == 0)
+		else if(strings_are_equal(option, TEXT("-merge-copied-files")))
 		{
 			exporter->should_merge_copied_files = true;
 		}
-		else if(lstrcmpi(option, TEXT("-hint-ie")) == 0)
+		else if(strings_are_equal(option, TEXT("-hint-ie")))
 		{
 			exporter->should_use_ie_hint = true;
-			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
+			if(i+1 < num_arguments && !string_is_empty(arguments[i+1]))
 			{
 				StringCchCopy(exporter->ie_hint_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
 
 			i += 1;
 		}
-		else if(lstrcmpi(option, TEXT("-find-and-export-all")) == 0)
+		else if(strings_are_equal(option, TEXT("-find-and-export-all")))
 		{
 			exporter->cache_type = CACHE_ALL;
 
-			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
+			if(i+1 < num_arguments && !string_is_empty(arguments[i+1]))
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
@@ -139,7 +142,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			seen_export_option = true;
 			break;
 		}
-		else if(string_starts_with_insensitive(option, TEXT("-export")))
+		else if(string_starts_with(option, TEXT("-export")))
 		{
 			TCHAR* cache_type = skip_to_suboption(option);
 			//char* cache_version = skip_to_suboption(cache_type);
@@ -150,15 +153,15 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 				exporter->cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
-			else if(lstrcmpi(cache_type, TEXT("-ie")) == 0)
+			else if(strings_are_equal(cache_type, TEXT("-ie")))
 			{
 				exporter->cache_type = CACHE_INTERNET_EXPLORER;
 			}
-			else if(lstrcmpi(cache_type, TEXT("-shockwave")) == 0)
+			else if(strings_are_equal(cache_type, TEXT("-shockwave")))
 			{
 				exporter->cache_type = CACHE_SHOCKWAVE_PLUGIN;
 			}
-			else if(lstrcmpi(cache_type, TEXT("-java")) == 0)
+			else if(strings_are_equal(cache_type, TEXT("-java")))
 			{
 				exporter->cache_type = CACHE_JAVA_PLUGIN;
 			}
@@ -170,18 +173,18 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 				success = false;
 			}
 
-			if(i+1 < num_arguments && !is_string_empty(arguments[i+1]))
+			if(i+1 < num_arguments && !string_is_empty(arguments[i+1]))
 			{
 				StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
 
-			if(i+2 < num_arguments && !is_string_empty(arguments[i+2]))
+			if(i+2 < num_arguments && !string_is_empty(arguments[i+2]))
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
 			}
 			PathAppend(exporter->output_path, DEFAULT_EXPORT_PATH);
 
-			exporter->is_exporting_from_default_locations = is_string_empty(exporter->cache_path);
+			exporter->is_exporting_from_default_locations = string_is_empty(exporter->cache_path);
 			
 			seen_export_option = true;
 			break;
@@ -209,7 +212,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		success = false;
 	}
 
-	if(exporter->should_use_ie_hint && is_string_empty(exporter->ie_hint_path))
+	if(exporter->should_use_ie_hint && string_is_empty(exporter->ie_hint_path))
 	{
 		log_print(LOG_ERROR, "Argument Parsing: The -hint-ie option was used without passing its value.");
 		console_print("The -hint-ie option requires a path as its argument.");
@@ -260,7 +263,7 @@ static void clean_up(Exporter* exporter)
 {
 	if(exporter->was_temporary_directory_created)
 	{
-		exporter->was_temporary_directory_created = !delete_directory_and_contents(exporter->temporary_path);
+		exporter->was_temporary_directory_created = !delete_directory_and_contents(exporter->exporter_temporary_path);
 	}
 
 	#ifndef BUILD_9X
@@ -281,7 +284,7 @@ static void clean_up(Exporter* exporter)
 int _tmain(int argc, TCHAR* argv[])
 {
 	Exporter exporter = {};
-	//SecureZeroMemory(&exporter, sizeof(exporter));	
+	//ZeroMemory(&exporter, sizeof(exporter));	
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
@@ -377,12 +380,11 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 	#endif
 
-	TCHAR temporary_files_directory_path[MAX_PATH_CHARS] = TEXT("");
-	if(GetTempPath(MAX_PATH_CHARS, temporary_files_directory_path) != 0
-		&& create_temporary_directory(temporary_files_directory_path, exporter.temporary_path))
+	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0
+		&& create_temporary_directory(exporter.windows_temporary_path, exporter.exporter_temporary_path))
 	{
 		exporter.was_temporary_directory_created = true;
-		log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.temporary_path);
+		log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.exporter_temporary_path);
 	}
 	else
 	{
@@ -404,6 +406,7 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
 	}
 
+	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_INFO, "Exporter Options:");
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
@@ -414,13 +417,18 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
 	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "----------------------------------------");
-	log_print(LOG_NONE, "- Temporary Path: '%s'", exporter.temporary_path);
 	log_print(LOG_NONE, "- Executable Path: '%s'", exporter.executable_path);
+	log_print(LOG_NONE, "- Exporter Temporary Path: '%s'", exporter.exporter_temporary_path);
+	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", (exporter.was_temporary_directory_created) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "- Windows Temporary Path: '%s'", exporter.windows_temporary_path);
 	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
 	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
 	log_print(LOG_NONE, "----------------------------------------");
-	log_print(LOG_NONE, "- Cache Version: %I32u", exporter.cache_version);
+	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
+	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Output Copy Path: '%s'", exporter.output_copy_path);
 	log_print(LOG_NONE, "- Output CSV Path: '%s'", exporter.output_csv_path);
 	log_print(LOG_NONE, "- Index Path: '%s'", exporter.index_path);
@@ -453,14 +461,12 @@ int _tmain(int argc, TCHAR* argv[])
 		case(CACHE_ALL):
 		{
 			_ASSERT(exporter.is_exporting_from_default_locations);
-			_ASSERT(is_string_empty(exporter.cache_path));
+			_ASSERT(string_is_empty(exporter.cache_path));
 
 			export_specific_or_default_internet_explorer_cache(&exporter);
-			exporter.cache_path[0] = TEXT('\0');
 			log_print_newline();
 
 			export_specific_or_default_shockwave_plugin_cache(&exporter);
-			exporter.cache_path[0] = TEXT('\0');
 		} break;
 
 		default:
@@ -469,6 +475,9 @@ int _tmain(int argc, TCHAR* argv[])
 			_ASSERT(false);
 		} break;
 	}
+
+	console_print("Finished running. Copied %I32u files.", exporter.num_copied_files);
+	log_print(LOG_INFO, "Finished Running: The exporter copied a total of %I32u files.", exporter.num_copied_files);
 
 	clean_up(&exporter);
 

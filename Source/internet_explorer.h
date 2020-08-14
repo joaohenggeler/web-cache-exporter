@@ -1,7 +1,7 @@
 #ifndef INTERNET_EXPLORER_H
 #define INTERNET_EXPLORER_H
 
-bool find_internet_explorer_version(TCHAR* ie_version, DWORD ie_version_size);
+bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size);
 
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter);
 void export_internet_explorer_4_to_9_cache(Exporter* exporter);

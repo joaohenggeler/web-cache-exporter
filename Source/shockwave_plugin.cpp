@@ -68,9 +68,9 @@ static TCHAR* get_director_file_type(TCHAR* file_path)
 
 void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 {
-	if(is_string_empty(exporter->cache_path))
+	if(exporter->is_exporting_from_default_locations)
 	{
-		if(GetTempPath(MAX_PATH_CHARS, exporter->cache_path) == 0)
+		if(FAILED(StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path)))
 		{
 			log_print(LOG_ERROR, "Shockwave Plugin: Failed to get the temporary files directory path.");
 			return;

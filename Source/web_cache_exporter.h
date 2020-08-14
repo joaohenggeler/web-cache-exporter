@@ -130,10 +130,11 @@ struct Exporter
 	Arena permanent_arena;
 	Arena temporary_arena;
 
-	bool was_temporary_directory_created;
-	TCHAR temporary_path[MAX_PATH_CHARS];
 	TCHAR executable_path[MAX_PATH_CHARS];
-
+	bool was_temporary_directory_created;
+	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
+	
+	TCHAR windows_temporary_path[MAX_PATH_CHARS];
 	TCHAR roaming_appdata_path[MAX_PATH_CHARS];
 	TCHAR local_appdata_path[MAX_PATH_CHARS];
 	TCHAR local_low_appdata_path[MAX_PATH_CHARS];
@@ -141,11 +142,12 @@ struct Exporter
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
-	u32 cache_version;
 	HANDLE csv_file_handle;
 	TCHAR output_copy_path[MAX_PATH_CHARS];
 	TCHAR output_csv_path[MAX_PATH_CHARS];
 	TCHAR index_path[MAX_PATH_CHARS];
+
+	u32 num_copied_files;
 };
 
 void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,

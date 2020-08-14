@@ -90,8 +90,11 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
 
 size_t string_size(const char* str);
 size_t string_size(const wchar_t* str);
-bool is_string_empty(const TCHAR* str);
-bool string_starts_with_insensitive(const TCHAR* str, const TCHAR* prefix);
+size_t string_length(const TCHAR* str);
+bool string_is_empty(const TCHAR* str);
+bool strings_are_equal(const char* str_1, const char* str_2, bool optional_case_insensitive = false);
+bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional_case_insensitive = false);
+bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_case_insensitive = false);
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
 
@@ -143,10 +146,26 @@ bool decode_url(TCHAR* url);
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 
-bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path);
+// @ExtendedPathLimit
+#ifdef BUILD_9X
+	#define EXTENDED_PATH_PREFIX ""
+	const u32 NUM_EXTENDED_PATH_PREFIX_CHARS = (u32) strlen(EXTENDED_PATH_PREFIX);
+	const u32 MAX_EXTENDED_PATH_CHARS = MAX_PATH_CHARS;
+#else
+	#define EXTENDED_PATH_PREFIX L"\\\\?\\"
+	const u32 NUM_EXTENDED_PATH_PREFIX_CHARS = (u32) wcslen(EXTENDED_PATH_PREFIX);
+	const u32 MAX_EXTENDED_PATH_CHARS = MAX_PATH_CHARS;
+#endif
+
+_STATIC_ASSERT(MAX_EXTENDED_PATH_CHARS <= STRSAFE_MAX_CCH);
+
+bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_buffer_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
-bool copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append);
+bool simple_append_path(TCHAR* result_path, const TCHAR* path_to_append,
+						size_t num_result_path_chars = MAX_PATH_CHARS);
+bool simple_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append,
+								 size_t num_result_path_chars = MAX_PATH_CHARS);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -188,9 +207,9 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result);
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size);
-bool read_first_file_bytes(const TCHAR* path, void* file_buffer, DWORD num_bytes_to_read);
+bool read_first_file_bytes(const TCHAR* path, void* file_buffer, u32 num_bytes_to_read);
 
-bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, DWORD value_data_size);
+bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
 
 // The types of the various log lines in the global log file.

@@ -38,6 +38,9 @@
 	- Internet Explorer 10 and 11 (WebCacheV01.dat and WebCacheV24.dat - JET Blue / ESE databases)
 
 	@Resources: Previous reverse engineering efforts that specify how the INDEX.DAT file format (IE 4 to 9) should be processed.
+	Note that we don't handle the entirety of these formats (INDEX.DAT or ESE databases). We only process the subset of the file
+	formats that is useful for this application. Any used members in the data structures that represent the various parts of the
+	INDEX.DAT file are marked with @Used.
 	
 	[GC] "The INDEX.DAT File Format"
 	--> http://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm
@@ -67,7 +70,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
-	CSV_SERVER_RESPONSE, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
+	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
 	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE
 };
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -106,11 +109,11 @@ enum Internet_Explorer_Index_Entry_Signature
 // @Format: The header for the index.dat file.
 struct Internet_Explorer_Index_Header
 {
-	s8 signature[NUM_SIGNATURE_CHARS]; // Including the null terminator.
-	u32 file_size;
+	s8 signature[NUM_SIGNATURE_CHARS]; // @Used. Includes the null terminator.
+	u32 file_size; // @Used.
 	u32 file_offset_to_first_hash_table_page;
 
-	u32 num_blocks;
+	u32 num_blocks; // @Used.
 	u32 num_allocated_blocks;
 	u32 _reserved_1;
 	
@@ -121,12 +124,12 @@ struct Internet_Explorer_Index_Header
 	u32 sticky_cache_size;
 	u32 _reserved_4;
 	
-	u32 num_directories;
+	u32 num_directories; // @Used.
 	struct
 	{
 		u32 num_files;
-		s8 name[NUM_CACHE_DIRECTORY_NAME_CHARS]; // Without null terminator.
-	} cache_directories[MAX_NUM_CACHE_DIRECTORIES];
+		s8 name[NUM_CACHE_DIRECTORY_NAME_CHARS]; // Does *not* include the null terminator.
+	} cache_directories[MAX_NUM_CACHE_DIRECTORIES]; // @Used.
 
 	u32 header_data[HEADER_DATA_LENGTH];
 	
@@ -136,18 +139,18 @@ struct Internet_Explorer_Index_Header
 // @Format: The beginning of each entry in the index.dat file.
 struct Internet_Explorer_Index_File_Map_Entry
 {
-	u32 signature;
-	u32 num_allocated_blocks;
+	u32 signature; // @Used.
+	u32 num_allocated_blocks; // @Used.
 };
 
 // @Format: The body of a URL entry in the index.dat file (IE 4, format version 4.7).
 struct Internet_Explorer_4_Index_Url_Entry
 {
-	FILETIME last_modified_time;
-	FILETIME last_access_time;
-	FILETIME expiry_time;
+	FILETIME last_modified_time; // @Used.
+	FILETIME last_access_time; // @Used.
+	FILETIME expiry_time; // @Used.
 
-	u32 cached_file_size;
+	u32 cached_file_size; // @Used.
 	struct
 	{
 		u32 _field_1;
@@ -157,9 +160,9 @@ struct Internet_Explorer_4_Index_Url_Entry
 	u32 _reserved_2;
 	
 	u32 _reserved_3;
-	u32 entry_offset_to_url;
+	u32 entry_offset_to_url; // @Used.
 
-	u8 cache_directory_index;
+	u8 cache_directory_index; // @Used.
 	struct
 	{
 		u8 _field_1;
@@ -167,16 +170,16 @@ struct Internet_Explorer_4_Index_Url_Entry
 		u8 _field_3;
 	} _reserved_4;
 
-	u32 entry_offset_to_filename;
+	u32 entry_offset_to_filename; // @Used.
 	u32 cache_flags;
-	u32 entry_offset_to_headers;
-	u32 headers_size;
+	u32 entry_offset_to_headers; // @Used.
+	u32 headers_size; // @Used.
 	u32 _reserved_5;
 
 	Dos_Date_Time last_sync_time;
-	u32 num_entry_locks; // Number of hits
+	u32 num_entry_locks; // @Used. Represents the number of hits (in practice at least).
 	u32 _reserved_6;
-	Dos_Date_Time creation_time;
+	Dos_Date_Time creation_time; // @Used.
 
 	u32 _reserved_7;
 };
@@ -184,40 +187,40 @@ struct Internet_Explorer_4_Index_Url_Entry
 // @Format: The body of a URL entry in the index.dat file (IE 5 to 9, format version 5.2).
 struct Internet_Explorer_5_To_9_Index_Url_Entry
 {
-	FILETIME last_modified_time;
-	FILETIME last_access_time;
-	Dos_Date_Time expiry_time;
+	FILETIME last_modified_time; // @Used.
+	FILETIME last_access_time; // @Used.
+	Dos_Date_Time expiry_time; // @Used.
 	u32 _reserved_1;
 
-	u32 cached_file_size;
-	u32 _reserved_2; // @Check: use as high part of cached_file_size?
+	u32 cached_file_size; // @Used.
+	u32 _reserved_2; // @TODO: use as high part of cached_file_size?
 
 	u32 file_offset_to_group_or_group_list;
 	
 	union
 	{
-		u32 sticky_time_delta; // For a URL entry: number of seconds before the cached item may be released (relative to the last access time).
+		u32 sticky_time_delta; // For a URL entry.
 		u32 file_offset_to_next_leak_entry; // For a LEAK entry.
 	};
 
 	u32 _reserved_3;
-	u32 entry_offset_to_url;
+	u32 entry_offset_to_url; // @Used.
 
-	u8 cache_directory_index; // 0xFE = special type (cookie/iecompat/iedownload)?, 0xFF = ?
+	u8 cache_directory_index; // // @Used.
 	u8 sync_count;
-	u8 format_version; // 0x00 =  IE5_URL_FILEMAP_ENTRY, 0x10 = IE6_URL_FILEMAP_ENTRY
+	u8 format_version;
 	u8 format_version_copy;
 
-	u32 entry_offset_to_filename;
+	u32 entry_offset_to_filename; // @Used.
 	u32 cache_flags;
-	u32 entry_offset_to_headers;
-	u32 headers_size;
+	u32 entry_offset_to_headers; // @Used.
+	u32 headers_size; // @Used.
 	u32 entry_offset_to_file_extension;
 
 	Dos_Date_Time last_sync_time;
-	u32 num_entry_locks; // Number of hits
+	u32 num_entry_locks; // @Used. Represents the number of hits (in practice at least).
 	u32 level_of_entry_lock_nesting;
-	Dos_Date_Time creation_time;
+	Dos_Date_Time creation_time; // @Used.
 
 	u32 _reserved_4;
 	u32 _reserved_5;
@@ -333,18 +336,21 @@ static void undecorate_path(TCHAR* path)
 // 3. headers_size - The size of the headers string in bytes.
 // The remaining parameters contain the address of the string in the Arena structure that contains the value of their respective
 // header value:
-// 4. server_response - The first line in the server's response (e.g. "HTTP/1.1 200 OK").
-// 5. cache_control - The "Cache-Control" header.
-// 6. pragma - The "Pragma" header.
-// 7. content_type - The "Content-Type" header.
-// 8. content_length - The "Content-Length" header.
-// 9. content_encoding - The "Content-Encoding" header.
+// 4. response - The first line in the server's response (e.g. "HTTP/1.1 200 OK").
+// 5. server - The "Server" header.
+// 6. cache_control - The "Cache-Control" header.
+// 7. pragma - The "Pragma" header.
+// 8. content_type - The "Content-Type" header.
+// 9. content_length - The "Content-Length" header.
+// 10. content_encoding - The "Content-Encoding" header.
 //
 // @Returns: Nothing.
 static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_t headers_size,
-								TCHAR** server_response, TCHAR** cache_control, TCHAR** pragma,
+								TCHAR** response, TCHAR** server,
+								TCHAR** cache_control, TCHAR** pragma,
 								TCHAR** content_type, TCHAR** content_length, TCHAR** content_encoding)
 {
+	// The headers aren't necessarily null terminated.
 	char* headers = push_and_copy_to_arena(arena, headers_size, char, headers_to_copy, headers_size);
 
 	const char* line_delimiters = "\r\n";
@@ -359,7 +365,7 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 		if(is_first_line)
 		{
 			is_first_line = false;
-			if(server_response != NULL) *server_response = copy_ansi_string_to_tchar(arena, line);
+			if(response != NULL) *response = copy_ansi_string_to_tchar(arena, line);
 		}
 		// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
 		// where "Content-Type" is the key, and "text/html" the value).
@@ -371,7 +377,11 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 			
 			if(key != NULL && value != NULL)
 			{
-				if(cache_control != NULL && strings_are_equal(key, "cache-control", true))
+				if(server != NULL && strings_are_equal(key, "server", true))
+				{
+					*server = copy_ansi_string_to_tchar(arena, value);
+				}
+				else if(cache_control != NULL && strings_are_equal(key, "cache-control", true))
 				{
 					*cache_control = copy_ansi_string_to_tchar(arena, value);
 				}
@@ -425,38 +435,32 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	resolve_exporter_output_paths_and_create_csv_file(exporter, TEXT("IE"), CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 
 	log_print_newline();
-	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-	PathAppend(exporter->index_path, TEXT("index.dat"));
+	shell_copy_and_append_path(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	log_print_newline();
-	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-	PathAppend(exporter->index_path, TEXT("Content.IE5\\index.dat"));
+	shell_copy_and_append_path(exporter->index_path, exporter->cache_path, TEXT("Content.IE5\\index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	log_print_newline();
-	StringCchCopy(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-	PathAppend(exporter->index_path, TEXT("Low\\Content.IE5\\index.dat"));
+	shell_copy_and_append_path(exporter->index_path, exporter->cache_path, TEXT("Low\\Content.IE5\\index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	#ifndef BUILD_9X
 
 		if(exporter->is_exporting_from_default_locations)
 		{
-			StringCchCopyW(exporter->cache_path, MAX_PATH_CHARS, exporter->local_appdata_path);
-			PathAppendW(exporter->cache_path, L"Microsoft\\Windows\\WebCache");
+			shell_copy_and_append_path(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
 		}
 
 		log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
 
 		log_print_newline();
-		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-		PathAppendW(exporter->index_path, L"WebCacheV01.dat");
+		shell_copy_and_append_path(exporter->index_path, exporter->cache_path, L"WebCacheV01.dat");
 		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
 
 		log_print_newline();
-		StringCchCopyW(exporter->index_path, MAX_PATH_CHARS, exporter->cache_path);
-		PathAppendW(exporter->index_path, L"WebCacheV24.dat");
+		shell_copy_and_append_path(exporter->index_path, exporter->cache_path, L"WebCacheV24.dat");
 		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
 		
 	#endif
@@ -492,8 +496,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		{
 			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a copy and opening that one...");
 		
-			// @TODO: Can we get a handle with CreateFile() that has the DELETE_ON_CLOSE flag set?
-			// We wouldn't need to explicitly delete the temporary file + it's deleted if the exporter crashes.
 			TCHAR temporary_index_path[MAX_PATH_CHARS] = TEXT("");
 			if(copy_to_temporary_file(exporter->index_path, exporter->exporter_temporary_path, temporary_index_path, &index_handle))
 			{
@@ -518,6 +520,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// 1. The file is too small to contain the header (we wouldn't be able to access critical information).
 	// 2. The file isn't a valid index file since it has an invalid signature.
 	// 3. The file size we read doesn't match the file size stored in the header.
+	// 4. The file format's version is not currently supported.
 
 	if(index_file_size < sizeof(Internet_Explorer_Index_Header))
 	{
@@ -550,19 +553,20 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 
 	// We only handle two versions of the index file format: 4.7 and 5.2.
-	// @TODO: Should this version be checked in the release builds? Right now we only assert it in debug mode.
 	char major_version = header->signature[24];
 	char minor_version = header->signature[26];
-	log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %hc.%hc) was opened successfully. Starting the export process.", major_version, minor_version);
-	_ASSERT( (major_version == '4' && minor_version == '7') || (major_version == '5' && minor_version == '2') );
-
-	#ifdef DEBUG
-		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_1: 0x%08X", header->_reserved_1);
-		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_2: 0x%08X", header->_reserved_2);
-		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_3: 0x%08X", header->_reserved_3);
-		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_4: 0x%08X", header->_reserved_4);
-		debug_log_print("Internet Explorer 4 to 9: Header->Reserved_5: 0x%08X", header->_reserved_5);
-	#endif
+	
+	if( (major_version == '4' && minor_version == '7') || (major_version == '5' && minor_version == '2') )
+	{
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %hc.%hc) was opened successfully. Starting the export process.", major_version, minor_version);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was opened successfully but its version (%hc.%hc) is not supported. No files will be exported from this cache.", major_version, minor_version);
+		safe_close_handle(&index_handle);
+		_ASSERT(false);
+		return;	
+	}
 	
 	// Go through each bit to check if a particular block was allocated. If so, we'll skip to that block and handle
 	// that specific entry type. If not, we'll ignore it and move to the next one.
@@ -571,8 +575,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	for(u32 i = 0; i < header->num_blocks; ++i)
 	{
-		size_t byte_index = i / CHAR_BIT;
-		size_t block_index_in_byte = i % CHAR_BIT;
+		u32 byte_index = i / CHAR_BIT;
+		u32 block_index_in_byte = i % CHAR_BIT;
 
 		bool is_block_allocated = ( allocation_bitmap[byte_index] & (1 << block_index_in_byte) ) != 0;
 
@@ -633,8 +637,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					// the website's original directory structure when we copy the cached file.
 					const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
 					TCHAR* url = copy_ansi_string_to_tchar(arena, url_in_mmf);
-					// @TODO: Change decode_url() so it decodes the URL in-place.
-					//TCHAR* url_copy = push_and_copy_to_arena(arena, string_size(url), TCHAR, url, string_size(url));
 					decode_url(url);
 
 					u32 entry_offset_to_headers;
@@ -643,7 +645,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					GET_URL_ENTRY_FIELD(headers_size, headers_size);
 					const char* headers_in_mmf = (char*) advance_bytes(entry, entry_offset_to_headers);
 
-					TCHAR* server_response = NULL;
+					TCHAR* response = NULL;
+					TCHAR* server = NULL;
 					TCHAR* cache_control = NULL;
 					TCHAR* pragma = NULL;
 					TCHAR* content_type = NULL;
@@ -653,7 +656,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					if( (entry_offset_to_headers > 0) && (headers_size > 0) )
 					{
 						parse_cache_headers(arena, headers_in_mmf, headers_size,
-											&server_response, &cache_control, &pragma,
+											&response, &server,
+											&cache_control, &pragma,
 											&content_type, &content_length, &content_encoding);
 					}
 
@@ -703,13 +707,11 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
 
 						TCHAR* cache_directory_name = copy_ansi_string_to_tchar(arena, cache_directory_ansi_name);
-						StringCchCopy(short_file_path, MAX_PATH_CHARS, cache_directory_name);
-						PathAppend(short_file_path, decorated_filename);
+						shell_copy_and_append_path(short_file_path, cache_directory_name, decorated_filename);
 
 						// Build the absolute file path to the cache file. The cache directories are next to the index file
 						// in this version of Internet Explorer. Here, exporter->index_path is already a full path.
-						StringCchCopy(full_file_path, MAX_PATH_CHARS, exporter->index_path);
-						PathAppend(full_file_path, TEXT(".."));
+						shell_copy_and_append_path(full_file_path, exporter->index_path, TEXT(".."));
 						PathAppend(full_file_path, short_file_path);
 
 						file_exists = does_file_exist(full_file_path);
@@ -741,7 +743,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					{
 						{filename}, {url}, {file_extension}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
-						{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
+						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
 						{num_hits}, {short_file_path}, {is_file_missing}
 					};
 
@@ -766,11 +768,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				// we could start treating their allocated blocks as the beginning of other entry types.
 				default:
 				{
-					size_t const NUM_ENTRY_SIGNATURE_CHARS = 4;
+					const size_t NUM_ENTRY_SIGNATURE_CHARS = 4;
 					char signature_string[NUM_ENTRY_SIGNATURE_CHARS + 1];
 					CopyMemory(signature_string, &(entry->signature), NUM_ENTRY_SIGNATURE_CHARS);
 					signature_string[NUM_ENTRY_SIGNATURE_CHARS] = '\0';
 					log_print(LOG_WARNING, "Internet Explorer 4 to 9: Found unknown entry signature at (%Iu, %Iu): 0x%08X ('%hs') with %I32u blocks allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
+					_ASSERT(false);
 				} break;
 
 			}
@@ -784,12 +787,20 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Finished exporting the cache.");
 }
 
+// ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
 
+// Define the export process for Internet Explorer 10 and 11. Only available on the Windows 2000 through 10 builds.
 #ifndef BUILD_9X
 
-	// ----------------------------------------------------------------------
-	// ----------------------------------------------------------------------
-	// ----------------------------------------------------------------------
+	// Define the stub versions of the functions we want to dynamically load, and the variables that will either contain the pointer to
+	// these loaded functions or to the stub versions (if we can't load the real ones).
+	// This is useful for two reasons:
+	// 1. We want to use a few functions that were only introduced in Windows Vista. On Windows 2000 and XP, the stub versions will be
+	// called instead and will return an error so the exporter can fail gracefully.
+	// 2. The user doesn't need to have ESE Runtime DLL on their machine. These functions are only required in Windows 7 through 10
+	// for the WinINet cache. It doesn't make sense to stop the whole application from running because of this specific type of cache.
 
 	#define JET_GET_DATABASE_FILE_INFO_W(function_name) JET_ERR JET_API function_name(JET_PCWSTR szDatabaseName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
 	#pragma warning(push)
@@ -1135,6 +1146,31 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	static HMODULE esent_library = NULL;
 
+	// Dynamically load any necessary functions from ESENT.dll. After being called, the following functions may used:
+	//
+	// - JetGetDatabaseFileInfoW()
+	// - JetGetSystemParameterW()
+	// - JetSetSystemParameterW()
+	// - JetCreateInstanceW()
+	// - JetInit()
+	// - JetTerm()
+	// - JetBeginSessionW()
+	// - JetEndSession()
+	// - JetAttachDatabase2W()
+	// - JetDetachDatabaseW()
+	// - JetOpenDatabaseW()
+	// - JetCloseDatabase()
+	// - JetOpenTableW()
+	// - JetCloseTable()
+	// - JetGetTableColumnInfoW()
+	// - JetRetrieveColumn()
+	// - JetRetrieveColumns()
+	// - JetGetRecordPosition()
+	// - JetMove()
+	//
+	// @Parameters: None.
+	// 
+	// @Returns: Nothing.
 	void windows_nt_load_esent_functions(void)
 	{
 		if(esent_library != NULL)
@@ -1174,6 +1210,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
+	// Free any functions that were previously dynamically loaded from ESENT.dll. After being called, these functions should
+	// no longer be called.
+	//
+	// @Parameters: None.
+	// 
+	// @Returns: Nothing.
 	void windows_nt_free_esent_functions(void)
 	{
 		if(esent_library == NULL)
@@ -1212,6 +1254,17 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
+	// Performs all clean up operations on the ESE database and deletes the temporary directory that holds any copied
+	// ESE files that were used to attempt a recovery of the database.
+	//
+	// @Parameters:
+	// 1. temporary_directory_path - The path to the temporary directory to delete.
+	// 2. instance - The address of the ESE instance to terminate. This value will be set to JET_instanceNil.
+	// 3. session_id - The address of the ESE session ID to end. This value will be set to JET_sesidNil.
+	// 4. database_id - The address of the database ID to close and detach. This value will be set to JET_dbidNil.
+	// 5. containers_table_id - The address of the Containers table ID to close. This value will be set to JET_tableidNil.
+	//
+	// @Returns: Nothing.
 	static void windows_nt_ese_clean_up(TCHAR* temporary_directory_path,
 										JET_INSTANCE* instance, JET_SESID* session_id,
 										JET_DBID* database_id, JET_TABLEID* containers_table_id)
@@ -1255,6 +1308,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
+	// Maps the value of the database state to a string.
+	//
+	// @Parameters:
+	// 1. state - The value of the 'dbstate' member in the JET_DBINFOMISC database information structure.
+	//
+	// @Returns: Nothing.
 	static wchar_t* windows_nt_get_database_state_string(unsigned long state)
 	{
 		switch(state)
@@ -1272,8 +1331,9 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	//
 	// @Parameters:
 	// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
-	// 2. ese_files_prefix - The three character prefix on the transaction logs and any other files that are next to the ESE
-	// database. This parameter is required to ensure that the data is recovered correctly.
+	// 2. ese_files_prefix - The three character prefix on the ESE files that are kept next to the ESE database. This parameter
+	// is required to ensure that the data is recovered correctly. For example, for the database file "WebCacheV01.dat", we would
+	// use the prefix "V01", as seen in the files next to this one (e.g. the transaction log file "V01.log").
 	//
 	// @Returns: Nothing.
 	void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
@@ -1281,15 +1341,13 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		Arena* arena = &(exporter->temporary_arena);
 		wchar_t* index_filename = PathFindFileNameW(exporter->index_path);
 
-		//windows_nt_force_copy_open_file(arena, L"C:\\NonASCIIHaven\\Flashpoint\\Devs\\wordfall.jar", L"C:\\NonASCIIHaven\\Flashpoint\\Devs\\wordfall_copy.jar");
-
 		if(!does_file_exist(exporter->index_path))
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: The ESE database file '%ls' was not found. No files will be exported from this cache.", index_filename);
 			return;
 		}
 
-		if(!exporter->was_temporary_directory_created)
+		if(!exporter->was_temporary_exporter_directory_created)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: The temporary exporter directory used to recover the ESE database's contents was not previously created. No files will be exported from this cache.");
 			return;
@@ -1297,32 +1355,26 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 		log_print(LOG_INFO, "Internet Explorer 10 to 11: The cache will be exported based on the information in the ESE database file '%ls'.", index_filename);
 
-		/*
-		wchar_t database_path[MAX_ESE_PATH_CHARS] = L"";
-		StringCchCopyW(database_path, MAX_ESE_PATH_CHARS, index_path);
-		PathAppendW(database_path, L"..");
-		StringCchCatW(database_path, MAX_ESE_PATH_CHARS, L"\\");*/
-
-		// @TODO:
-		// 1. Copy every file in this directory to a temporary location. This will require:
-		// 1a. The normal CopyFile function which will be used for files that aren't being used by another
+		// How the ESE database will be read:
+		// 1. Copy every ESE file in the database's directory to a temporary location. This will require:
+		// 1a. The normal CopyFile() function which will be used for files that aren't being used by another
 		// process (if we're exporting from a live machine) or for every file (if we're exporting from
 		// a backup of another machine).
-		// 1b. Our own force_copy_file function which uses the Native API to duplicate the file handle for
-		// any file that is being used by another process (sharing violation). We'll map that file into memory
-		// and then dump the contents into the temporary location we mentioned above.
-		// 2. Regardless of how these files are copied, we'll mark this temporary for deletion.
+		// 1b. Our own windows_nt_force_copy_open_file() function which will be used for files that are being
+		// used by another process.
+		// 2. Set the required ESE system parameters so a database recovery is attempted if necessary. We'll
+		// need to point to our temporary directory which contains the copied transaction logs, and specify
+		// the three character base name (e.g. "V01") that is used in their filenames.
 		
 		wchar_t index_directory_path[MAX_PATH_CHARS] = L"";
-		StringCchCopyW(index_directory_path, MAX_PATH_CHARS, exporter->index_path);
-		PathAppendW(index_directory_path, TEXT(".."));
+		shell_copy_and_append_path(index_directory_path, exporter->index_path, TEXT(".."));
 
+		// Find and copy every ESE file in the database's directory to our temporary one.
 		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
 		if(create_temporary_directory(exporter->exporter_temporary_path, temporary_directory_path))
 		{
 			wchar_t search_path[MAX_PATH_CHARS] = L"";
-			StringCchCopyW(search_path, MAX_PATH_CHARS, index_directory_path);
-			PathAppendW(search_path, L"*");
+			shell_copy_and_append_path(search_path, index_directory_path, L"*");
 
 			WIN32_FIND_DATAW file_find_data = {};
 			HANDLE search_handle = FindFirstFileW(search_path, &file_find_data);
@@ -1330,21 +1382,23 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			bool found_file = search_handle != INVALID_HANDLE_VALUE;
 			while(found_file)
 			{
-				// Ignore directories, "." and ".."
-				if( (file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0
-					&& wcscmp(file_find_data.cFileName, L".") != 0
-					&& wcscmp(file_find_data.cFileName, L"..") != 0)
+				// Ignore the  "." and ".." files, and any directories.
+				if( ((file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+					&& !strings_are_equal(file_find_data.cFileName, L".")
+					&& !strings_are_equal(file_find_data.cFileName, L".."))
 				{
 					wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
-					StringCchCopyW(copy_source_path, MAX_PATH_CHARS, index_directory_path);
-					PathAppendW(copy_source_path, file_find_data.cFileName);
-
+					shell_copy_and_append_path(copy_source_path, index_directory_path, file_find_data.cFileName);
+	
 					wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
-					StringCchCopyW(copy_destination_path, MAX_PATH_CHARS, temporary_directory_path);
-					PathAppendW(copy_destination_path, file_find_data.cFileName);
+					shell_copy_and_append_path(copy_destination_path, temporary_directory_path, file_find_data.cFileName);
 
+					// Attempt to copy the ESE file normally...
 					if(!CopyFile(copy_source_path, copy_destination_path, FALSE))
 					{
+						// ...or forcibily copy it if it's being used by another process.
+						// In practice, this will be used for the" WebCache<base>.dat" and "<base>.log" files, where <base> is
+						// the ESE prefix passed to this function (e.g. "V01").
 						if(GetLastError() == ERROR_SHARING_VIOLATION)
 						{
 							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", file_find_data.cFileName);
@@ -1364,11 +1418,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				found_file = FindNextFile(search_handle, &file_find_data) == TRUE;
 			}
 
-			if(search_handle != INVALID_HANDLE_VALUE)
-			{
-				FindClose(search_handle);
-				search_handle = INVALID_HANDLE_VALUE;
-			}
+			safe_find_close(&search_handle);
 		}
 		else
 		{
@@ -1376,9 +1426,9 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			return;
 		}
 
+		// Read the ESE database that was copied to our temporary directory.
 		wchar_t temporary_database_path[MAX_PATH_CHARS] = L"";
-		StringCchCopyW(temporary_database_path, MAX_PATH_CHARS, temporary_directory_path);
-		PathAppendW(temporary_database_path, index_filename);
+		shell_copy_and_append_path(temporary_database_path, temporary_directory_path, index_filename);
 
 		JET_ERR error_code = JET_errSuccess;
 		JET_INSTANCE instance = JET_instanceNil;
@@ -1392,7 +1442,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetGetDatabaseFileInfoW(temporary_database_path, &page_size, sizeof(page_size), JET_DbInfoPageSize);
 		if(error_code < 0)
 		{
-			// Default to this value (taken from sample WebCacheV01.dat files) if we can't get it out of the database for some reason.
+			// Default to this value (taken from sample WebCache<base>.dat files) if we can't get it out of the database for some reason.
 			page_size = 32768;
 			log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to get the ESE database's page size with the error code %ld. This value will default to %lu.", error_code, page_size);
 		}
@@ -1413,7 +1463,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			return;
 		}
 		
-		// The system parameters that use this path require it to end in a backslash.
+		// Set the required system parameters so the recovery process is attempted.
+		// @Docs: The system parameters that use this path must end in a backslash.
 		StringCchCatW(temporary_directory_path, MAX_TEMPORARY_PATH_CHARS, L"\\");
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramRecovery, 0, L"On");
 		error_code = JetSetSystemParameterW(&instance, session_id, JET_paramMaxTemporaryTables, 0, NULL);
@@ -1442,9 +1493,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetAttachDatabase2W(session_id, temporary_database_path, 0, JET_bitDbReadOnly);
 		if(error_code < 0)
 		{
-			wchar_t error_message[1024];
-			JET_API_PTR err = error_code;
-			JetGetSystemParameterW(instance, session_id, JET_paramErrorToString, &err, error_message, sizeof(error_message));
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to attach the database '%ls'", error_code, temporary_database_path);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
@@ -1466,14 +1514,29 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			return;
 		}
 
-		// Empty or "C:\Users\<Username>\AppData\Local\Microsoft\Windows\WebCache"
-		bool set_original_database_path = false;
+		// @Hint:
+		// When exporting the cache, we need to resolve the paths of the cached files that are stored on disk. This is a problem
+		// if the database file came from a different computer since the base cache directory (the IDX_DIRECTORY column below)
+		// contains an absolute path. This path won't exist on the current computer. However, we already know the path to the database
+		// file on the current computer (index_directory_path), so if we can figure out what this same path was on the original computer,
+		// we can take the relative path from one to the other and apply that to the base cache directory column. This will then take
+		// us to the absolute path of the cached files in the current computer, even though they came from another machine.
+		//
+		// We'll solve this one of two ways:
+		// 1. Assume that the first directory in the Containers table is "<Local Appdata>\Microsoft\Windows\INetCache\IE", meaning
+		// we can go back two directories ("..\\..\\WebCache") and retrieve "<Local AppData>\Microsoft\Windows\WebCache".
+		// 2. Allow the user to pass a command line option that specifies the path on the current computer to where the "<Local AppData>"
+		// directory was located in the other machine. We can then add "Microsoft\\Windows\\WebCache" and arrive at the same directory
+		// as in 1.
+		//
+		// This original path will either stay empty (if we're exporting from default locations on the current machine) or will be
+		// set to "<Local AppData>\Microsoft\Windows\WebCache" (using either of the previously mentioned methods).
+		bool is_original_database_path_set = false;
 		wchar_t original_database_path[MAX_PATH_CHARS] = L"";
 		if(!exporter->is_exporting_from_default_locations && exporter->should_use_ie_hint)
 		{
-			set_original_database_path = true;
-			StringCchCopyW(original_database_path, MAX_PATH_CHARS, exporter->ie_hint_path);
-			PathAppendW(original_database_path, L"Microsoft\\Windows\\WebCache");
+			is_original_database_path_set = true;
+			shell_copy_and_append_path(original_database_path, exporter->ie_hint_path, L"Microsoft\\Windows\\WebCache");
 		}
 
 		enum Container_Column_Index
@@ -1485,7 +1548,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			NUM_CONTAINER_COLUMNS = 4
 		};
 
-		const wchar_t* CONTAINER_COLUMN_NAMES[NUM_CONTAINER_COLUMNS] =
+		const wchar_t* const CONTAINER_COLUMN_NAMES[NUM_CONTAINER_COLUMNS] =
 		{
 			L"Name", 				// JET_coltypText		(10)
 			L"ContainerId",			// JET_coltypLongLong 	(15)
@@ -1493,50 +1556,59 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			L"SecureDirectories" 	// JET_coltypLongText 	(12)
 		};
 
-		JET_COLUMNDEF container_column_info[NUM_CONTAINER_COLUMNS];
+		// Get the necessary column IDs for the Containers table.
+		JET_COLUMNDEF container_column_info[NUM_CONTAINER_COLUMNS] = {};
 		for(size_t i = 0; i < NUM_CONTAINER_COLUMNS; ++i)
 		{
 			error_code = JetGetTableColumnInfoW(session_id, containers_table_id, CONTAINER_COLUMN_NAMES[i],
 												&container_column_info[i], sizeof(container_column_info[i]), JET_ColInfo);
 		}
 
+		// Move through the Containers table. This will tell us where each cache directory is located.
 		bool found_container_record = (JetMove(session_id, containers_table_id, JET_MoveFirst, 0) == JET_errSuccess);
 		while(found_container_record)
 		{
-			wchar_t container_name[256];
-			unsigned long actual_container_name_size;
+			// @Docs: "JET_coltypText: A fixed or variable length text column that can be up to 255 ASCII characters in length
+			// or 127 Unicode characters in length." - JET_COLTYP, Extensible Storage Engine Reference.
+			const size_t MAX_COLUMN_TYPE_TEXT_CHARS = 256;
+			wchar_t container_name[MAX_COLUMN_TYPE_TEXT_CHARS] = L"";
+			unsigned long actual_container_name_size = 0;
 			error_code = JetRetrieveColumn(	session_id, containers_table_id, container_column_info[IDX_NAME].columnid,
 											container_name, sizeof(container_name), &actual_container_name_size, 0, NULL);
 			size_t num_container_name_chars = actual_container_name_size / sizeof(wchar_t);
 
 			// Check if the container record belongs to the cache.
-			if(wcsncmp(container_name, L"Content", num_container_name_chars) == 0)
+			if(strings_are_at_most_equal(container_name, L"Content", num_container_name_chars))
 			{
-				JET_RETRIEVECOLUMN container_columns[NUM_CONTAINER_COLUMNS]; // "ContainerId", "Directory", and "SecureDirectories".
+				// Retrieve the "ContainerId", "Directory", and "SecureDirectories" columns.
+				JET_RETRIEVECOLUMN container_columns[NUM_CONTAINER_COLUMNS] = {};
 				for(size_t i = 0; i < NUM_CONTAINER_COLUMNS; ++i)
 				{
 					container_columns[i].columnid = container_column_info[i].columnid;
 					container_columns[i].pvData = NULL;
 					container_columns[i].cbData = 0;
-					container_columns[i].grbit = 0;
+					// Don't handle multi-valued columns (JET_bitRetrieveIgnoreDefault + sequence tag 1).
+					container_columns[i].grbit = JET_bitRetrieveIgnoreDefault;
 					container_columns[i].ibLongValue = 0;
 					container_columns[i].itagSequence = 1;
 				}
 
-				s64 container_id;
+				s64 container_id = -1;
 				container_columns[IDX_CONTAINER_ID].pvData = &container_id;
 				container_columns[IDX_CONTAINER_ID].cbData = sizeof(container_id);
 
-				wchar_t directory[MAX_PATH_CHARS];
+				wchar_t directory[MAX_PATH_CHARS] = L"";
 				container_columns[IDX_DIRECTORY].pvData = directory;
 				container_columns[IDX_DIRECTORY].cbData = sizeof(directory);
 
-				wchar_t secure_directories[NUM_CACHE_DIRECTORY_NAME_CHARS * MAX_NUM_CACHE_DIRECTORIES + 1];
+				wchar_t secure_directories[NUM_CACHE_DIRECTORY_NAME_CHARS * MAX_NUM_CACHE_DIRECTORIES + 1] = L"";
 				container_columns[IDX_SECURE_DIRECTORIES].pvData = secure_directories;
 				container_columns[IDX_SECURE_DIRECTORIES].cbData = sizeof(secure_directories);
 
-				// Skip retrieving the "Name" column and get only "ContainerId" onwards.
+				// Skip retrieving the "Name" column (we already got it above) and only get "ContainerId" onwards.
 				error_code = JetRetrieveColumns(session_id, containers_table_id, &container_columns[IDX_CONTAINER_ID], NUM_CONTAINER_COLUMNS - 1);
+				
+				// Check if we were able to retrieve every column.
 				bool retrieval_success = true;
 				for(size_t i = IDX_CONTAINER_ID; i < NUM_CONTAINER_COLUMNS; ++i)
 				{
@@ -1554,11 +1626,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				// enough information to properly export them.
 				if(retrieval_success)
 				{
-					// @Assert: The names of the directories that contain the cached files should have exactly this many characters.
-					_ASSERT( (wcslen(secure_directories) % NUM_CACHE_DIRECTORY_NAME_CHARS) == 0 );
+					// @Assert: The name of a cache directory should have exactly this many characters.
+					_ASSERT( (string_length(secure_directories) % NUM_CACHE_DIRECTORY_NAME_CHARS) == 0 );
 
-					size_t num_cache_directories = wcslen(secure_directories) / NUM_CACHE_DIRECTORY_NAME_CHARS;
-					wchar_t cache_directory_names[MAX_NUM_CACHE_DIRECTORIES][NUM_CACHE_DIRECTORY_NAME_CHARS + 1];
+					// Create an array of cache directory names (including the null terminator) to make future accesses easier.
+					size_t num_cache_directories = string_length(secure_directories) / NUM_CACHE_DIRECTORY_NAME_CHARS;
+					wchar_t cache_directory_names[MAX_NUM_CACHE_DIRECTORIES][NUM_CACHE_DIRECTORY_NAME_CHARS + 1] = {L""};
 					size_t cache_directory_name_size = NUM_CACHE_DIRECTORY_NAME_CHARS * sizeof(wchar_t);
 					for(size_t i = 0; i < num_cache_directories; ++i)
 					{
@@ -1567,8 +1640,9 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						cache_directory_names[i][NUM_CACHE_DIRECTORY_NAME_CHARS] = L'\0';
 					}
 
+					// Open each Cache table by building its name ("Container_<s64 id>") using the previously retrieved ID.
 					const size_t NUM_CACHE_TABLE_NAME_CHARS = 10 + MAX_INT64_CHARS;
-					wchar_t cache_table_name[NUM_CACHE_TABLE_NAME_CHARS]; // "Container_<s64 id>"
+					wchar_t cache_table_name[NUM_CACHE_TABLE_NAME_CHARS] = L"";
 					if(SUCCEEDED(StringCchPrintfW(cache_table_name, NUM_CACHE_TABLE_NAME_CHARS, L"Container_%I64d", container_id)))
 					{
 						JET_TABLEID cache_table_id = JET_tableidNil;
@@ -1578,11 +1652,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 							// >>>>
 							// >>>> START EXPORTING
 							// >>>>
-
-							if(error_code > 0)
-							{
-								log_print(LOG_WARNING, "Internet Explorer 10 to 11: Opened the cache table '%ls' with warning %ld.", cache_table_name, error_code);
-							}
 							
 							enum Cache_Column_Index
 							{
@@ -1599,7 +1668,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 								NUM_CACHE_COLUMNS = 10
 							};
 
-							const wchar_t* CACHE_COLUMN_NAMES[NUM_CACHE_COLUMNS] =
+							const wchar_t* const CACHE_COLUMN_NAMES[NUM_CACHE_COLUMNS] =
 							{
 								L"Filename", 		// JET_coltypLongText 		(12)
 								L"Url", 			// JET_coltypLongText 		(12)
@@ -1613,27 +1682,31 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 								L"AccessCount"		// JET_coltypUnsignedLong 	(14)
 							};
 
-							JET_COLUMNDEF cache_column_info[NUM_CACHE_COLUMNS];
+							// Get the necessary column IDs for each Cache table.
+							JET_COLUMNDEF cache_column_info[NUM_CACHE_COLUMNS] = {};
 							for(size_t i = 0; i < NUM_CACHE_COLUMNS; ++i)
 							{
 								error_code = JetGetTableColumnInfoW(session_id, cache_table_id, CACHE_COLUMN_NAMES[i],
 																	&cache_column_info[i], sizeof(cache_column_info[i]), JET_ColInfo);
 							}
 
+							// Move through each Cache table. This will give us all the information needed to export the cache.
 							bool found_cache_record = (JetMove(session_id, cache_table_id, JET_MoveFirst, 0) == JET_errSuccess);
 							while(found_cache_record)
 							{
-								JET_RETRIEVECOLUMN cache_columns[NUM_CACHE_COLUMNS];
+								JET_RETRIEVECOLUMN cache_columns[NUM_CACHE_COLUMNS] = {};
 
 								for(size_t i = 0; i < NUM_CACHE_COLUMNS; ++i)
 								{
 									cache_columns[i].columnid = cache_column_info[i].columnid;
 									cache_columns[i].pvData = NULL;
 									cache_columns[i].cbData = 0;
+									// Don't handle multi-valued columns (JET_bitRetrieveIgnoreDefault + sequence tag 1).
 									cache_columns[i].grbit = JET_bitRetrieveIgnoreDefault;
 									cache_columns[i].ibLongValue = 0;
 									cache_columns[i].itagSequence = 1;
 								}
+								// Retrieve the actual sizes for "Filename", "Url", and "ResponseHeaders" columns.
 								error_code = JetRetrieveColumns(session_id, cache_table_id, cache_columns, NUM_CACHE_COLUMNS);
 
 								unsigned long filename_size = cache_columns[IDX_FILENAME].cbActual;
@@ -1646,23 +1719,23 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 								cache_columns[IDX_URL].pvData = url;
 								cache_columns[IDX_URL].cbData = url_size;
 
-								s64 file_size;
+								s64 file_size = -1;
 								cache_columns[IDX_FILE_SIZE].pvData = &file_size;
 								cache_columns[IDX_FILE_SIZE].cbData = sizeof(file_size);
 
-								FILETIME last_modified_time_value;
+								FILETIME last_modified_time_value = {};
 								cache_columns[IDX_LAST_MODIFIED_TIME].pvData = &last_modified_time_value;
 								cache_columns[IDX_LAST_MODIFIED_TIME].cbData = sizeof(last_modified_time_value);
 
-								FILETIME creation_time_value;
+								FILETIME creation_time_value = {};
 								cache_columns[IDX_CREATION_TIME].pvData = &creation_time_value;
 								cache_columns[IDX_CREATION_TIME].cbData = sizeof(creation_time_value);
 								
-								FILETIME last_access_time_value;
+								FILETIME last_access_time_value = {};
 								cache_columns[IDX_LAST_ACCESS_TIME].pvData = &last_access_time_value;
 								cache_columns[IDX_LAST_ACCESS_TIME].cbData = sizeof(last_access_time_value);
 
-								FILETIME expiry_time_value;
+								FILETIME expiry_time_value = {};
 								cache_columns[IDX_EXPIRY_TIME].pvData = &expiry_time_value;
 								cache_columns[IDX_EXPIRY_TIME].cbData = sizeof(expiry_time_value);
 
@@ -1671,14 +1744,15 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 								cache_columns[IDX_HEADERS].pvData = headers;
 								cache_columns[IDX_HEADERS].cbData = headers_size;
 
-								u32 secure_directory_index;
+								u32 secure_directory_index = 0;
 								cache_columns[IDX_SECURE_DIRECTORY].pvData = &secure_directory_index;
 								cache_columns[IDX_SECURE_DIRECTORY].cbData = sizeof(secure_directory_index);
 
-								u32 access_count;
+								u32 access_count = 0;
 								cache_columns[IDX_ACCESS_COUNT].pvData = &access_count;
 								cache_columns[IDX_ACCESS_COUNT].cbData = sizeof(access_count);
 
+								// Retrieve the values for every column.
 								error_code = JetRetrieveColumns(session_id, cache_table_id, cache_columns, NUM_CACHE_COLUMNS);
 								for(size_t i = 0; i < NUM_CACHE_COLUMNS; ++i)
 								{
@@ -1692,40 +1766,43 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									}
 								}
 
+								// Handle the retrieved values.
 								{
-									wchar_t* decorated_filename = push_and_copy_to_arena(arena, filename_size, wchar_t, filename, filename_size);
-									decorated_filename;
+									wchar_t* decorated_filename = push_string_to_arena(arena, filename);
 									undecorate_path(filename);
+
 									wchar_t* file_extension = skip_to_file_extension(filename);
 
 									decode_url(url);
 
-									wchar_t cached_file_size[MAX_INT64_CHARS];
+									wchar_t cached_file_size[MAX_INT64_CHARS] = L"";
 									convert_s64_to_string(file_size, cached_file_size);
 
-									wchar_t last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
+									wchar_t last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = L"";
 									format_filetime_date_time(last_modified_time_value, last_modified_time);
 
-									wchar_t creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
+									wchar_t creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = L"";
 									format_filetime_date_time(creation_time_value, creation_time);
 
-									wchar_t last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
+									wchar_t last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = L"";
 									format_filetime_date_time(last_access_time_value, last_access_time);
 
-									wchar_t expiry_time[MAX_FORMATTED_DATE_TIME_CHARS];
+									wchar_t expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = L"";
 									format_filetime_date_time(expiry_time_value, expiry_time);
 
-									wchar_t* server_response = NULL;
+									wchar_t* response = NULL;
+									wchar_t* server = NULL;
 									wchar_t* cache_control = NULL;
 									wchar_t* pragma = NULL;
 									wchar_t* content_type = NULL;
 									wchar_t* content_length = NULL;
 									wchar_t* content_encoding = NULL;
 									parse_cache_headers(arena, headers, headers_size,
-														&server_response, &cache_control, &pragma,
+														&response, &server,
+														&cache_control, &pragma,
 														&content_type, &content_length, &content_encoding);
 
-									wchar_t num_hits[MAX_INT32_CHARS];
+									wchar_t num_hits[MAX_INT32_CHARS] = L"";
 									convert_u32_to_string(access_count, num_hits);
 
 									// @Format: The cache directory indexes stored in the database are one based.
@@ -1733,11 +1810,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									_ASSERT(secure_directory_index < num_cache_directories);
 									wchar_t* cache_directory = cache_directory_names[secure_directory_index];
 
-									wchar_t short_file_path[MAX_PATH_CHARS];
-									StringCchCopyW(short_file_path, MAX_PATH_CHARS, cache_directory);
-									PathAppendW(short_file_path, decorated_filename);
+									wchar_t short_file_path[MAX_PATH_CHARS] = L"";
+									shell_copy_and_append_path(short_file_path, cache_directory, decorated_filename);
 
-									// @Format: 
+									// @Hint: If we're exporting from a live machine, the absolute path stored in the database
+									// can be used directly. Otherwise, we'll use one of the two methods described in @Hint to
+									// determine the absolute path to the cached files.
 									wchar_t full_file_path[MAX_PATH_CHARS] = L"";
 
 									if(exporter->is_exporting_from_default_locations)
@@ -1746,11 +1824,10 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									}
 									else
 									{
-										if(!set_original_database_path)
+										if(!is_original_database_path_set)
 										{
-											StringCchCopyW(original_database_path, MAX_PATH_CHARS, directory);
-											PathAppendW(original_database_path, L"..\\..\\WebCache");
-											set_original_database_path = !string_is_empty(original_database_path);
+											shell_copy_and_append_path(original_database_path, directory, L"..\\..\\WebCache");
+											is_original_database_path_set = !string_is_empty(original_database_path);
 										}
 
 										wchar_t path_from_database_to_cache[MAX_PATH_CHARS] = L"";
@@ -1758,8 +1835,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 															original_database_path, FILE_ATTRIBUTE_DIRECTORY, // From this directory...
 															directory, FILE_ATTRIBUTE_DIRECTORY); // To this directory.
 
-										StringCchCopyW(full_file_path, MAX_PATH_CHARS, index_directory_path);
-										PathAppendW(full_file_path, path_from_database_to_cache);
+										shell_copy_and_append_path(full_file_path, index_directory_path, path_from_database_to_cache);
 									}
 
 									PathAppendW(full_file_path, short_file_path);
@@ -1771,7 +1847,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									{
 										{filename}, {url}, {file_extension}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
-										{server_response}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
+										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
 										{num_hits}, {short_file_path}, {is_file_missing}
 									};
 
@@ -1780,12 +1856,14 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 														full_file_path, url, filename);
 								}
 								
+								// Move to the next cache record.
 								found_cache_record = (JetMove(session_id, cache_table_id, JET_MoveNext, 0) == JET_errSuccess);
 							}
 
 							// >>>>
 							// >>>> FINISH EXPORTING
 							// >>>>
+
 							error_code = JetCloseTable(session_id, cache_table_id);
 							cache_table_id = JET_tableidNil;
 							if(error_code < 0)
@@ -1806,6 +1884,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				}
 			}
 
+			// Move to the next container record.
 			found_container_record = (JetMove(session_id, containers_table_id, JET_MoveNext, 0) == JET_errSuccess);
 		}
 

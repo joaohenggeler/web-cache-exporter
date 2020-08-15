@@ -459,6 +459,18 @@ bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional
 	else 							return wcscmp(str_1, str_2) == 0;
 }
 
+bool strings_are_at_most_equal(const char* str_1, const char* str_2, size_t max_num_chars, bool optional_case_insensitive)
+{
+	if(optional_case_insensitive) 	return _strnicmp(str_1, str_2, max_num_chars) == 0;
+	else 							return strncmp(str_1, str_2, max_num_chars) == 0;
+}
+
+bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_t max_num_chars, bool optional_case_insensitive)
+{
+	if(optional_case_insensitive) 	return _wcsnicmp(str_1, str_2, max_num_chars) == 0;
+	else 							return wcsncmp(str_1, str_2, max_num_chars) == 0;
+}
+
 // Checks if a string begins with a given prefix. This check is case insensitive.
 //
 // @Parameters:
@@ -667,6 +679,48 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 			return NULL;
 		}
 
+		return wide_string;
+	#endif
+}
+
+TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
+{
+	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
+	if(num_chars_required_wide == 0)
+	{
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a Wide string with the error code %lu.", GetLastError());
+		_ASSERT(false);
+		return NULL;
+	}
+
+	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
+	wchar_t* wide_string = push_arena(arena, size_required_wide, wchar_t);
+	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
+	{
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a Wide string with the error code %lu.", GetLastError());
+		_ASSERT(false);
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
+		if(size_required_ansi == 0)
+		{
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		char* ansi_string = push_arena(arena, size_required_ansi, char);
+		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
+		{
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		return ansi_string;
+	#else
 		return wide_string;
 	#endif
 }
@@ -1070,6 +1124,12 @@ bool simple_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, 
 {
 	return SUCCEEDED(StringCchCopy(result_path, num_result_path_chars, path_to_copy))
 			&& (simple_append_path(result_path, path_to_append, num_result_path_chars));
+}
+
+bool shell_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append)
+{
+	return SUCCEEDED(StringCchCopy(result_path, MAX_PATH_CHARS, path_to_copy))
+			&& (PathAppend(result_path, path_to_append) == TRUE);
 }
 
 static bool truncate_path_components(TCHAR* path)
@@ -1483,7 +1543,7 @@ bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_fil
 // In the debug builds, this address is picked in relation to a base address (see the debug constants at the top of this file).
 //
 // After being done with the file, this memory is unmapped using SAFE_UNMAP_VIEW_OF_FILE().
-void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size)
+void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool read_only)
 {
 	void* mapped_memory = NULL;
 	*result_file_size = 0;
@@ -1499,15 +1559,18 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size)
 			*result_file_size = file_size;
 			if(file_size > 0)
 			{
-				HANDLE mapping_handle = CreateFileMapping(file_handle, NULL, PAGE_READONLY, 0, 0, NULL);
+				DWORD desired_protection = (read_only) ? (PAGE_READONLY) : (PAGE_WRITECOPY);
+				HANDLE mapping_handle = CreateFileMapping(file_handle, NULL, desired_protection, 0, 0, NULL);
 
 				if(mapping_handle != NULL)
 				{
+					DWORD desired_access = (read_only) ? (FILE_MAP_READ) : (FILE_MAP_COPY);
+
 					#ifdef DEBUG
-						mapped_memory = MapViewOfFileEx(mapping_handle, FILE_MAP_READ, 0, 0, 0, DEBUG_MEMORY_MAPPING_BASE_ADDRESS);
+						mapped_memory = MapViewOfFileEx(mapping_handle, desired_access, 0, 0, 0, DEBUG_MEMORY_MAPPING_BASE_ADDRESS);
 						DEBUG_MEMORY_MAPPING_BASE_ADDRESS = advance_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 					#else
-						mapped_memory = MapViewOfFile(mapping_handle, FILE_MAP_READ, 0, 0, 0);
+						mapped_memory = MapViewOfFile(mapping_handle, desired_access, 0, 0, 0);
 					#endif
 
 					if(mapped_memory == NULL)
@@ -1550,10 +1613,11 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size)
 // 
 // @Returns: See memory_map_entire_file(2). In addition to using the SAFE_UNMAP_VIEW_OF_FILE() function to unmap this memory,
 // the resulting file handle should also be closed with safe_close_handle().
-void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size)
+void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool read_only)
 {
+	DWORD desired_access = (read_only) ? (GENERIC_READ) : (GENERIC_READ | GENERIC_WRITE);
 	HANDLE file_handle = CreateFile(file_path,
-									GENERIC_READ,
+									desired_access,
 									0, // @Docs: The Win32 API Reference recommends exclusive access (though not required).
 									NULL,
 									OPEN_EXISTING,
@@ -1562,7 +1626,7 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 
 	*result_file_handle = file_handle;
 
-	return memory_map_entire_file(file_handle, result_file_size);
+	return memory_map_entire_file(file_handle, result_file_size, read_only);
 }
 
 // Reads a given number of bytes from the beginning of a file.
@@ -1943,7 +2007,7 @@ void close_csv_file(HANDLE* csv_file_handle)
 
 // Writes the header to a CSV file using UTF-8 as the character encoding. This header string is built using the Csv_Type enumeration
 // values that correspond to each column. These values will be separated by commas.
-// For example: the array {CSV_FILENAME, CSV_URL, CSV_SERVER_RESPONSE} would write the string "Filename, URL, Server Response".
+// For example: the array {CSV_FILENAME, CSV_URL, CSV_RESPONSE} would write the string "Filename, URL, Server Response".
 // This header is only added to empty CSV files. If the file already contains text, this function does nothing.
 //
 // @Parameters:
@@ -2140,6 +2204,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 	#define NtQuerySystemInformation dll_nt_query_system_information
 
 	// Dynamically load any necessary functions from Ntdll.dll. After being called, the following functions may used:
+	//
 	// - NtQuerySystemInformation()
 	//
 	// @Parameters: None.
@@ -2210,6 +2275,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 	#define GetOverlappedResultEx dll_get_overlapped_result_ex
 
 	// Dynamically load any necessary functions from Kernel32.dll. After being called, the following functions may used:
+	//
 	// - GetOverlappedResultEx()
 	//
 	// @Parameters: None.

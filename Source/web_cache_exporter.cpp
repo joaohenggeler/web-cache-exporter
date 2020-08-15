@@ -4,18 +4,9 @@
 #include "internet_explorer.h"
 #include "shockwave_plugin.h"
 
-/*void resolve_cache_version_output_paths(Exporter* exporter, u32 cache_version, TCHAR* cache_version_to_string[])
-{
-	get_full_path_name(exporter->output_path);
-
-	exporter->cache_version = cache_version;
-
-	StringCchCopy(exporter->output_copy_path, MAX_PATH_CHARS, exporter->output_path);
-	PathAppend(exporter->output_copy_path, cache_version_to_string[cache_version]);
-
-	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
-	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
-}*/
+/*
+	@TODO
+*/
 
 void resolve_exporter_output_paths_and_create_csv_file(Exporter* exporter, const TCHAR* cache_identifier, const Csv_Type column_types[], size_t num_columns)
 {
@@ -261,9 +252,9 @@ static size_t get_temporary_memory_size_for_os_version(Exporter* exporter)
 
 static void clean_up(Exporter* exporter)
 {
-	if(exporter->was_temporary_directory_created)
+	if(exporter->was_temporary_exporter_directory_created)
 	{
-		exporter->was_temporary_directory_created = !delete_directory_and_contents(exporter->exporter_temporary_path);
+		exporter->was_temporary_exporter_directory_created = !delete_directory_and_contents(exporter->exporter_temporary_path);
 	}
 
 	#ifndef BUILD_9X
@@ -287,7 +278,8 @@ int _tmain(int argc, TCHAR* argv[])
 	//ZeroMemory(&exporter, sizeof(exporter));	
 
 	create_log_file(TEXT("Web-Cache-Exporter.log"));
-	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.", BUILD_TARGET, BUILD_VERSION, BUILD_MODE);
+	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.",
+							EXPORTER_BUILD_TARGET, EXPORTER_BUILD_VERSION, EXPORTER_BUILD_MODE);
 
 	if(argc <= 1)
 	{
@@ -383,7 +375,7 @@ int _tmain(int argc, TCHAR* argv[])
 	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0
 		&& create_temporary_directory(exporter.windows_temporary_path, exporter.exporter_temporary_path))
 	{
-		exporter.was_temporary_directory_created = true;
+		exporter.was_temporary_exporter_directory_created = true;
 		log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.exporter_temporary_path);
 	}
 	else
@@ -419,7 +411,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Executable Path: '%s'", exporter.executable_path);
 	log_print(LOG_NONE, "- Exporter Temporary Path: '%s'", exporter.exporter_temporary_path);
-	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", (exporter.was_temporary_directory_created) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", (exporter.was_temporary_exporter_directory_created) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Windows Temporary Path: '%s'", exporter.windows_temporary_path);
 	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);

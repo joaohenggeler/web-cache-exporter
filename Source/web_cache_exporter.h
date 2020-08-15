@@ -1,27 +1,6 @@
 #ifndef WEB_CACHE_EXPORTER_H
 #define WEB_CACHE_EXPORTER_H
 
-// Passed by the Build.bat batch file.
-#ifndef BUILD_VERSION
-	#define BUILD_VERSION "UNKNOWN"
-#endif
-
-#ifdef DEBUG
-	#define BUILD_MODE "debug"
-#else
-	#define BUILD_MODE "release"
-#endif
-
-#ifdef BUILD_9X
-	#define BUILD_TARGET "9x-x86-32"
-#else
-	#ifdef BUILD_32_BIT
-		#define BUILD_TARGET "NT-x86-32"
-	#else
-		#define BUILD_TARGET "NT-x86-64"
-	#endif
-#endif
-
 #ifdef BUILD_9X
 	// Target Windows 98 and ME (9x, ANSI).
 	// Minimum Windows Version: Windows 98 (release version 4.10 -> 0x0410).
@@ -83,6 +62,29 @@
 
 #include <crtdbg.h>
 
+// Passed by the Build.bat batch file.
+#ifdef BUILD_VERSION
+	const char* const EXPORTER_BUILD_VERSION = BUILD_VERSION;
+#else
+	const char* const EXPORTER_BUILD_VERSION = "Unknown";
+#endif
+
+#ifdef DEBUG
+	const char* const EXPORTER_BUILD_MODE = "debug";
+#else
+	const char* const EXPORTER_BUILD_MODE = "release";
+#endif
+
+#ifdef BUILD_9X
+	const char* const EXPORTER_BUILD_TARGET = "9x-x86-32";
+#else
+	#ifdef BUILD_32_BIT
+		const char* const EXPORTER_BUILD_TARGET = "NT-x86-32";
+	#else
+		const char* const EXPORTER_BUILD_TARGET = "NT-x86-64";
+	#endif
+#endif
+
 typedef __int8 s8;
 typedef __int16 s16;
 typedef __int32 s32;
@@ -131,7 +133,7 @@ struct Exporter
 	Arena temporary_arena;
 
 	TCHAR executable_path[MAX_PATH_CHARS];
-	bool was_temporary_directory_created;
+	bool was_temporary_exporter_directory_created;
 	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
 	
 	TCHAR windows_temporary_path[MAX_PATH_CHARS];

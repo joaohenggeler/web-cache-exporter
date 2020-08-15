@@ -90,11 +90,19 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
 
 size_t string_size(const char* str);
 size_t string_size(const wchar_t* str);
+
 size_t string_length(const TCHAR* str);
+
 bool string_is_empty(const TCHAR* str);
+
 bool strings_are_equal(const char* str_1, const char* str_2, bool optional_case_insensitive = false);
 bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional_case_insensitive = false);
+
+bool strings_are_at_most_equal(const char* str_1, const char* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
+bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
+
 bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_case_insensitive = false);
+
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
 
@@ -108,6 +116,7 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 TCHAR* skip_to_file_extension(TCHAR* str);
 
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
+TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -154,7 +163,7 @@ const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 #else
 	#define EXTENDED_PATH_PREFIX L"\\\\?\\"
 	const u32 NUM_EXTENDED_PATH_PREFIX_CHARS = (u32) wcslen(EXTENDED_PATH_PREFIX);
-	const u32 MAX_EXTENDED_PATH_CHARS = MAX_PATH_CHARS;
+	const u32 MAX_EXTENDED_PATH_CHARS = MAX_PATH_CHARS + 4;
 #endif
 
 _STATIC_ASSERT(MAX_EXTENDED_PATH_CHARS <= STRSAFE_MAX_CCH);
@@ -166,6 +175,7 @@ bool simple_append_path(TCHAR* result_path, const TCHAR* path_to_append,
 						size_t num_result_path_chars = MAX_PATH_CHARS);
 bool simple_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append,
 								 size_t num_result_path_chars = MAX_PATH_CHARS);
+bool shell_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -205,8 +215,8 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
 bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
 
-void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result);
-void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size);
+void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool read_only = true);
+void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool read_only = true);
 bool read_first_file_bytes(const TCHAR* path, void* file_buffer, u32 num_bytes_to_read);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
@@ -309,23 +319,27 @@ enum Csv_Type
 	CSV_LAST_ACCESS_TIME = 8,
 	CSV_EXPIRY_TIME = 9,
 
-	CSV_SERVER_RESPONSE = 10,
-	CSV_CACHE_CONTROL = 11,
-	CSV_PRAGMA = 12,
-	CSV_CONTENT_TYPE = 13,
-	CSV_CONTENT_LENGTH = 14,
-	CSV_CONTENT_ENCODING = 15,
+	CSV_RESPONSE = 10,
+	CSV_SERVER = 11,
+	CSV_CACHE_CONTROL = 12,
+	CSV_PRAGMA = 13,
+	CSV_CONTENT_TYPE = 14,
+	CSV_CONTENT_LENGTH = 15,
+	CSV_CONTENT_ENCODING = 16,
 
-	CSV_LOCATION_ON_CACHE = 16,
-	CSV_MISSING_FILE = 17,
+	CSV_LOCATION_ON_CACHE = 17,
+	CSV_MISSING_FILE = 18,
+
+	CSV_CUSTOM_FILE_GROUP = 19,
+	CSV_CUSTOM_URL_GROUP = 20,
 	
 	// Internet Explorer specific.
-	CSV_HITS = 18,
+	CSV_HITS = 21,
 	
 	// Shockwave Plugin specific.
-	CSV_DIRECTOR_FILE_TYPE = 19,
+	CSV_DIRECTOR_FILE_TYPE = 22,
 
-	NUM_CSV_TYPES = 20
+	NUM_CSV_TYPES = 23
 };
 
 // An array that maps the previous values to ASCII strings.
@@ -337,8 +351,9 @@ const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
-	"Server Response", "Cache-Control", "Pragma", "Content-Type", "Content-Length", "Content-Encoding",
+	"Response", "Server", "Cache-Control", "Pragma", "Content-Type", "Content-Length", "Content-Encoding",
 	"Location On Cache", "Missing File",
+	"Custom File Group", "Custom URL Group",
 	"Hits",
 	"Director File Type"
 };

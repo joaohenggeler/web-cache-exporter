@@ -334,7 +334,8 @@ int _tmain(int argc, TCHAR* argv[])
 			log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
 		}
 
-		size_t permanent_memory_size = get_total_group_files_size(&exporter);
+		u32 num_groups = 0;
+		size_t permanent_memory_size = get_total_group_files_size(&exporter, &num_groups);
 		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the permanent memory arena.", permanent_memory_size);
 
 		if(!create_arena(&exporter.permanent_arena, permanent_memory_size))
@@ -357,10 +358,9 @@ int _tmain(int argc, TCHAR* argv[])
 			clean_up(&exporter);
 			return 1;
 		}
-	}
 
-	{
-		load_all_group_files(&exporter);
+		log_print(LOG_INFO, "Startup: Loading %I32u groups.", num_groups);
+		load_all_group_files(&exporter, num_groups);
 	}
 
 	#ifndef BUILD_9X

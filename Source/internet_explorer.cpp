@@ -525,6 +525,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file_size < sizeof(Internet_Explorer_Index_Header))
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is smaller than the file format's header. No files will be exported from this cache.");
+		SAFE_UNMAP_VIEW_OF_FILE(index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -539,6 +540,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		signature_string[NUM_SIGNATURE_CHARS] = '\0';
 
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file starts with an invalid signature: '%hs'. No files will be exported from this cache.", signature_string);
+		SAFE_UNMAP_VIEW_OF_FILE(index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -547,6 +549,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file_size != header->file_size)
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is different than the size specified in its header. No files will be exported from this cache.");
+		SAFE_UNMAP_VIEW_OF_FILE(index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -563,6 +566,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	else
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was opened successfully but its version (%hc.%hc) is not supported. No files will be exported from this cache.", major_version, minor_version);
+		SAFE_UNMAP_VIEW_OF_FILE(index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;	

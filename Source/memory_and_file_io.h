@@ -39,8 +39,9 @@ bool destroy_arena(Arena* arena);
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-//#define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
-//#define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
+#define WHILE_TRUE(...) for(;;)
+#define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
+#define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
 void* advance_bytes(void* pointer, size_t num_bytes);

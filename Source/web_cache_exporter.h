@@ -115,7 +115,9 @@ const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 	TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
 };
 
+struct Exporter;
 #include "memory_and_file_io.h"
+#include "custom_groups.h"
 struct Exporter
 {
 	bool should_copy_files;
@@ -131,6 +133,8 @@ struct Exporter
 
 	Arena permanent_arena;
 	Arena temporary_arena;
+
+	Custom_Groups* custom_groups;
 
 	TCHAR executable_path[MAX_PATH_CHARS];
 	bool was_temporary_exporter_directory_created;

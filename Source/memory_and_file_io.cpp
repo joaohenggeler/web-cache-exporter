@@ -1147,7 +1147,7 @@ static bool truncate_path_components(TCHAR* path)
 		_ASSERT(false);
 	}
 
-	for(;;)
+	WHILE_TRUE()
 	{
 		bool is_end_of_string = (*path == TEXT('\0'));
 

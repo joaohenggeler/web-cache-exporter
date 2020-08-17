@@ -566,7 +566,7 @@ static bool convert_hexadecimal_char_to_integer(TCHAR hex_char, u8* result_integ
 	}
 	else
 	{
-		_ASSERT(false);
+		log_print(LOG_ERROR, "Convert Hexadecimal Character To Integer: The character '%c' (%hhd) cannot be converted into an integer.", hex_char, (char) hex_char);
 	}
 
 	return success;
@@ -679,48 +679,6 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 			return NULL;
 		}
 
-		return wide_string;
-	#endif
-}
-
-TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
-{
-	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
-	if(num_chars_required_wide == 0)
-	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a Wide string with the error code %lu.", GetLastError());
-		_ASSERT(false);
-		return NULL;
-	}
-
-	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
-	wchar_t* wide_string = push_arena(arena, size_required_wide, wchar_t);
-	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
-	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a Wide string with the error code %lu.", GetLastError());
-		_ASSERT(false);
-		return NULL;
-	}
-
-	#ifdef BUILD_9X
-		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
-		if(size_required_ansi == 0)
-		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
-			_ASSERT(false);
-			return NULL;
-		}
-
-		char* ansi_string = push_arena(arena, size_required_ansi, char);
-		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
-		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
-			_ASSERT(false);
-			return NULL;
-		}
-
-		return ansi_string;
-	#else
 		return wide_string;
 	#endif
 }

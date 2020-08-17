@@ -4,8 +4,8 @@
 enum Group_Type
 {
 	GROUP_NONE = 0,
-	GROUP_FILE_GROUP = 1,
-	GROUP_URL_GROUP = 2
+	GROUP_FILE = 1,
+	GROUP_URL = 2
 };
 
 enum List_Type
@@ -19,6 +19,19 @@ enum List_Type
 	LIST_DOMAINS = 4
 };
 
+struct File_Signature
+{
+	u32 num_bytes;
+	u8* bytes;
+	bool* is_wildcard;
+};
+
+struct Domain
+{
+	TCHAR* host;
+	TCHAR* path;
+};
+
 struct Group
 {
 	Group_Type type;
@@ -28,6 +41,9 @@ struct Group
 	{
 		struct
 		{
+			u32 num_file_signatures;
+			File_Signature** file_signatures;
+
 			u32 num_mime_types;
 			TCHAR** mime_types;
 
@@ -38,7 +54,7 @@ struct Group
 		struct
 		{
 			u32 num_domains;
-			TCHAR** domains;
+			Domain** domains;
 		} url_info;
 	};
 };

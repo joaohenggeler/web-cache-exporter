@@ -117,7 +117,6 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 TCHAR* skip_to_file_extension(TCHAR* str);
 
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
-TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>

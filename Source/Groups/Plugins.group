@@ -1,0 +1,319 @@
+; This is a comment.
+
+BEGIN_FILE_GROUP Cabinet
+
+	BEGIN_FILE_SIGNATURES
+		; "MSCF"
+		4D 53 43 46
+	END
+
+	BEGIN_MIME_TYPES
+		application/vnd.ms-cab-compressed
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		cab
+	END
+
+END
+
+BEGIN_FILE_GROUP Cult3D
+
+	BEGIN_FILE_SIGNATURES
+		; "C3DF"
+		43 33 44 46
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-cult3d-object
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		co
+	END
+
+END
+
+BEGIN_FILE_GROUP Viscape
+
+	BEGIN_FILE_SIGNATURES
+		; "SVR"
+		53 56 52
+	END
+
+	BEGIN_MIME_TYPES
+		x-world/x-vrt
+		x-world/x-svr
+		x-world/x-xvr
+
+		application/vnd.superscape.vislite
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		vrt svr xvr
+		ssv
+	END
+
+END
+
+BEGIN_FILE_GROUP Hypercosm
+
+	BEGIN_FILE_SIGNATURES
+		; "Hypercosm3D"
+		48 79 70 65 72 63 6F 73 6D 33 44
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-hypercosm
+		; application/x-hypercosm
+		; application/x-Hypercosm-3D-Applet
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		hcvm
+	END
+
+END
+
+BEGIN_FILE_GROUP Vitalize
+
+	BEGIN_FILE_SIGNATURES
+		; "VTZ "
+		56 54 5A 20
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-cnc
+		application/x-tgf
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		ccn
+	END
+
+END
+
+BEGIN_FILE_GROUP Unity
+
+	BEGIN_FILE_SIGNATURES
+		; "UnityWeb"
+		55 6E 69 74 79 57 65 62
+	END
+
+	BEGIN_MIME_TYPES
+		application/vnd.unity
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		unity3d
+	END
+
+END
+
+BEGIN_FILE_GROUP Authorware
+
+	BEGIN_MIME_TYPES
+		application/x-authorware
+		; application/x-authorware-bin
+		; application/x-authorware-map
+		; application/x-authorware-seg
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		aab aam aas
+	END
+
+END
+
+BEGIN_FILE_GROUP 3D Groove GX
+
+	BEGIN_FILE_EXTENSIONS
+		grv
+	END
+
+END
+
+BEGIN_FILE_GROUP Silverlight
+
+	BEGIN_MIME_TYPES
+		application/x-silverlight
+		; application/x-silverlight-app
+		; application/x-silverlight
+		; application/x-silverlight-2
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		xap
+		; scr
+	END
+
+END
+
+BEGIN_FILE_GROUP Screensaver
+
+	BEGIN_FILE_EXTENSIONS
+		scr
+	END
+
+END
+
+; Virtools / 3D Life Player
+BEGIN_FILE_GROUP 3DVIA
+
+	BEGIN_FILE_SIGNATURES
+		; "Nemo Fi"
+		4E 65 6D 6F 20 46 69
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-virtools
+		application/x-nemo
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		cmo vmo nmo nms
+	END
+
+END
+
+BEGIN_FILE_GROUP Flash
+
+	BEGIN_FILE_SIGNATURES
+		; "FWS" (uncompressed)
+		46 57 53
+		; "CWS" (ZLIB compressed)
+		43 57 53
+		; "ZWS" (LZMA compressed)
+		5A 57 53
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-shockwave-flash
+		application/vnd.adobe.flash-movie
+		application/futuresplash
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		swf spl
+	END
+
+END
+
+BEGIN_FILE_GROUP Shockwave
+
+	BEGIN_FILE_SIGNATURES
+
+		; __ matches any byte.
+		
+		; "RIFX____MV93" (Director/Protected Movie or Cast - Big Endian)
+		52 49 46 58 __ __ __ __ 4D 56 39 33
+		
+		; "XFIR____39VM" (Director/Protected Movie or Cast - Little Endian)
+		58 46 49 52 __ __ __ __ 33 39 56 4D
+
+		; "RIFX____FGDM" (Shockwave Movie - Big Endian)
+		52 49 46 58 __ __ __ __ 46 47 44 4D
+
+		; "XFIR____MDGF" (Shockwave Movie - Little Endian)
+		58 46 49 52 __ __ __ __ 4D 44 47 46
+
+		; "RIFX____FGDC" (Shockwave Cast - Big Endian)
+		52 49 46 58 __ __ __ __ 46 47 44 43
+
+		; "XFIR____CDGF" (Shockwave Cast - Little Endian)
+		58 46 49 52 __ __ __ __ 43 44 47 46
+
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-director
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		dir dxr dcr
+		cst cxt cct
+		swa w3d
+	END
+
+END
+
+BEGIN_FILE_GROUP Java
+
+	BEGIN_FILE_SIGNATURES
+		; ☕
+		CA FE BA BE
+	END
+
+	; Be careful not to shorten these MIME types in a way that includes JavaScript files.
+	BEGIN_MIME_TYPES
+		application/x-java-applet
+		application/x-java-bean
+		application/x-java-vm
+		application/java-vm
+		application/java-archive
+
+		application/x-java-jnlp-file
+
+		application/java-serialized-object
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		class jar
+		jnlp
+		ser
+		djr
+	END
+
+END
+
+BEGIN_FILE_GROUP VRML
+
+	BEGIN_FILE_SIGNATURES
+		; "#VRML V" to match "#VRML V1.0 ascii" (VRML 1.0) and "#VRML V2.0 utf8" (VRML97)
+		23 56 52 4D 4C 20 56
+	END
+
+	BEGIN_MIME_TYPES
+		x-world/x-vrml
+		model/vrml
+		application/x-vrml
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		wrl wrz
+		; wrl.gz
+	END
+
+END
+
+BEGIN_FILE_GROUP MIDI
+
+	BEGIN_FILE_SIGNATURES
+		; "MThd"
+		4D 54 68 64
+	END
+
+	BEGIN_MIME_TYPES
+		audio/midi audio/x-midi
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		mid midi
+	END
+
+END
+
+BEGIN_URL_GROUP Cartoon Network
+
+	; Comment inside URL group.
+
+	BEGIN_DOMAINS
+		; Matches cartoonnetwork.com, www.cartoonnetwork.com, and i.cartoonnetwork.com
+		cartoonnetwork.com
+		; Matches i.cdn.turner.com/toon/* and ht.cdn.turner.com/toon/*
+		turner.com/toon
+		; Matches awesomehouseparty.com, i.awesomehouseparty.com, and www.awesomehouseparty.com
+		awesomehouseparty.com
+	END
+
+END

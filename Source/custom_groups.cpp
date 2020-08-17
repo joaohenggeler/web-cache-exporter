@@ -4,13 +4,120 @@
 
 static const TCHAR* GROUP_FILES_DIRECTORY = TEXT("Groups");
 static const TCHAR* GROUP_FILES_SEARCH_PATH = TEXT("Groups\\*.group");
+
+static const char COMMENT = ';';
 static const char* LINE_DELIMITERS = "\r\n";
 static const char* TOKEN_DELIMITERS = " \t";
+static const char* BEGIN_FILE_GROUP = "BEGIN_FILE_GROUP";
+static const char* BEGIN_URL_GROUP = "BEGIN_URL_GROUP";
+static const char* END_GROUP = "END";
+
+static const char* BEGIN_FILE_SIGNATURES = "BEGIN_FILE_SIGNATURES";
+static const TCHAR* BYTE_DELIMITERS = TEXT(" ");
+static const char* BEGIN_MIME_TYPES = "BEGIN_MIME_TYPES";
+static const char* BEGIN_FILE_EXTENSIONS = "BEGIN_FILE_EXTENSIONS";
+static const char* BEGIN_DOMAINS = "BEGIN_DOMAINS";
+static const TCHAR* URL_PATH_DELIMITERS = TEXT("/");
+
+static TCHAR* copy_utf_8_string_to_tchar(Arena* permanent_arena, Arena* temporary_arena, const char* utf_8_string)
+{
+	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
+	if(num_chars_required_wide == 0)
+	{
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a Wide string with the error code %lu.", GetLastError());
+		_ASSERT(false);
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		Arena* wide_string_arena = temporary_arena;
+	#else
+		Arena* wide_string_arena = permanent_arena;
+		temporary_arena;
+	#endif
+
+	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
+	wchar_t* wide_string = push_arena(wide_string_arena, size_required_wide, wchar_t);
+	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
+	{
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a Wide string with the error code %lu.", GetLastError());
+		_ASSERT(false);
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
+		if(size_required_ansi == 0)
+		{
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		char* ansi_string = push_arena(permanent_arena, size_required_ansi, char);
+		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
+		{
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		return ansi_string;
+	#else
+		return wide_string;
+	#endif
+}
+
+static TCHAR* skip_to_end_of_string(TCHAR* str)
+{
+	while(*str != TEXT('\0')) ++str;
+	return str;
+}
+
+static TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings)
+{
+	TCHAR** string_array = push_arena(arena, num_strings * sizeof(TCHAR*), TCHAR*);
+
+	for(u32 i = 0; i < num_strings; ++i)
+	{
+		string_array[i] = first_string;
+		first_string = skip_to_end_of_string(first_string);
+		++first_string;
+	}
+
+	return string_array;
+}
+
+static u32 count_tokens_delimited_by_spaces(TCHAR* str)
+{
+	u32 count = 0;
+
+	bool was_previously_whitespace = true;
+	while(*str != TEXT('\0'))
+	{
+		if(*str == TEXT(' '))
+		{
+			was_previously_whitespace = true;
+		}
+		else
+		{
+			if(was_previously_whitespace)
+			{
+				++count;
+			}
+			was_previously_whitespace = false;
+		}
+
+		++str;
+	}
+
+	return count;
+}
 
 size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 {
 	size_t total_file_size = 0;
-	u32 num_groups = 0;
+	u32 total_num_groups = 0;
 
 	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
 	shell_copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
@@ -19,9 +126,10 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 	HANDLE search_handle = FindFirstFile(search_path, &file_find_data);
 	bool found_file = search_handle != INVALID_HANDLE_VALUE;
 
+	// Find each group file on disk and keep track of their total file disk and number of groups.
 	while(found_file)
 	{
-		// Only handle files (skip directories).
+		// Skip directories.
 		if((file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
 		{
 			#ifdef BUILD_32_BIT
@@ -52,10 +160,10 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 					char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
 					if(group_type != NULL && group_name != NULL)
 					{
-						if(strings_are_equal(group_type, "BEGIN_FILE_GROUP")
-						|| strings_are_equal(group_type, "BEGIN_URL_GROUP"))
+						if(strings_are_equal(group_type, BEGIN_FILE_GROUP)
+						|| strings_are_equal(group_type, BEGIN_URL_GROUP))
 						{
-							++num_groups;
+							++total_num_groups;
 						}
 					}
 
@@ -72,17 +180,31 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 
 	safe_find_close(&search_handle);
 
-	*result_num_groups = num_groups;
-	return sizeof(Custom_Groups) + MAX(num_groups - 1, 0) * sizeof(Group) + total_file_size * sizeof(TCHAR);
+	*result_num_groups = total_num_groups;
+	return sizeof(Custom_Groups) + MAX(total_num_groups - 1, 0) * sizeof(Group) + total_file_size * sizeof(TCHAR);
+}
+
+static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* temporary_arena,
+											char* list_line, const char* token_delimiters,
+											TCHAR** token_strings, u32* token_counter)
+{
+	if(*token_strings == NULL) *token_strings = push_arena(permanent_arena, 0, TCHAR);
+
+	char* remaining_tokens = NULL;
+	char* token = strtok_s(list_line, token_delimiters, &remaining_tokens);
+	while(token != NULL)
+	{
+		++(*token_counter);
+		copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, token);
+		token = strtok_s(NULL, token_delimiters, &remaining_tokens);
+	}
 }
 
 void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 					 const TCHAR* file_path, Group* groups, u32* num_processed_groups)
 {
-	permanent_arena;
-	temporary_arena;
-
-	log_print(LOG_INFO, "Load Group File: Loading file at '%s'.", file_path);
+	TCHAR* group_filename = PathFindFileName(file_path);
+	log_print(LOG_INFO, "Load Group File: Loading the group '%s'.", group_filename);
 
 	HANDLE group_file_handle = INVALID_HANDLE_VALUE;
 	u64 group_file_size = 0;
@@ -90,7 +212,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 	
 	if(group_file == NULL)
 	{
-		log_print(LOG_ERROR, "Load Group File: Failed to load '%s'.", file_path);
+		log_print(LOG_ERROR, "Load Group File: Failed to load the group '%s'.", group_filename);
 		safe_close_handle(&group_file_handle);
 		return;
 	}
@@ -99,122 +221,300 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 	char* line = strtok_s(group_file, LINE_DELIMITERS, &remaining_lines);
 
 	Group_Type current_group_type = GROUP_NONE;
+	// Keep track of which group we're loading data to.
+	Group* group = NULL;
+
 	List_Type current_list_type = LIST_NONE;
-	u32 current_group_index = 0;
+	// Keep track of the strings that are loaded from each list type. These are kept contiguously in memory, so this address points
+	// to the first string.
+	// These are set back to NULL after processing their respective list type.
+	u32 num_file_signatures = 0;
+	TCHAR* file_signature_strings = NULL;
+	TCHAR* mime_type_strings = NULL;
+	TCHAR* file_extension_strings = NULL;
+	u32 num_domains = 0;
+	TCHAR* domain_strings = NULL;
 
 	while(line != NULL)
 	{
 		line = skip_leading_whitespace(line);
 
-		if(*line == ';')
+		if(*line == COMMENT)
 		{
 			// Skip comments.
 		}
-		else if(current_list_type != LIST_NONE && strings_are_equal(line, "END"))
+		// Reached the end of a list. Aggregate and perform any last operations on the data before moving on to the next list or group.
+		else if(current_list_type != LIST_NONE && strings_are_equal(line, END_GROUP))
 		{
-			current_list_type = LIST_NONE;	
+			switch(current_list_type)
+			{
+				case(LIST_FILE_SIGNATURES):
+				{
+					File_Signature** file_signatures = push_arena(permanent_arena, num_file_signatures * sizeof(File_Signature*), File_Signature*);
+					
+					for(u32 i = 0; i < num_file_signatures; ++i)
+					{
+						++(group->file_info.num_file_signatures);
+						File_Signature* signature = push_arena(permanent_arena, sizeof(File_Signature), File_Signature);
+
+						u32 num_bytes = count_tokens_delimited_by_spaces(file_signature_strings);
+						u8* bytes = push_arena(permanent_arena, num_bytes * sizeof(u8), u8);
+						bool* is_wildcard = push_arena(permanent_arena, num_bytes * sizeof(bool), bool);
+
+						TCHAR* next_file_extension_string = skip_to_end_of_string(file_signature_strings);
+						++next_file_extension_string;
+
+						TCHAR* remaining_bytes = NULL;
+						TCHAR* byte_string = _tcstok_s(file_signature_strings, BYTE_DELIMITERS, &remaining_bytes);
+						u32 byte_idx = 0;
+						while(byte_string != NULL)
+						{
+							if(byte_idx >= num_bytes)
+							{
+								_ASSERT(false);
+								break;
+							}
+
+							if(strings_are_equal(byte_string, TEXT("__")))
+							{
+								is_wildcard[byte_idx] = true;
+							}
+							else if(convert_hexadecimal_string_to_byte(byte_string, &bytes[byte_idx]))
+							{
+								is_wildcard[byte_idx] = false;
+							}
+							else
+							{
+								log_print(LOG_ERROR, "Load Group File: The byte '%s' cannot be converted into a numeric value. The file signature number %I32u in the group '%s' will be skipped.", byte_string, i+1, group->name);
+								num_bytes = 0;
+								bytes = NULL;
+								is_wildcard = NULL;
+								ZeroMemory(bytes, num_bytes * sizeof(u8));
+								ZeroMemory(is_wildcard, num_bytes * sizeof(bool));
+								break;
+							}
+
+							byte_string = _tcstok_s(NULL, BYTE_DELIMITERS, &remaining_bytes);
+							++byte_idx;
+						}
+
+						signature->num_bytes = num_bytes;
+						signature->bytes = bytes;
+						signature->is_wildcard = is_wildcard;
+						file_signatures[i] = signature;
+
+						file_signature_strings = next_file_extension_string;
+					}
+
+					group->file_info.file_signatures = file_signatures;
+
+					num_file_signatures = 0;
+					file_signature_strings = NULL;
+				} break;
+
+				case(LIST_MIME_TYPES):
+				{
+					group->file_info.mime_types = build_array_from_contiguous_strings(permanent_arena, mime_type_strings, group->file_info.num_mime_types);
+					mime_type_strings = NULL;
+				} break;
+
+				case(LIST_FILE_EXTENSIONS):
+				{
+					group->file_info.file_extensions = build_array_from_contiguous_strings(permanent_arena, file_extension_strings, group->file_info.num_file_extensions);
+					file_extension_strings = NULL;
+				} break;
+
+				case(LIST_DOMAINS):
+				{
+					Domain** domains = push_arena(permanent_arena, num_domains * sizeof(Domain*), Domain*);
+					
+					for(u32 i = 0; i < num_domains; ++i)
+					{
+						++(group->url_info.num_domains);
+						Domain* domain = push_arena(permanent_arena, sizeof(Domain), Domain);
+
+						TCHAR* next_domain_string = skip_to_end_of_string(domain_strings);
+						++next_domain_string;
+
+						TCHAR* path = NULL;
+						TCHAR* host = _tcstok_s(domain_strings, URL_PATH_DELIMITERS, &path);
+
+						domain->host = push_string_to_arena(permanent_arena, host);
+						if(path != NULL && !string_is_empty(path))
+						{
+							domain->path = push_string_to_arena(permanent_arena, path);
+						}
+						else
+						{
+							domain->path = NULL;
+						}
+
+						domains[i] = domain;
+
+						domain_strings = next_domain_string;
+					}
+
+					group->url_info.domains = domains;
+
+					num_domains = 0;
+					domain_strings = NULL;
+				} break;
+			}
+
+			current_list_type = LIST_NONE;
 		}
-		else if(current_group_type != GROUP_NONE && strings_are_equal(line, "END"))
+		// Reached the end of a group.
+		else if(current_group_type != GROUP_NONE && strings_are_equal(line, END_GROUP))
 		{
 			current_group_type = GROUP_NONE;
+			group = NULL;
 		}
 		else
 		{
 			switch(current_group_type)
 			{
+				// Add a new group.
 				case(GROUP_NONE):
 				{
 					char* group_name = NULL;
 					char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
 					if(group_type != NULL && group_name != NULL)
 					{
-						if(strings_are_equal(group_type, "BEGIN_FILE_GROUP"))
+						if(strings_are_equal(group_type, BEGIN_FILE_GROUP))
 						{
-							current_group_type = GROUP_FILE_GROUP;
+							current_group_type = GROUP_FILE;
+							
 						}
-						else if(strings_are_equal(group_type, "BEGIN_URL_GROUP"))
+						else if(strings_are_equal(group_type, BEGIN_URL_GROUP))
 						{
-							current_group_type = GROUP_URL_GROUP;
+							current_group_type = GROUP_URL;
 						}
 						else
 						{
-							// Unknown block name
+							log_print(LOG_ERROR, "Load Group File: Unknown group type '%hs'.", group_type);
 						}
 
 						if(current_group_type != GROUP_NONE)
 						{
-							current_group_index = *num_processed_groups;
+							// Get this group's index in the global custom groups array.
+							u32 group_idx = *num_processed_groups;
 							++(*num_processed_groups);
+							group = &groups[group_idx];
 
-							groups[current_group_index].type = current_group_type;
-							groups[current_group_index].name = copy_utf_8_string_to_tchar(permanent_arena, group_name);	
+							group->type = current_group_type;
+							group->name = copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
+
+							if(current_group_type == GROUP_FILE)
+							{
+								ZeroMemory(&(group->file_info), sizeof(group->file_info));
+							}
+							else if(current_group_type == GROUP_URL)
+							{
+								ZeroMemory(&(group->url_info), sizeof(group->url_info));
+							}
+							else
+							{
+								_ASSERT(false);
+							}
 						}
 					}
 				} break;
 
-				case(GROUP_FILE_GROUP):
+				// Add the lists from a file group.
+				case(GROUP_FILE):
 				{
 					switch(current_list_type)
 					{
 						case(LIST_NONE):
 						{
-							if(strings_are_equal(line, "BEGIN_MIME_TYPES"))
+							if(strings_are_equal(line, BEGIN_FILE_SIGNATURES))
+							{
+								current_list_type = LIST_FILE_SIGNATURES;
+							}
+							else if(strings_are_equal(line, BEGIN_MIME_TYPES))
 							{
 								current_list_type = LIST_MIME_TYPES;
 							}
-							else if(strings_are_equal(line, "BEGIN_FILE_EXTENSIONS"))
+							else if(strings_are_equal(line, BEGIN_FILE_EXTENSIONS))
 							{
 								current_list_type = LIST_FILE_EXTENSIONS;
+							}
+							else
+							{
+								log_print(LOG_ERROR, "Load Group File: Unknown group file list type '%hs'.", line);
 							}
 						} break;
 
 						case(LIST_FILE_SIGNATURES):
 						{
-							// @TODO
+							// File signatures are processed differently from MIME types and file extensions.
+							// We only allow one file signature per line, and the way each token (byte) is delimited is different.
+							++num_file_signatures;
+							if(file_signature_strings == NULL) file_signature_strings = push_arena(temporary_arena, 0, TCHAR);
+							copy_utf_8_string_to_tchar(temporary_arena, temporary_arena, line);
 						} break;
 
 						case(LIST_MIME_TYPES):
 						{
-							// @TODO
+							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
+															line, TOKEN_DELIMITERS,
+															&mime_type_strings, &(group->file_info.num_mime_types));
 						} break;
 
 						case(LIST_FILE_EXTENSIONS):
 						{
+							/*if(file_extension_strings == NULL) file_extension_strings = push_arena(permanent_arena, 0, TCHAR);
+
 							char* remaining_file_extensions = NULL;
 							char* file_extension = strtok_s(line, TOKEN_DELIMITERS, &remaining_file_extensions);
 							while(file_extension != NULL)
 							{
-								debug_log_print("%hs", file_extension);
-
+								++();
+								copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, file_extension);
 								file_extension = strtok_s(NULL, TOKEN_DELIMITERS, &remaining_file_extensions);
-							}
+							}*/
+
+							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
+															line, TOKEN_DELIMITERS,
+															&file_extension_strings, &(group->file_info.num_file_extensions));
 						} break;
 					}
 				} break;
 
-				case(GROUP_URL_GROUP):
+				// Add the lists from a URL group.
+				case(GROUP_URL):
 				{
 					switch(current_list_type)
 					{
 						case(LIST_NONE):
 						{
-							// @TODO
+							if(strings_are_equal(line, BEGIN_DOMAINS))
+							{
+								current_list_type = LIST_DOMAINS;
+							}
+							else
+							{
+								log_print(LOG_ERROR, "Load Group File: Unknown group URL list type '%hs'.", line);
+							}
 						} break;
 
 						case(LIST_DOMAINS):
 						{
 							// @TODO
+							++num_domains;
+							if(domain_strings == NULL) domain_strings = push_arena(temporary_arena, 0, TCHAR);
+							copy_utf_8_string_to_tchar(temporary_arena, temporary_arena, line);
 						} break;
 					}
 				} break;
 			}
-
-			//TCHAR* foo = copy_utf_8_string_to_tchar(temporary_arena, line);
-			//log_print(LOG_NONE, "-> %s", foo);
 		}
 
 		line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
 	}
+
+	_ASSERT(current_list_type == LIST_NONE);
+	_ASSERT(current_group_type == GROUP_NONE);
 
 	SAFE_UNMAP_VIEW_OF_FILE(group_file);
 	safe_close_handle(&group_file_handle);
@@ -231,15 +531,17 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 {
 	if(num_groups == 0)
 	{
-		log_print(LOG_WARNING, "Load All Group Files: Attempted to load zero groups.");
+		log_print(LOG_WARNING, "Load All Group Files: Attempted to load zero groups. No groups will be loaded.");
 		return;
 	}
 
+	// The relevant loaded group data will go to the permanent arena, and any intermediary data to the temporary one.
 	Arena* permanent_arena = &(exporter->permanent_arena);
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
+	// Find each group file on disk.
 	u32 num_group_files = 0;
-	TCHAR* group_filenames = push_arena(temporary_arena, 0, TCHAR);
+	TCHAR* first_group_filename = push_arena(temporary_arena, 0, TCHAR);
 	{
 		TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
 		shell_copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
@@ -264,22 +566,26 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 		safe_find_close(&search_handle);
 	}
 
-	TCHAR** group_filenames_array = push_arena(temporary_arena, num_group_files * sizeof(TCHAR*), TCHAR*);
-	for(u32 i = 0; i < num_group_files; ++i)
+	if(num_group_files == 0)
 	{
-		group_filenames_array[i] = group_filenames;
-		while(*group_filenames != TEXT('\0')) ++group_filenames;
-		++group_filenames;
-
-		debug_log_print("%I32u : %s", i, group_filenames_array[i]);
+		log_print(LOG_ERROR, "Load All Group Files: Expected to load %I32u groups from at least one file on disk, but found none. No groups will be loaded.", num_groups);
+		_ASSERT(false);
 	}
 
+	// Build an array with the filenames so we can sort them alphabetically. FindFirstFile() doesn't guarantee any specific order,
+	// and we want the way the group files are loaded to be deterministic.
+	TCHAR** group_filenames_array = build_array_from_contiguous_strings(temporary_arena, first_group_filename, num_group_files);
 	qsort(group_filenames_array, num_group_files, sizeof(TCHAR*), compare_filenames);
 
-	_ASSERT(num_groups > 0);
+	// Build an array of group structures, each containing 
+	// @Note: Don't confuse 'num_group_files' with 'num_groups'. The former is the number of .group files on disk, and the latter
+	// the total number of groups that are defined in them. Each group file may defined zero or more groups.
+	// The number of groups is greater than zero here.
 	size_t custom_groups_size = sizeof(Custom_Groups) + sizeof(Group) * (num_groups - 1);
 	Custom_Groups* custom_groups = push_arena(permanent_arena, custom_groups_size, Custom_Groups);
 	custom_groups->num_groups = num_groups;
+
+	// The global group counter that is used to keep track of each group's place in the array.
 	u32 num_processed_groups = 0;
 	
 	for(u32 i = 0; i < num_group_files; ++i)
@@ -290,13 +596,61 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 
 		load_group_file(permanent_arena, temporary_arena,
 						group_file_path, custom_groups->groups, &num_processed_groups);
-
-		debug_log_print("%I32u : %s", i, group_filenames_array[i]);
 	}
 
-	_ASSERT(num_processed_groups <= num_groups);
+	if(num_processed_groups != num_groups)
+	{
+		log_print(LOG_WARNING, "Load All Group Files: Loaded %I32u groups when %I32u were expected.", num_processed_groups, num_groups);
+		_ASSERT(false);
+	}
 
 	exporter->custom_groups = custom_groups;
 
+	// Remember that the custom group data is kept in the permanent arena.
 	clear_arena(temporary_arena);
+
+	for(u32 i = 0; i < custom_groups->num_groups; ++i)
+	{
+		Group group = custom_groups->groups[i];
+		debug_log_print("########## Group '%s'", group.name);
+		if(group.type == GROUP_FILE)
+		{
+			if(group.file_info.num_file_extensions > 0) debug_log_print("- File Extensions");
+			for(u32 j = 0; j < group.file_info.num_file_extensions; ++j)
+			{
+				TCHAR* file_extension = group.file_info.file_extensions[j];
+				debug_log_print("-> %s", file_extension);
+			}
+
+			if(group.file_info.num_mime_types > 0) debug_log_print("- MIME Types");
+			for(u32 j = 0; j < group.file_info.num_mime_types; ++j)
+			{
+				TCHAR* mime_type = group.file_info.mime_types[j];
+				debug_log_print("-> %s", mime_type);
+			}
+
+			if(group.file_info.num_file_signatures > 0) debug_log_print("- File Signatures");
+			for(u32 j = 0; j < group.file_info.num_file_signatures; ++j)
+			{
+				debug_log_print("-> %I32u", j);
+				File_Signature* signature = group.file_info.file_signatures[j];
+				for(u32 k = 0; k < signature->num_bytes; ++k)
+				{
+					char* is_wildcard = (signature->is_wildcard[k]) ? ("true") : ("false");
+					debug_log_print("--> 0x%02X %hs", signature->bytes[k], is_wildcard);
+				}
+			}
+		}
+		else if(group.type == GROUP_URL)
+		{
+			if(group.url_info.num_domains > 0) debug_log_print("- Domains");
+			for(u32 j = 0; j < group.url_info.num_domains; ++j)
+			{
+				Domain* domain = group.url_info.domains[j];
+				debug_log_print("-> Host = '%s'. Path = '%s'.", domain->host, (domain->path != NULL) ? (domain->path) : (TEXT("-")));
+			}
+		}
+	}
+
+	debug_log_print("END");
 }

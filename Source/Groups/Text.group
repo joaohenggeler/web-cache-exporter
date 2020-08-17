@@ -1,16 +1,10 @@
-; Comment 1
-
 BEGIN_FILE_GROUP HTML
 
-	; Comment 2
-
 	BEGIN_MIME_TYPES
-		; Comment 3
 		text/html
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		; Comment 4
 		htm html
 	END
 
@@ -19,6 +13,7 @@ END
 BEGIN_FILE_GROUP CSS
 
 	BEGIN_MIME_TYPES
+		text/css text/css text/css
 		text/css
 	END
 
@@ -28,7 +23,6 @@ BEGIN_FILE_GROUP CSS
 
 END
 
-; ☕
 BEGIN_FILE_GROUP JavaScript
 
 	BEGIN_MIME_TYPES
@@ -37,9 +31,7 @@ BEGIN_FILE_GROUP JavaScript
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		js abc
-		foo bar
-		blargh
+		js
 	END
 
 END

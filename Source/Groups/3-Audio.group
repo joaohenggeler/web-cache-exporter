@@ -1,0 +1,36 @@
+BEGIN_FILE_GROUP MIDI
+
+	BEGIN_FILE_SIGNATURES
+		; "MThd"
+		4D 54 68 64
+	END
+
+	BEGIN_MIME_TYPES
+		audio/midi audio/x-midi
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		mid midi
+	END
+
+END
+
+BEGIN_FILE_GROUP Audio
+
+	BEGIN_FILE_SIGNATURES
+		; AU - ".snd"
+		2E 73 6E 64
+
+		; WAVE - "RIFF____WAVEfmt "
+		52 49 46 46 __ __ __ __ 57 41 56 45 66 6D 74 20
+	END
+
+	BEGIN_MIME_TYPES
+		audio/
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		aif aiff au mp3 ogg wav
+	END
+
+END

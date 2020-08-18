@@ -1,0 +1,20 @@
+BEGIN_FILE_GROUP Executable
+
+	BEGIN_MIME_TYPES
+		application/exe
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		exe
+	END
+
+END
+
+; Note that screensavers and Silverlight applications share the .scr file extension. We'll always label these files as the former.
+BEGIN_FILE_GROUP Screensaver
+
+	BEGIN_FILE_EXTENSIONS
+		scr
+	END
+
+END

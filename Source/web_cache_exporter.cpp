@@ -30,12 +30,60 @@ void resolve_exporter_output_paths_and_create_csv_file(Exporter* exporter, const
 
 void export_cache_entry(Exporter* exporter,
 						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
-						const TCHAR* full_entry_path, const TCHAR* entry_url, const TCHAR* entry_filename)
+						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename)
 {
 	Arena* arena = &(exporter->temporary_arena);
 
 	// @TODO: File and URL groups - check column_types for CSV_CUSTOM_FILE_GROUP and CSV_CUSTOM_URL_GROUP
 	// and get the right group from the previously loaded files.
+	Matchable_Cache_Entry entry_to_match = {};
+	entry_to_match.full_file_path = full_entry_path;
+	entry_to_match.url_to_match = entry_url;
+
+	SSIZE_T file_group_index = -1;
+	SSIZE_T url_group_index = -1;
+
+	for(size_t i = 0; i < num_columns; ++i)
+	{
+		switch(column_types[i])
+		{
+			case(CSV_CUSTOM_FILE_GROUP):
+			{
+				file_group_index = i;
+			} break;
+
+			case(CSV_CUSTOM_URL_GROUP):
+			{
+				url_group_index = i;
+			} break;
+
+			case(CSV_CONTENT_TYPE):
+			{
+				entry_to_match.mime_type_to_match = column_values[i].value;
+			} break;
+
+			case(CSV_FILE_EXTENSION):
+			{
+				entry_to_match.file_extension_to_match = column_values[i].value;
+			} break;
+		}
+	}
+
+	entry_to_match.should_match_file_group = (file_group_index != -1);
+	entry_to_match.should_match_url_group = (url_group_index != -1);
+
+	if(match_cache_entry_to_groups(arena, exporter->custom_groups, &entry_to_match))
+	{
+		if(file_group_index != -1)
+		{
+			column_values[file_group_index].value = entry_to_match.matched_file_group_name;
+		}
+
+		if(url_group_index != -1)
+		{
+			column_values[url_group_index].value = entry_to_match.matched_url_group_name;
+		}
+	}
 
 	if(exporter->should_create_csv)
 	{

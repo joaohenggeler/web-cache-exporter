@@ -201,7 +201,7 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 }
 
 void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
-					 const TCHAR* file_path, Group* groups, u32* num_processed_groups)
+					 const TCHAR* file_path, Group* group_array, u32* num_processed_groups, u32* max_num_file_signature_bytes)
 {
 	TCHAR* group_filename = PathFindFileName(file_path);
 	log_print(LOG_INFO, "Load Group File: Loading the group '%s'.", group_filename);
@@ -239,7 +239,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 	{
 		line = skip_leading_whitespace(line);
 
-		if(*line == COMMENT)
+		if(*line == COMMENT || string_is_empty(line))
 		{
 			// Skip comments.
 		}
@@ -258,11 +258,17 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 						File_Signature* signature = push_arena(permanent_arena, sizeof(File_Signature), File_Signature);
 
 						u32 num_bytes = count_tokens_delimited_by_spaces(file_signature_strings);
+
+						if(num_bytes > *max_num_file_signature_bytes)
+						{
+							*max_num_file_signature_bytes = num_bytes;
+						}
+
 						u8* bytes = push_arena(permanent_arena, num_bytes * sizeof(u8), u8);
 						bool* is_wildcard = push_arena(permanent_arena, num_bytes * sizeof(bool), bool);
 
-						TCHAR* next_file_extension_string = skip_to_end_of_string(file_signature_strings);
-						++next_file_extension_string;
+						TCHAR* next_file_signature_string = skip_to_end_of_string(file_signature_strings);
+						++next_file_signature_string;
 
 						TCHAR* remaining_bytes = NULL;
 						TCHAR* byte_string = _tcstok_s(file_signature_strings, BYTE_DELIMITERS, &remaining_bytes);
@@ -303,7 +309,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 						signature->is_wildcard = is_wildcard;
 						file_signatures[i] = signature;
 
-						file_signature_strings = next_file_extension_string;
+						file_signature_strings = next_file_signature_string;
 					}
 
 					group->file_info.file_signatures = file_signatures;
@@ -399,7 +405,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							// Get this group's index in the global custom groups array.
 							u32 group_idx = *num_processed_groups;
 							++(*num_processed_groups);
-							group = &groups[group_idx];
+							group = &group_array[group_idx];
 
 							group->type = current_group_type;
 							group->name = copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
@@ -587,6 +593,7 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 
 	// The global group counter that is used to keep track of each group's place in the array.
 	u32 num_processed_groups = 0;
+	u32 max_num_file_signature_bytes = 0;
 	
 	for(u32 i = 0; i < num_group_files; ++i)
 	{
@@ -595,7 +602,7 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 		PathAppend(group_file_path, group_filenames_array[i]);
 
 		load_group_file(permanent_arena, temporary_arena,
-						group_file_path, custom_groups->groups, &num_processed_groups);
+						group_file_path, custom_groups->groups, &num_processed_groups, &max_num_file_signature_bytes);
 	}
 
 	if(num_processed_groups != num_groups)
@@ -604,11 +611,16 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 		_ASSERT(false);
 	}
 
+	log_print(LOG_INFO, "Load All Group Files: Allocating %I32u bytes for the file signature buffer.", max_num_file_signature_bytes);
+	custom_groups->file_signature_buffer = push_arena(permanent_arena, max_num_file_signature_bytes, u8);
+	custom_groups->file_signature_buffer_size = max_num_file_signature_bytes;
+
 	exporter->custom_groups = custom_groups;
 
 	// Remember that the custom group data is kept in the permanent arena.
 	clear_arena(temporary_arena);
 
+	#if 0
 	for(u32 i = 0; i < custom_groups->num_groups; ++i)
 	{
 		Group group = custom_groups->groups[i];
@@ -653,4 +665,132 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	}
 
 	debug_log_print("END");
+
+	#endif
+}
+
+static bool compare_file_bytes_using_wildcards(const TCHAR* file_path, u8* file_buffer, u32 num_bytes, u8* bytes, bool* is_wildcard)
+{
+	if(!read_first_file_bytes(file_path, file_buffer, num_bytes))
+	{
+		return false;
+	}
+
+	for(u32 i = 0; i < num_bytes; ++i)
+	{
+		if(!is_wildcard[i] && file_buffer[i] != bytes[i])
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_groups, Matchable_Cache_Entry* entry_to_match)
+{
+	bool should_match_file_group = entry_to_match->should_match_file_group;
+	bool should_match_url_group = entry_to_match->should_match_url_group;
+	TCHAR* matched_file_group_name = NULL;
+	TCHAR* matched_url_group_name = NULL;
+	
+	TCHAR* full_file_path = entry_to_match->full_file_path;
+	TCHAR* mime_type_to_match = entry_to_match->mime_type_to_match;
+	TCHAR* file_extension_to_match = entry_to_match->file_extension_to_match;
+
+	Url_Parts url_parts_to_match = {};
+	bool partioned_url_successfully = should_match_url_group
+									&& partition_url(temporary_arena, entry_to_match->url_to_match, &url_parts_to_match);
+
+	for(u32 i = 0; i < custom_groups->num_groups; ++i)
+	{
+		Group group = custom_groups->groups[i];
+
+		// If we have yet to match a file group ('matched_file_group_name' is NULL).
+		if(group.type == GROUP_FILE && should_match_file_group)
+		{
+			// Match a file signature by comparing each individual byte while taking into account wildcards,
+			// which match any byte.
+			if(matched_file_group_name == NULL && full_file_path != NULL)
+			{
+				for(u32 j = 0; j < group.file_info.num_file_signatures; ++j)
+				{
+					File_Signature* signature = group.file_info.file_signatures[j];
+					_ASSERT(signature->num_bytes <= custom_groups->file_signature_buffer_size);
+
+					if(compare_file_bytes_using_wildcards(	full_file_path, custom_groups->file_signature_buffer,
+															signature->num_bytes, signature->bytes, signature->is_wildcard))
+					{
+						matched_file_group_name = group.name;
+					}
+				}
+			}
+
+			// Match a MIME type by comparing the beginning of the string (case insensitive).
+			if(matched_file_group_name == NULL && mime_type_to_match != NULL)
+			{
+				for(u32 j = 0; j < group.file_info.num_mime_types; ++j)
+				{
+					TCHAR* mime_type_in_group = group.file_info.mime_types[j];
+					if(string_starts_with(mime_type_to_match, mime_type_in_group, true))
+					{
+						matched_file_group_name = group.name;
+					}
+				}		
+			}
+
+			// Match a file extension by comparing strings (case insensitive).
+			if(matched_file_group_name == NULL && file_extension_to_match != NULL)
+			{
+				for(u32 j = 0; j < group.file_info.num_file_extensions; ++j)
+				{
+					TCHAR* file_extension_in_group = group.file_info.file_extensions[j];
+					if(strings_are_equal(file_extension_to_match, file_extension_in_group, true))
+					{
+						matched_file_group_name = group.name;
+					}
+				}
+			}
+		}
+		// If we have yet to match a URL group ('matched_url_group_name' is NULL).
+		else if(group.type == GROUP_URL && should_match_url_group)
+		{
+			if(matched_url_group_name == NULL && partioned_url_successfully)
+			{
+				for(u32 j = 0; j < group.url_info.num_domains; ++j)
+				{
+					Domain* domain = group.url_info.domains[j];
+					// The URL we partioned always has a 'path', but the 'host' might be NULL.
+					// The opposite is true for a URL group: the 'path' might be NULL, but the host always exists.
+					bool urls_match = (url_parts_to_match.host != NULL) && string_ends_with(url_parts_to_match.host, domain->host, true);
+
+					if(domain->path != NULL)
+					{
+						urls_match = urls_match && string_starts_with(url_parts_to_match.path, domain->path, true);
+					}
+
+					if(urls_match)
+					{
+						matched_url_group_name = group.name;
+					}
+				}
+			}
+		}
+
+		// If we matched the groups we wanted, we don't need to continue checking.
+		// We either don't want to match a given group type (meaning we can exit if we got the other),
+		// or we do want to match it (meaning we need to check if we got it).
+		if 	( 	( !should_match_file_group || (should_match_file_group && matched_file_group_name != NULL) )
+			&& 	( !should_match_url_group || (should_match_url_group && matched_url_group_name != NULL))
+			)
+		{
+			break;
+		}
+	}
+
+	entry_to_match->matched_file_group_name = matched_file_group_name;
+	entry_to_match->matched_url_group_name = matched_url_group_name;
+
+	// If we matched at least one group.
+	return (matched_file_group_name != NULL) || (matched_url_group_name != NULL);
 }

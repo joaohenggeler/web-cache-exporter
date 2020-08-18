@@ -442,9 +442,14 @@ size_t string_length(const TCHAR* str)
 // 1. str - The string to check.
 //
 // @Returns: True if the string is empty. Otherwise, false.
-bool string_is_empty(const TCHAR* str)
+bool string_is_empty(const char* str)
 {
-	return *str == TEXT('\0');
+	return *str == '\0';
+}
+
+bool string_is_empty(const wchar_t* str)
+{
+	return *str == L'\0';
 }
 
 bool strings_are_equal(const char* str_1, const char* str_2, bool optional_case_insensitive)
@@ -482,6 +487,16 @@ bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_cas
 {
 	if(optional_case_insensitive) 	return _tcsncicmp(str, prefix, _tcslen(prefix)) == 0;
 	else 							return _tcsnccmp(str, prefix, _tcslen(prefix)) == 0;
+}
+
+bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_insensitive)
+{
+	size_t str_length = string_length(str);
+	size_t suffix_length = string_length(suffix);
+	if(suffix_length > str_length) return false;
+
+	const TCHAR* suffix_in_str = str + str_length - suffix_length;
+	return strings_are_equal(suffix_in_str, suffix, optional_case_insensitive);
 }
 
 // Skips the leading whitespace (spaces and tabs) in a string.
@@ -1598,6 +1613,8 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 // This function fails if it read less bytes than the specified value.
 bool read_first_file_bytes(const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read)
 {
+	if(num_bytes_to_read == 0) return false;
+
 	bool success = true;
 	HANDLE file_handle = CreateFile( file_path,
 								     GENERIC_READ,

@@ -1,0 +1,216 @@
+BEGIN_URL_GROUP Big Fat Awesome House Party
+
+	BEGIN_DOMAINS
+		awesomehouseparty.com
+	END
+
+END
+
+BEGIN_URL_GROUP Candystand
+
+	BEGIN_DOMAINS
+		candystand.com
+	END
+
+END
+
+BEGIN_URL_GROUP Cartoon Network
+
+	BEGIN_DOMAINS
+		cartoonnetwork.com
+		turner.com/toon
+	END
+
+END
+
+BEGIN_URL_GROUP Disney
+
+	BEGIN_DOMAINS
+		disney.go.com
+	END
+
+END
+
+BEGIN_URL_GROUP Faradise
+
+	BEGIN_DOMAINS
+		faradise.com
+	END
+
+END
+
+BEGIN_URL_GROUP GameHouse
+
+	BEGIN_DOMAINS
+		gamehouse.com
+		cdn.ghstatic.com
+	END
+
+END
+
+BEGIN_URL_GROUP Game Show Network (GSN)
+
+	BEGIN_DOMAINS
+		gsn.com
+	END
+
+END
+
+BEGIN_URL_GROUP The Groove Alliance
+
+	BEGIN_DOMAINS
+		3dgroove.com
+	END
+
+END
+
+BEGIN_URL_GROUP Inhance Digital Corporation
+
+	BEGIN_DOMAINS
+		inhance.com
+	END
+
+END
+
+BEGIN_URL_GROUP Jig Interactive
+
+	BEGIN_DOMAINS
+		jiginteractive.com
+		jigint.com
+	END
+
+END
+
+BEGIN_URL_GROUP Kewlbox
+
+	BEGIN_DOMAINS
+		kewlbox.com
+	END
+
+END
+
+BEGIN_URL_GROUP King.com / Royal Games
+
+	BEGIN_DOMAINS
+		king.com
+		king.gamesgames.com
+		king.games.co.uk
+		midas.games.yahoo.net
+		royalgames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Millsberry
+
+	BEGIN_DOMAINS
+		millsberry.com
+	END
+
+END
+
+BEGIN_URL_GROUP Nabiscoworld
+
+	BEGIN_DOMAINS
+		nabiscoworld.com
+	END
+
+END
+
+BEGIN_URL_GROUP Neopets
+
+	BEGIN_DOMAINS
+		neopets.com
+	END
+
+END
+
+BEGIN_URL_GROUP PBS Kids
+
+	BEGIN_DOMAINS
+		pbskids.org
+	END
+
+END
+
+BEGIN_URL_GROUP Pogo.com
+
+	BEGIN_DOMAINS
+		pogo.com
+	END
+
+END
+
+BEGIN_URL_GROUP PopCap
+
+	BEGIN_DOMAINS
+		popcap.com
+	END
+
+END
+
+BEGIN_URL_GROUP Postopia
+
+	BEGIN_DOMAINS
+		postopia.com
+		postkids.com
+	END
+
+END
+
+BEGIN_URL_GROUP PrizeGames.com
+
+	BEGIN_DOMAINS
+		prizegames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Pumkin Online English Course
+
+	BEGIN_DOMAINS
+		pumkin.com
+	END
+
+END
+
+BEGIN_URL_GROUP Too Munch Fun
+
+	BEGIN_DOMAINS
+		toomunchfun.com
+	END
+
+END
+
+BEGIN_URL_GROUP VR Edmonton
+
+	BEGIN_DOMAINS
+		vredmonton.com
+	END
+
+END
+
+BEGIN_URL_GROUP Webkinz
+
+	BEGIN_DOMAINS
+		webkinz.com
+		cdn.hamsters.ganz.com
+	END
+
+END
+
+BEGIN_URL_GROUP Yahoo! Games
+
+	BEGIN_DOMAINS
+		l.yimg.com/os/en_us/Games
+	END
+
+END
+
+BEGIN_URL_GROUP Zylom
+
+	BEGIN_DOMAINS
+		zylom.com
+	END
+
+END

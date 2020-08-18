@@ -1,0 +1,17 @@
+BEGIN_FILE_GROUP Font
+
+	BEGIN_MIME_TYPES
+		font/
+		application/font
+		; Matches:
+		; application/font-woff
+
+		application/vnd.ms-fontobject
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		otf ttf woff woff2
+		eot
+	END
+
+END

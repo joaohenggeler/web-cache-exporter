@@ -61,23 +61,28 @@ struct Group
 
 struct Custom_Groups
 {
+	u8* file_signature_buffer;
+	u32 file_signature_buffer_size;
+
 	u32 num_groups;
 	Group groups[ANYSIZE_ARRAY];
 };
 
 struct Matchable_Cache_Entry
 {
-	u32 num_file_signature_bytes;
-	u8* file_signature_to_match;
+	TCHAR* full_file_path;
 	TCHAR* mime_type_to_match;
 	TCHAR* file_extension_to_match;
-
 	TCHAR* url_to_match;
 
-	u32 matched_group_index;
+	bool should_match_file_group;
+	TCHAR* matched_file_group_name;
+	bool should_match_url_group;
+	TCHAR* matched_url_group_name;
 };
 
 size_t get_total_group_files_size(Exporter* exporter, u32* num_groups);
 void load_all_group_files(Exporter* exporter, u32 num_groups);
+bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_groups, Matchable_Cache_Entry* entry_to_match);
 
 #endif

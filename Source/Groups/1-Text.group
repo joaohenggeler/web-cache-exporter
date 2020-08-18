@@ -1,0 +1,114 @@
+BEGIN_FILE_GROUP HTML
+
+	BEGIN_FILE_SIGNATURES
+		; "<html"
+		3C 68 74 6D 6C
+		; "<!DOCTYPE html"
+		3C 21 44 4F 43 54 59 50 45 20 68 74 6D 6C
+
+		; "<HTML"
+		3C 48 54 4D 4C
+		; "<!DOCTYPE HTML"
+		3C 21 44 4F 43 54 59 50 45 20 48 54 4D 4C
+	END
+
+	BEGIN_MIME_TYPES
+		text/html
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		htm html xhtml
+	END
+
+END
+
+BEGIN_FILE_GROUP CSS
+
+	BEGIN_MIME_TYPES
+		text/css
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		css
+	END
+
+END
+
+BEGIN_FILE_GROUP JavaScript
+
+	BEGIN_MIME_TYPES
+		text/javascript
+		application/javascript
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		js
+	END
+
+END
+
+BEGIN_FILE_GROUP VBScript
+
+	BEGIN_MIME_TYPES
+		text/vbscript
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		vbs
+	END
+
+END
+
+BEGIN_FILE_GROUP JSON
+
+	BEGIN_MIME_TYPES
+		application/json
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		json
+	END
+
+END
+
+BEGIN_FILE_GROUP XML
+
+	BEGIN_FILE_SIGNATURES
+		; "<?xml "
+		; 3C 3F 78 6D 6C 20
+	END
+
+	BEGIN_MIME_TYPES
+		text/xml
+		application/xml
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		xml
+	END
+
+END
+
+BEGIN_FILE_GROUP Plain Text
+
+	BEGIN_MIME_TYPES
+		text/plain
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		txt
+	END
+
+END
+
+BEGIN_FILE_GROUP Server-Side Scripting
+
+	BEGIN_FILE_EXTENSIONS
+		asp aspx cshtml vbhtml
+		cgi
+		jsp
+		php php3 php4 php5 phtml
+		shtml shtm stm
+	END
+
+END

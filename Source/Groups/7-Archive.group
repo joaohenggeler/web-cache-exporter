@@ -1,0 +1,20 @@
+BEGIN_FILE_GROUP ZIP
+
+	BEGIN_FILE_SIGNATURES
+		; "PK.."
+		50 4B 03 04
+		; Empty archive
+		50 4B 05 06
+		; Split or spanned archive
+		50 4B 07 08
+	END
+
+	BEGIN_MIME_TYPES
+		application/zip
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		zip
+	END
+
+END

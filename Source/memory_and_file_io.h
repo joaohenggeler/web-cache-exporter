@@ -94,7 +94,8 @@ size_t string_size(const wchar_t* str);
 
 size_t string_length(const TCHAR* str);
 
-bool string_is_empty(const TCHAR* str);
+bool string_is_empty(const char* str);
+bool string_is_empty(const wchar_t* str);
 
 bool strings_are_equal(const char* str_1, const char* str_2, bool optional_case_insensitive = false);
 bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional_case_insensitive = false);
@@ -103,6 +104,8 @@ bool strings_are_at_most_equal(const char* str_1, const char* str_2, size_t max_
 bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
 
 bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_case_insensitive = false);
+
+bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_insensitive = false);
 
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);

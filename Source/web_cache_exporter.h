@@ -160,7 +160,7 @@ void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, cons
 												const Csv_Type column_types[], size_t num_columns);
 void export_cache_entry(Exporter* exporter,
 						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
-						const TCHAR* full_entry_path, const TCHAR* entry_url, const TCHAR* entry_filename);
+						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename);
 void close_exporter_csv_file(Exporter* exporter);
 
 #endif

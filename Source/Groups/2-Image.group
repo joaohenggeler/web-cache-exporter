@@ -1,0 +1,30 @@
+BEGIN_FILE_GROUP Image
+
+	BEGIN_FILE_SIGNATURES
+
+		; BMP - "BM"
+		42 4D
+
+		; GIF - "GIF8" to match "GIF87a" and "GIF89a"
+		47 49 46 38
+
+		; JPEG
+		FF D8 FF DB
+		FF D8 FF E0
+		FF D8 FF EE
+		FF D8 FF E1
+
+		; PNG - ".PNG"
+		89 50 4E 47 0D 0A 1A 0A
+
+	END
+
+	BEGIN_MIME_TYPES
+		image/
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		bmp gif ico jpg jpeg png svg
+	END
+
+END

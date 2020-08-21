@@ -1,3 +1,15 @@
+BEGIN_FILE_GROUP Server-Side Script
+
+	BEGIN_FILE_EXTENSIONS
+		asp aspx cshtml vbhtml
+		cgi
+		jsp
+		php php3 php4 php5 phtml
+		shtml shtm stm
+	END
+
+END
+
 BEGIN_FILE_GROUP HTML
 
 	BEGIN_FILE_SIGNATURES
@@ -14,10 +26,15 @@ BEGIN_FILE_GROUP HTML
 
 	BEGIN_MIME_TYPES
 		text/html
+
+		application/xhtml
+		; Matches:
+		; application/xhtml+xml
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		htm html xhtml
+		htm html
+		xhtml
 	END
 
 END
@@ -38,7 +55,17 @@ BEGIN_FILE_GROUP JavaScript
 
 	BEGIN_MIME_TYPES
 		text/javascript
+
 		application/javascript
+		application/ecmascript
+		application/x-ecmascript
+		application/x-javascript
+
+		text/ecmascript
+		text/jscript
+		text/livescript
+		text/x-ecmascript
+		text/x-javascript
 	END
 
 	BEGIN_FILE_EXTENSIONS
@@ -71,9 +98,19 @@ BEGIN_FILE_GROUP JSON
 
 END
 
+; Channel Definition Format
+BEGIN_FILE_GROUP CDF
+
+	BEGIN_FILE_EXTENSIONS
+		cdf
+	END
+
+END
+
 BEGIN_FILE_GROUP XML
 
 	BEGIN_FILE_SIGNATURES
+		; Removed since it would result in too many false positives (e.g. SVG files).
 		; "<?xml "
 		; 3C 3F 78 6D 6C 20
 	END
@@ -97,18 +134,6 @@ BEGIN_FILE_GROUP Plain Text
 
 	BEGIN_FILE_EXTENSIONS
 		txt
-	END
-
-END
-
-BEGIN_FILE_GROUP Server-Side Scripting
-
-	BEGIN_FILE_EXTENSIONS
-		asp aspx cshtml vbhtml
-		cgi
-		jsp
-		php php3 php4 php5 phtml
-		shtml shtm stm
 	END
 
 END

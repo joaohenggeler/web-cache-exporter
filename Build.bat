@@ -5,7 +5,7 @@ REM xxx
 SETLOCAL
 PUSHD "%~dp0"
 
-	RMDIR /S /Q "Exported-Cache"
+	RMDIR /S /Q "ExportedCache"
 	
 	SET "CLEAN_BUILD=Yes"
 	REM Debug or Release

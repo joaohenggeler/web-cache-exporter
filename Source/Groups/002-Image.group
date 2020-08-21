@@ -14,7 +14,7 @@ BEGIN_FILE_GROUP Image
 		FF D8 FF EE
 		FF D8 FF E1
 
-		; PNG - ".PNG"
+		; PNG - ".PNG...."
 		89 50 4E 47 0D 0A 1A 0A
 
 	END

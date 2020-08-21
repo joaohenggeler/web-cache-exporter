@@ -120,7 +120,7 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 	u32 total_num_groups = 0;
 
 	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
-	shell_copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
+	PathCombine(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
 
 	WIN32_FIND_DATA file_find_data = {};
 	HANDLE search_handle = FindFirstFile(search_path, &file_find_data);
@@ -141,7 +141,7 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 			total_file_size += file_size;
 			
 			TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
-			shell_copy_and_append_path(group_file_path, exporter->executable_path, GROUP_FILES_DIRECTORY);
+			PathCombine(group_file_path, exporter->executable_path, GROUP_FILES_DIRECTORY);
 			PathAppend(group_file_path, file_find_data.cFileName);
 
 			HANDLE group_file_handle = INVALID_HANDLE_VALUE;
@@ -204,7 +204,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 					 const TCHAR* file_path, Group* group_array, u32* num_processed_groups, u32* max_num_file_signature_bytes)
 {
 	TCHAR* group_filename = PathFindFileName(file_path);
-	log_print(LOG_INFO, "Load Group File: Loading the group '%s'.", group_filename);
+	log_print(LOG_INFO, "Load Group File: Loading the group file '%s'...", group_filename);
 
 	HANDLE group_file_handle = INVALID_HANDLE_VALUE;
 	u64 group_file_size = 0;
@@ -212,7 +212,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 	
 	if(group_file == NULL)
 	{
-		log_print(LOG_ERROR, "Load Group File: Failed to load the group '%s'.", group_filename);
+		log_print(LOG_ERROR, "Load Group File: Failed to load the group file '%s'.", group_filename);
 		safe_close_handle(&group_file_handle);
 		return;
 	}
@@ -220,18 +220,25 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 	char* remaining_lines = NULL;
 	char* line = strtok_s(group_file, LINE_DELIMITERS, &remaining_lines);
 
-	Group_Type current_group_type = GROUP_NONE;
 	// Keep track of which group we're loading data to.
+	Group_Type current_group_type = GROUP_NONE;
+	
 	Group* group = NULL;
 
-	List_Type current_list_type = LIST_NONE;
 	// Keep track of the strings that are loaded from each list type. These are kept contiguously in memory, so this address points
 	// to the first string.
-	// These are set back to NULL after processing their respective list type.
+	// These counters and addresses are set back to zero and NULL after processing their respective list type.
+	List_Type current_list_type = LIST_NONE;
+	
 	u32 num_file_signatures = 0;
 	TCHAR* file_signature_strings = NULL;
+
+	u32 num_mime_types = 0;
 	TCHAR* mime_type_strings = NULL;
+	
+	u32 num_file_extensions = 0;
 	TCHAR* file_extension_strings = NULL;
+	
 	u32 num_domains = 0;
 	TCHAR* domain_strings = NULL;
 
@@ -291,12 +298,10 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							}
 							else
 							{
-								log_print(LOG_ERROR, "Load Group File: The byte '%s' cannot be converted into a numeric value. The file signature number %I32u in the group '%s' will be skipped.", byte_string, i+1, group->name);
+								log_print(LOG_ERROR, "Load Group File: The string '%s' cannot be converted into a byte. The file signature number %I32u in the group '%s' will be skipped.", byte_string, i+1, group->name);
 								num_bytes = 0;
 								bytes = NULL;
 								is_wildcard = NULL;
-								ZeroMemory(bytes, num_bytes * sizeof(u8));
-								ZeroMemory(is_wildcard, num_bytes * sizeof(bool));
 								break;
 							}
 
@@ -320,13 +325,19 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 
 				case(LIST_MIME_TYPES):
 				{
-					group->file_info.mime_types = build_array_from_contiguous_strings(permanent_arena, mime_type_strings, group->file_info.num_mime_types);
+					group->file_info.mime_types = build_array_from_contiguous_strings(permanent_arena, mime_type_strings, num_mime_types);
+					group->file_info.num_mime_types = num_mime_types;
+
+					num_mime_types = 0;
 					mime_type_strings = NULL;
 				} break;
 
 				case(LIST_FILE_EXTENSIONS):
 				{
-					group->file_info.file_extensions = build_array_from_contiguous_strings(permanent_arena, file_extension_strings, group->file_info.num_file_extensions);
+					group->file_info.file_extensions = build_array_from_contiguous_strings(permanent_arena, file_extension_strings, num_file_extensions);
+					group->file_info.num_file_extensions = num_file_extensions;
+
+					num_file_extensions = 0;
 					file_extension_strings = NULL;
 				} break;
 
@@ -464,25 +475,14 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 						{
 							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
 															line, TOKEN_DELIMITERS,
-															&mime_type_strings, &(group->file_info.num_mime_types));
+															&mime_type_strings, &num_mime_types);
 						} break;
 
 						case(LIST_FILE_EXTENSIONS):
 						{
-							/*if(file_extension_strings == NULL) file_extension_strings = push_arena(permanent_arena, 0, TCHAR);
-
-							char* remaining_file_extensions = NULL;
-							char* file_extension = strtok_s(line, TOKEN_DELIMITERS, &remaining_file_extensions);
-							while(file_extension != NULL)
-							{
-								++();
-								copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, file_extension);
-								file_extension = strtok_s(NULL, TOKEN_DELIMITERS, &remaining_file_extensions);
-							}*/
-
 							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
 															line, TOKEN_DELIMITERS,
-															&file_extension_strings, &(group->file_info.num_file_extensions));
+															&file_extension_strings, &num_file_extensions);
 						} break;
 					}
 				} break;
@@ -519,8 +519,17 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 		line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
 	}
 
-	_ASSERT(current_list_type == LIST_NONE);
-	_ASSERT(current_group_type == GROUP_NONE);
+	if(current_list_type != LIST_NONE)
+	{
+		log_print(LOG_WARNING, "Load Group File: Found unterminated list of type '%s' in the group file '%s'.", LIST_TYPE_TO_STRING[current_list_type], group_filename);
+		console_print("Load Group File: Found unterminated list of type '%s' in the group file '%s'.", LIST_TYPE_TO_STRING[current_list_type], group_filename);
+	}
+
+	if(current_group_type != GROUP_NONE)
+	{
+		log_print(LOG_WARNING, "Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
+		console_print("Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
+	}
 
 	SAFE_UNMAP_VIEW_OF_FILE(group_file);
 	safe_close_handle(&group_file_handle);
@@ -550,7 +559,7 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	TCHAR* first_group_filename = push_arena(temporary_arena, 0, TCHAR);
 	{
 		TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
-		shell_copy_and_append_path(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
+		PathCombine(search_path, exporter->executable_path, GROUP_FILES_SEARCH_PATH);
 
 		WIN32_FIND_DATA file_find_data = {};
 		HANDLE search_handle = FindFirstFile(search_path, &file_find_data);
@@ -598,7 +607,7 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	for(u32 i = 0; i < num_group_files; ++i)
 	{
 		TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
-		shell_copy_and_append_path(group_file_path, exporter->executable_path, GROUP_FILES_DIRECTORY);
+		PathCombine(group_file_path, exporter->executable_path, GROUP_FILES_DIRECTORY);
 		PathAppend(group_file_path, group_filenames_array[i]);
 
 		load_group_file(permanent_arena, temporary_arena,

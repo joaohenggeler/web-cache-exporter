@@ -1,0 +1,15 @@
+BEGIN_FILE_GROUP Model
+
+	BEGIN_MIME_TYPES
+		model/
+	END
+
+END
+
+BEGIN_FILE_GROUP World
+
+	BEGIN_MIME_TYPES
+		x-world/
+	END
+
+END

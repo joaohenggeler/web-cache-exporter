@@ -4,9 +4,7 @@
 #include "internet_explorer.h"
 #include "shockwave_plugin.h"
 
-/*
-	@TODO
-*/
+static const TCHAR* DEFAULT_EXPORT_DIRECTORY = TEXT("ExportedCache");
 
 void resolve_exporter_output_paths_and_create_csv_file(Exporter* exporter, const TCHAR* cache_identifier, const Csv_Type column_types[], size_t num_columns)
 {
@@ -20,9 +18,9 @@ void resolve_exporter_output_paths_and_create_csv_file(Exporter* exporter, const
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
 	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
 
-	if(exporter->should_create_csv)
+	if(exporter->should_create_csv && create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle)))
 	{
-		create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle));
+		++(exporter->num_csv_files_created);
 		csv_print_header(arena, exporter->csv_file_handle, column_types, num_columns);
 		clear_arena(arena);
 	}
@@ -33,6 +31,9 @@ void export_cache_entry(Exporter* exporter,
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename)
 {
 	Arena* arena = &(exporter->temporary_arena);
+
+	bool file_exists = does_file_exist(full_entry_path);
+	++(exporter->num_processed_files);
 
 	// @TODO: File and URL groups - check column_types for CSV_CUSTOM_FILE_GROUP and CSV_CUSTOM_URL_GROUP
 	// and get the right group from the previously loaded files.
@@ -66,6 +67,11 @@ void export_cache_entry(Exporter* exporter,
 			{
 				entry_to_match.file_extension_to_match = column_values[i].value;
 			} break;
+
+			case(CSV_MISSING_FILE):
+			{
+				column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+			} break;
 		}
 	}
 
@@ -90,7 +96,7 @@ void export_cache_entry(Exporter* exporter,
 		csv_print_row(arena, exporter->csv_file_handle, column_types, column_values, num_columns);
 	}
 
-	if(exporter->should_copy_files)
+	if(file_exists && exporter->should_copy_files)
 	{
 		if(copy_file_using_url_directory_structure(arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename))
 		{
@@ -127,8 +133,6 @@ static TCHAR* skip_to_suboption(TCHAR* str)
 
 	return suboption;
 }
-
-const TCHAR* DEFAULT_EXPORT_PATH = TEXT("Exported-Cache");
 
 static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Exporter* exporter)
 {
@@ -174,7 +178,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
-			PathAppend(exporter->output_path, DEFAULT_EXPORT_PATH);
+			PathAppend(exporter->output_path, DEFAULT_EXPORT_DIRECTORY);
 
 			exporter->is_exporting_from_default_locations = true;
 
@@ -221,7 +225,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
 			}
-			PathAppend(exporter->output_path, DEFAULT_EXPORT_PATH);
+			PathAppend(exporter->output_path, DEFAULT_EXPORT_DIRECTORY);
 
 			exporter->is_exporting_from_default_locations = string_is_empty(exporter->cache_path);
 			
@@ -322,10 +326,9 @@ static void clean_up(Exporter* exporter)
 
 int _tmain(int argc, TCHAR* argv[])
 {
-	Exporter exporter = {};
-	//ZeroMemory(&exporter, sizeof(exporter));	
+	Exporter exporter = {};	
 
-	create_log_file(TEXT("Web-Cache-Exporter.log"));
+	create_log_file(TEXT("WCE.log"));
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.",
 							EXPORTER_BUILD_TARGET, EXPORTER_BUILD_VERSION, EXPORTER_BUILD_MODE);
 
@@ -409,6 +412,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 		log_print(LOG_INFO, "Startup: Loading %I32u groups.", num_groups);
 		load_all_group_files(&exporter, num_groups);
+		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity after loading the group files.", get_used_arena_capacity(&exporter.permanent_arena));
 	}
 
 	#ifndef BUILD_9X
@@ -516,8 +520,13 @@ int _tmain(int argc, TCHAR* argv[])
 		} break;
 	}
 
-	console_print("Finished running. Copied %I32u files.", exporter.num_copied_files);
-	log_print(LOG_INFO, "Finished Running: The exporter copied a total of %I32u files.", exporter.num_copied_files);
+	log_print_newline();
+	log_print(LOG_INFO, "Finished Running: Created %I32u CSV files. Processed %I32u cached files. Copied %I32u cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
+
+	console_print("Finished running:");
+	console_print("- Created %I32u CSV files.", exporter.num_csv_files_created);
+	console_print("- Processed %I32u cached files.", exporter.num_processed_files);
+	console_print("- Copied %I32u cached files.", exporter.num_copied_files);
 
 	clean_up(&exporter);
 

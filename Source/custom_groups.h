@@ -5,7 +5,8 @@ enum Group_Type
 {
 	GROUP_NONE = 0,
 	GROUP_FILE = 1,
-	GROUP_URL = 2
+	GROUP_URL = 2,
+	NUM_GROUP_TYPES = 3
 };
 
 enum List_Type
@@ -16,7 +17,17 @@ enum List_Type
 	LIST_MIME_TYPES = 2,
 	LIST_FILE_EXTENSIONS = 3,
 
-	LIST_DOMAINS = 4
+	LIST_DOMAINS = 4,
+
+	NUM_LIST_TYPES = 5
+};
+
+const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {TEXT(""), TEXT("File"), TEXT("URL")};
+const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
+{
+	TEXT(""),
+	TEXT("File Signatures"), TEXT("MIME Types"), TEXT("File Extensions"),
+	TEXT("Domains")
 };
 
 struct File_Signature

@@ -28,6 +28,7 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 #define push_arena(arena, push_size, Type) ((Type*) aligned_push_arena(arena, push_size, __alignof(Type)))
 #define push_and_copy_to_arena(arena, push_size, Type, data, data_size) ((Type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(Type), data, data_size))
 TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy);
+float32 get_used_arena_capacity(Arena* arena);
 void clear_arena(Arena* arena);
 bool destroy_arena(Arena* arena);
 
@@ -110,14 +111,15 @@ bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
 
-const size_t MAX_INT32_CHARS = 33;
-const size_t MAX_INT64_CHARS = 65;
+// u32 = "0" to "4294967295", s32 = "-2147483648" to "2147483647", MAX = 11 characters
+// u64 = "0" to "18446744073709551615", s64 = "-9223372036854775808" to "9223372036854775807", MAX = 20 characters
+const size_t MAX_INT32_CHARS = 11 + 1;
+const size_t MAX_INT64_CHARS = 20 + 1; 
 bool convert_u32_to_string(u32 value, TCHAR* result_string);
 bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
-TCHAR* skip_to_file_extension(TCHAR* str);
 
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
 
@@ -158,27 +160,10 @@ bool decode_url(TCHAR* url);
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 
-// @ExtendedPathLimit
-#ifdef BUILD_9X
-	#define EXTENDED_PATH_PREFIX ""
-	const u32 NUM_EXTENDED_PATH_PREFIX_CHARS = (u32) strlen(EXTENDED_PATH_PREFIX);
-	const u32 MAX_EXTENDED_PATH_CHARS = MAX_PATH_CHARS;
-#else
-	#define EXTENDED_PATH_PREFIX L"\\\\?\\"
-	const u32 NUM_EXTENDED_PATH_PREFIX_CHARS = (u32) wcslen(EXTENDED_PATH_PREFIX);
-	const u32 MAX_EXTENDED_PATH_CHARS = MAX_PATH_CHARS + 4;
-#endif
-
-_STATIC_ASSERT(MAX_EXTENDED_PATH_CHARS <= STRSAFE_MAX_CCH);
-
-bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_buffer_chars = MAX_PATH_CHARS);
+TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false);
+bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_result_path_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
-bool simple_append_path(TCHAR* result_path, const TCHAR* path_to_append,
-						size_t num_result_path_chars = MAX_PATH_CHARS);
-bool simple_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append,
-								 size_t num_result_path_chars = MAX_PATH_CHARS);
-bool shell_copy_and_append_path(TCHAR* result_path, const TCHAR* path_to_copy, const TCHAR* path_to_append);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -216,10 +201,11 @@ void create_directories(const TCHAR* path_to_create);
 bool delete_directory_and_contents(const TCHAR* directory_path);
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
-bool copy_file_using_url_directory_structure(Arena* arena, const TCHAR* full_file_path, const TCHAR* base_destination_path, const TCHAR* url, const TCHAR* filename);
+bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_file_path, 
+												const TCHAR* full_base_directory_path, const TCHAR* url, const TCHAR* filename);
 
-void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool read_only = true);
-void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool read_only = true);
+void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
+void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
 bool read_first_file_bytes(const TCHAR* path, void* file_buffer, u32 num_bytes_to_read);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
@@ -331,9 +317,10 @@ enum Csv_Type
 	CSV_CONTENT_ENCODING = 16,
 
 	CSV_LOCATION_ON_CACHE = 17,
-	CSV_MISSING_FILE = 18,
 
-	CSV_CUSTOM_FILE_GROUP = 19,
+	// Automatically set by export_cache_entry():
+	CSV_MISSING_FILE = 18, 
+	CSV_CUSTOM_FILE_GROUP = 19, // Depends on CSV_FILE_EXTENSION and CSV_CONTENT_TYPE.
 	CSV_CUSTOM_URL_GROUP = 20,
 	
 	// Internet Explorer specific.
@@ -345,11 +332,9 @@ enum Csv_Type
 	NUM_CSV_TYPES = 23
 };
 
-// An array that maps the previous values to ASCII strings.
-// @Note: We'll take advantage of the fact that ASCII is a subset of UTF-8 in order to avoid unnecessary conversions
-// and just write the columns' names directly to the CSV file (which uses UTF-8 as the character encoding).
-// This project's source files are stored in UTF-8.
-const char* const CSV_TYPE_TO_ASCII_STRING[NUM_CSV_TYPES] =
+// An array that maps the previous values to UTF-8 strings. Used to write the columns' names directly to the CSV file
+// (which uses UTF-8 as the character encoding). This project's source files are stored in UTF-8.
+const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 {
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
@@ -369,6 +354,11 @@ struct Csv_Entry
 	TCHAR* value;
 	wchar_t* utf_16_value;
 };
+
+// A helper constant used to identify uninitialized CSV entries. These are used when the value of some column is automatically
+// set by export_cache_entry() and doesn't need to be handled by each exporter specifically. For example, the custom group
+// columns (see the enumeration above).
+const Csv_Entry NULL_CSV_ENTRY = {NULL, NULL};
 
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
 void close_csv_file(HANDLE* csv_file_handle);

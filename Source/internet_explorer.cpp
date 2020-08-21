@@ -351,6 +351,7 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 								TCHAR** cache_control, TCHAR** pragma,
 								TCHAR** content_type, TCHAR** content_length, TCHAR** content_encoding)
 {
+	_ASSERT(headers_size > 0);
 	// The headers aren't necessarily null terminated.
 	char* headers = push_and_copy_to_arena(arena, headers_size, char, headers_to_copy, headers_size);
 
@@ -436,32 +437,32 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	resolve_exporter_output_paths_and_create_csv_file(exporter, TEXT("IE"), CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 
 	log_print_newline();
-	shell_copy_and_append_path(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
+	PathCombine(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	log_print_newline();
-	shell_copy_and_append_path(exporter->index_path, exporter->cache_path, TEXT("Content.IE5\\index.dat"));
+	PathCombine(exporter->index_path, exporter->cache_path, TEXT("Content.IE5\\index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	log_print_newline();
-	shell_copy_and_append_path(exporter->index_path, exporter->cache_path, TEXT("Low\\Content.IE5\\index.dat"));
+	PathCombine(exporter->index_path, exporter->cache_path, TEXT("Low\\Content.IE5\\index.dat"));
 	export_internet_explorer_4_to_9_cache(exporter);
 
 	#ifndef BUILD_9X
 
 		if(exporter->is_exporting_from_default_locations)
 		{
-			shell_copy_and_append_path(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
+			PathCombineW(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
 		}
 
 		log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
 
 		log_print_newline();
-		shell_copy_and_append_path(exporter->index_path, exporter->cache_path, L"WebCacheV01.dat");
+		PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV01.dat");
 		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
 
 		log_print_newline();
-		shell_copy_and_append_path(exporter->index_path, exporter->cache_path, L"WebCacheV24.dat");
+		PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV24.dat");
 		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
 		
 	#endif
@@ -694,7 +695,6 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					
 					TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
 					TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-					bool file_exists = false;
 
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
 					// Channel Definition Format (CDF): https://en.wikipedia.org/wiki/Channel_Definition_Format
@@ -712,17 +712,16 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
 
 						TCHAR* cache_directory_name = copy_ansi_string_to_tchar(arena, cache_directory_ansi_name);
-						shell_copy_and_append_path(short_file_path, cache_directory_name, decorated_filename);
+						PathCombine(short_file_path, cache_directory_name, decorated_filename);
 
 						// Build the absolute file path to the cache file. The cache directories are next to the index file
 						// in this version of Internet Explorer. Here, exporter->index_path is already a full path.
-						shell_copy_and_append_path(full_file_path, exporter->index_path, TEXT(".."));
+						PathCombine(full_file_path, exporter->index_path, TEXT(".."));
 						PathAppend(full_file_path, short_file_path);
-
-						file_exists = does_file_exist(full_file_path);
 					}
 					else if(cache_directory_index == CHANNEL_DEFINITION_FORMAT_INDEX)
 					{
+						// @TODO: CDF files exist!!
 						// CDF files are marked with this special string since they're not stored on disk.
 						StringCchCopy(short_file_path, MAX_PATH_CHARS, TEXT("<CDF>"));
 					}
@@ -742,14 +741,13 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					GET_URL_ENTRY_FIELD(num_entry_locks, num_entry_locks);
 					convert_u32_to_string(num_entry_locks, num_hits);
 
-					TCHAR* is_file_missing = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
-
 					Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 					{
 						{filename}, {url}, {file_extension}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path}, {is_file_missing}
+						{num_hits}, {short_file_path}, NULL_CSV_ENTRY,
+						NULL_CSV_ENTRY, NULL_CSV_ENTRY
 					};
 
 					export_cache_entry(	exporter,
@@ -1372,14 +1370,14 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		// the three character base name (e.g. "V01") that is used in their filenames.
 		
 		wchar_t index_directory_path[MAX_PATH_CHARS] = L"";
-		shell_copy_and_append_path(index_directory_path, exporter->index_path, TEXT(".."));
+		PathCombineW(index_directory_path, exporter->index_path, TEXT(".."));
 
 		// Find and copy every ESE file in the database's directory to our temporary one.
 		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
 		if(create_temporary_directory(exporter->exporter_temporary_path, temporary_directory_path))
 		{
 			wchar_t search_path[MAX_PATH_CHARS] = L"";
-			shell_copy_and_append_path(search_path, index_directory_path, L"*");
+			PathCombineW(search_path, index_directory_path, L"*");
 
 			WIN32_FIND_DATAW file_find_data = {};
 			HANDLE search_handle = FindFirstFileW(search_path, &file_find_data);
@@ -1393,10 +1391,10 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					&& !strings_are_equal(file_find_data.cFileName, L".."))
 				{
 					wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
-					shell_copy_and_append_path(copy_source_path, index_directory_path, file_find_data.cFileName);
+					PathCombineW(copy_source_path, index_directory_path, file_find_data.cFileName);
 	
 					wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
-					shell_copy_and_append_path(copy_destination_path, temporary_directory_path, file_find_data.cFileName);
+					PathCombineW(copy_destination_path, temporary_directory_path, file_find_data.cFileName);
 
 					// Attempt to copy the ESE file normally...
 					if(!CopyFile(copy_source_path, copy_destination_path, FALSE))
@@ -1433,7 +1431,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 		// Read the ESE database that was copied to our temporary directory.
 		wchar_t temporary_database_path[MAX_PATH_CHARS] = L"";
-		shell_copy_and_append_path(temporary_database_path, temporary_directory_path, index_filename);
+		PathCombineW(temporary_database_path, temporary_directory_path, index_filename);
 
 		JET_ERR error_code = JET_errSuccess;
 		JET_INSTANCE instance = JET_instanceNil;
@@ -1541,7 +1539,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(!exporter->is_exporting_from_default_locations && exporter->should_use_ie_hint)
 		{
 			is_original_database_path_set = true;
-			shell_copy_and_append_path(original_database_path, exporter->ie_hint_path, L"Microsoft\\Windows\\WebCache");
+			PathCombineW(original_database_path, exporter->ie_hint_path, L"Microsoft\\Windows\\WebCache");
 		}
 
 		enum Container_Column_Index
@@ -1802,10 +1800,14 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									wchar_t* content_type = NULL;
 									wchar_t* content_length = NULL;
 									wchar_t* content_encoding = NULL;
-									parse_cache_headers(arena, headers, headers_size,
-														&response, &server,
-														&cache_control, &pragma,
-														&content_type, &content_length, &content_encoding);
+
+									if(headers_size > 0)
+									{
+										parse_cache_headers(arena, headers, headers_size,
+															&response, &server,
+															&cache_control, &pragma,
+															&content_type, &content_length, &content_encoding);
+									}
 
 									wchar_t num_hits[MAX_INT32_CHARS] = L"";
 									convert_u32_to_string(access_count, num_hits);
@@ -1816,7 +1818,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									wchar_t* cache_directory = cache_directory_names[secure_directory_index];
 
 									wchar_t short_file_path[MAX_PATH_CHARS] = L"";
-									shell_copy_and_append_path(short_file_path, cache_directory, decorated_filename);
+									PathCombineW(short_file_path, cache_directory, decorated_filename);
 
 									// @Hint: If we're exporting from a live machine, the absolute path stored in the database
 									// can be used directly. Otherwise, we'll use one of the two methods described in @Hint to
@@ -1831,7 +1833,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									{
 										if(!is_original_database_path_set)
 										{
-											shell_copy_and_append_path(original_database_path, directory, L"..\\..\\WebCache");
+											PathCombineW(original_database_path, directory, L"..\\..\\WebCache");
 											is_original_database_path_set = !string_is_empty(original_database_path);
 										}
 
@@ -1840,20 +1842,18 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 															original_database_path, FILE_ATTRIBUTE_DIRECTORY, // From this directory...
 															directory, FILE_ATTRIBUTE_DIRECTORY); // To this directory.
 
-										shell_copy_and_append_path(full_file_path, index_directory_path, path_from_database_to_cache);
+										PathCombineW(full_file_path, index_directory_path, path_from_database_to_cache);
 									}
 
 									PathAppendW(full_file_path, short_file_path);
-									
-									bool file_exists = does_file_exist(full_file_path);
-									wchar_t* is_file_missing = (file_exists) ? (L"No") : (L"Yes");
 
 									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 									{
 										{filename}, {url}, {file_extension}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-										{num_hits}, {short_file_path}, {is_file_missing}
+										{num_hits}, {short_file_path}, NULL_CSV_ENTRY,
+										NULL_CSV_ENTRY, NULL_CSV_ENTRY
 									};
 
 									export_cache_entry(	exporter,

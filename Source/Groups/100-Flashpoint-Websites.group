@@ -43,7 +43,7 @@ BEGIN_URL_GROUP GameHouse
 
 	BEGIN_DOMAINS
 		gamehouse.com
-		cdn.ghstatic.com
+		ghstatic.com
 	END
 
 END
@@ -202,7 +202,7 @@ END
 BEGIN_URL_GROUP Yahoo! Games
 
 	BEGIN_DOMAINS
-		l.yimg.com/os/en_us/Games
+		yimg.com/os/en_us/Games
 	END
 
 END

@@ -115,9 +115,10 @@ const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 	TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
 };
 
-struct Exporter;
 #include "memory_and_file_io.h"
+struct Exporter;
 #include "custom_groups.h"
+
 struct Exporter
 {
 	bool should_copy_files;
@@ -153,6 +154,8 @@ struct Exporter
 	TCHAR output_csv_path[MAX_PATH_CHARS];
 	TCHAR index_path[MAX_PATH_CHARS];
 
+	u32 num_csv_files_created;
+	u32 num_processed_files;
 	u32 num_copied_files;
 };
 

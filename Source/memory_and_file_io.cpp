@@ -78,17 +78,6 @@ bool create_arena(Arena* arena, size_t total_size)
 	return success;
 }
 
-// Checks if a number is a power of two.
-//
-// @Parameters:
-// 1. value - The non-negative value to check.
-//
-// @Returns: True if the value is a power of two. Otherwise, false.
-static bool is_power_of_two(size_t value)
-{
-	return (value & (value - 1)) == 0;
-}
-
 // Moves an arena's available memory pointer by a certain number, giving back the aligned address to a memory location
 // where you can write at least that number of bytes.
 // This function is usually called by using the macro push_arena(arena, push_size, Type), which determines the alignment of
@@ -123,9 +112,9 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 	void* aligned_address = misaligned_address;
 	if(alignment_size > 1)
 	{
-		if(is_power_of_two(alignment_size))
+		if(IS_POWER_OF_TWO(alignment_size))
 		{
-			aligned_address = (void*) ( (((uintptr_t) misaligned_address) + (alignment_size - 1)) & ~(alignment_size - 1) );
+			aligned_address = (void*) ALIGN_UP((uintptr_t) misaligned_address, alignment_size);
 		}
 		else
 		{
@@ -601,15 +590,21 @@ wchar_t* skip_leading_whitespace(wchar_t* str)
 static const size_t INT_FORMAT_RADIX = 10;
 bool convert_u32_to_string(u32 value, TCHAR* result_string)
 {
-	return _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
+	if(!success) *result_string = TEXT('\0');
+	return success;
 }
 bool convert_u64_to_string(u64 value, TCHAR* result_string)
 {
-	return _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
+	if(!success) *result_string = TEXT('\0');
+	return success;
 }
 bool convert_s64_to_string(s64 value, TCHAR* result_string)
 {
-	return _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
+	if(!success) *result_string = TEXT('\0');
+	return success;
 }
 
 // Converts a single hexadecimal character to an integer.
@@ -1486,6 +1481,9 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 // For example: "C:\Path" + "http://www.example.com:80/path/file.php?query#fragment" + "file.ext"
 // results in: "C:\Path\www.example.com\path\file.ext"
 //
+// If this file already exists, a tilde followed by a number will be added before the file extension. This number will be incremented
+// until there's no longer a naming collision. For example: "C:\Path\www.example.com\path\file~1.ext".
+//
 // Since the URL and filename can be invalid Windows paths, these may be modified accordingly (e.g. replacing invalid characters).
 //
 // Note that all of these paths are limited to MAX_PATH characters. This limit used to be extended by using the "\\?\" prefix
@@ -1526,7 +1524,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 		if(!build_target_success)
 		{
 			console_print("The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
-			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s'. This file will be copied to the base export directory instead.", filename);
+			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
 			StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
 		}
 	}
@@ -2169,16 +2167,13 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type colum
 // @Parameters:
 // 1. arena - The Arena structure where any intermediary strings are stored.
 // 2. csv_file_handle - The handle to the CSV file.
-// 3. column_types - An array that contains the type of each value.
-// 4. column_values - The array of values to write. The TCHAR value strings must be contained in the 'value' field of the Csv_Entry
+// 3. column_values - The array of values to write. The TCHAR value strings must be contained in the 'value' field of the Csv_Entry
 // structure. If a value is NULL, then nothing will be written in its cell.
-// 5. num_columns - The number of elements in this array.
+// 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns)
+void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values[], size_t num_columns)
 {
-	column_types; // @TODO: Use this in the future for file and URL groups.
-
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
 		log_print(LOG_ERROR, "Csv Print Row: Attempted to add the header to a CSV file that wasn't been opened yet.");
@@ -2574,6 +2569,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 	// Forcibly copies a file that was opened by another process. This function is used to bypass sharing violation errors when
 	// trying to read a file that is being used by another process.
 	//
+	// You should use the CopyFile() function from the Windows API first, and only use this one if CopyFile() fails with the error
+	// code ERROR_SHARING_VIOLATION.
+	//
 	// @Parameters:
 	// 1. arena - The Arena structure where the file buffer and any intermediary information about the currently opened handles
 	// is stored.
@@ -2622,10 +2620,14 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 				SYSTEM_INFO system_info = {};
 				GetSystemInfo(&system_info);
 
-				const size_t FILE_BUFFER_SIZE = 32768; // @TODO
-				void* file_buffer = aligned_push_arena(arena, FILE_BUFFER_SIZE, system_info.dwPageSize);
-				_ASSERT(FILE_BUFFER_SIZE % system_info.dwPageSize == 0);
+				const u32 DESIRED_FILE_BUFFER_SIZE = 32768;
+				_STATIC_ASSERT(IS_POWER_OF_TWO(DESIRED_FILE_BUFFER_SIZE));
 
+				u32 file_buffer_size = ALIGN_UP(DESIRED_FILE_BUFFER_SIZE, system_info.dwPageSize);
+				_ASSERT(file_buffer_size % system_info.dwPageSize == 0);
+
+				void* file_buffer = aligned_push_arena(arena, file_buffer_size, system_info.dwPageSize);
+				
 				u64 total_bytes_read = 0;
 				u64 total_bytes_written = 0;
 				OVERLAPPED overlapped = {};
@@ -2636,7 +2638,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 				do
 				{
 					DWORD num_bytes_read = 0;
-					bool read_success = ReadFile(source_file_handle, file_buffer, FILE_BUFFER_SIZE, &num_bytes_read, &overlapped) == TRUE;
+					bool read_success = ReadFile(source_file_handle, file_buffer, file_buffer_size, &num_bytes_read, &overlapped) == TRUE;
 					
 					if(!read_success)
 					{
@@ -2658,33 +2660,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 								}
 								else if(overlapped_result_error_code == WAIT_TIMEOUT)
 								{
-									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Cancelling all pending I/O operations and retrying. Read %I64u and wrote %I64u bytes so far.", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written);
-									
-									// If the function timed out, we'll cancel all pending I/O operations issued by us and then
-									// try to read the data again.
-									// See: https://docs.microsoft.com/en-us/windows/win32/fileio/canceling-pending-i-o-operations
-									if(CancelIo(source_file_handle))
-									{
-										// @TODO: Use GetOverlappedResultEx() here?
-										#if 1
-										// Wait for the I/O subsystem to acknowledge our cancellation.
-										if(!GetOverlappedResultEx(source_file_handle, &overlapped, &num_bytes_read, TIMEOUT_IN_MILLISECONDS, FALSE))
-										{
-											overlapped_result_error_code = GetLastError();
-											if(overlapped_result_error_code != WAIT_TIMEOUT)
-											{
-												log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result after canceling all pending I/O operatiosn with the the error code %lu.", overlapped_result_error_code);
-												_ASSERT(false);												
-											}
-										}
-										#endif
-									}
-									else
-									{
-										log_print(LOG_ERROR, "Force Copy Open File: Failed to cancel all pending I/O operation before retrying with the error code %lu.", GetLastError());
-										_ASSERT(false);
-									}
-
+									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation.", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written);
 									++num_read_retry_attempts;
 									continue;
 								}
@@ -2721,8 +2697,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_t
 						u32 offset_high = 0;
 						u32 offset_low = 0;
 						separate_u64_into_high_and_low_u32s(total_bytes_read, &offset_high, &offset_low);					
-						overlapped.OffsetHigh = (DWORD) offset_high;
-						overlapped.Offset = (DWORD) offset_low;
+						overlapped.OffsetHigh = offset_high;
+						overlapped.Offset = offset_low;
 					}
 					else
 					{

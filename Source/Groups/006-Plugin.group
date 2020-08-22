@@ -30,8 +30,8 @@ END
 BEGIN_FILE_GROUP Atomic3D
 
 	BEGIN_MIME_TYPES
-		video/x-atomic3d-feature
 		application/x-atomic3d
+		; video/x-atomic3d-feature
 	END
 
 	BEGIN_FILE_EXTENSIONS
@@ -193,6 +193,12 @@ BEGIN_FILE_GROUP Pulse
 
 	BEGIN_MIME_TYPES
 		application/x-pulse
+		; Matches:
+		; application/x-pulse-player
+		; application/x-pulse-player-32
+		; application/x-pulse-stream
+		; application/x-pulse-download
+		; application/x-pulse-version
 	END
 
 	BEGIN_FILE_EXTENSIONS
@@ -357,9 +363,11 @@ BEGIN_FILE_GROUP X3D
 	BEGIN_MIME_TYPES
 		model/x3d
 		; Matches:
-		; model/x3d-vrml
-		; model/x3d+fastinfoset
 		; model/x3d+xml
+		; model/x3d+binary
+		; model/x3d+vrml
+		; model/x3d+zip
+		; model/x3d+fastinfoset
 	END
 
 	BEGIN_FILE_EXTENSIONS

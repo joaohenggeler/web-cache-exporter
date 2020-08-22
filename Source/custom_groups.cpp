@@ -129,7 +129,7 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 	// Find each group file on disk and keep track of their total file disk and number of groups.
 	while(found_file)
 	{
-		// Skip directories.
+		// Ignore directories.
 		if((file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
 		{
 			#ifdef BUILD_32_BIT
@@ -567,7 +567,7 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 		bool found_file = search_handle != INVALID_HANDLE_VALUE;
 		while(found_file)
 		{
-			// Skip directories.
+			// Ignore directories.
 			if((file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
 			{
 				size_t size = string_size(file_find_data.cFileName);

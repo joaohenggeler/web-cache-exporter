@@ -41,8 +41,17 @@ bool destroy_arena(Arena* arena);
 */
 
 #define WHILE_TRUE(...) for(;;)
-#define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
 #define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
+#define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
+#define IS_POWER_OF_TWO(value) ( ((value) > 0) && (( (value) & ((value) - 1) ) == 0) )
+
+// Aligns a value up given an alignment size. This value is offset so that it is the next multiple of the alignment size.
+//
+// @Parameters:
+// 1. value - The value to align.
+// 2. alignment - The alignment size in bytes. This value must be a power of two.
+#define ALIGN_UP(value, alignment) ( ( (value) + ((alignment) - 1) ) & ~((alignment) - 1) )
+
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
 void* advance_bytes(void* pointer, size_t num_bytes);
@@ -363,7 +372,7 @@ const Csv_Entry NULL_CSV_ENTRY = {NULL, NULL};
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
 void close_csv_file(HANDLE* csv_file_handle);
 void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);
-void csv_print_row(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], Csv_Entry row[], size_t num_columns);
+void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values[], size_t num_columns);
 
 // Retrieves the address of a function from a loaded library and sets a given variable to this value.
 //

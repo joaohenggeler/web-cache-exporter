@@ -37,6 +37,30 @@
 	- Internet Explorer 5 to 9 (Content.IE5\index.dat)
 	- Internet Explorer 10 and 11 (WebCacheV01.dat and WebCacheV24.dat - JET Blue / ESE databases)
 
+	@DefaultCacheLocations:
+	- 95, 98, ME 	C:\WINDOWS\Temporary Internet Files
+	- 2000, XP 		C:\Documents and Settings\<Username>\Local Settings\Temporary Internet Files
+	- Vista, 7	 	C:\Users\<Username>\AppData\Local\Microsoft\Windows\Temporary Internet Files
+	- 8.1, 10	 	C:\Users\<Username>\AppData\Local\Microsoft\Windows\INetCache
+
+	In addition to these locations, assume that "<Cache Location>\Low" also exists and contains cached files like these previous
+	locations. For example: "C:\Users\<Username>\AppData\Local\Microsoft\Windows\INetCache\Low".
+	See:
+	- https://helgeklein.com/blog/2009/01/internet-explorer-in-protected-mode-how-the-low-integrity-environment-gets-created/
+	- https://kb.digital-detective.net/display/BF/Understanding+and+Working+in+Protected+Mode+Internet+Explorer
+
+	For IE 4:
+	- Cached Files: <Cache Location>\<8 Character Directory>
+	- Database File: <Cache Location>\index.dat
+
+	For IE 5 to 9:
+	- Cached Files: <Cache Location>\Content.IE5\<8 Character Directory>
+	- Database File: <Cache Location>\Content.IE5\index.dat
+
+	For IE 10 and 11:
+	- Cached Files: <Cache Location>\IE\<8 Character Directory>
+	- Database File: <Cache Location>\..\WebCache\WebCacheV01.dat or WebCacheV24.dat
+
 	@Resources: Previous reverse engineering efforts that specify how the INDEX.DAT file format (IE 4 to 9) should be processed.
 	Note that we don't handle the entirety of these formats (INDEX.DAT or ESE databases). We only process the subset of the file
 	formats that is useful for this application. Any used members in the data structures that represent the various parts of the
@@ -53,6 +77,8 @@
 	
 	[NS-B2] "Improved solution for reading the history of Internet Explorer 10"
 	--> https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/
+
+	See also: https://kb.digital-detective.net/display/BF/Internet+Explorer
 
 	@Tools: Existing software that also reads IE's cache.
 	
@@ -95,7 +121,7 @@ enum Internet_Explorer_Index_Entry_Signature
 	ENTRY_LEAK = 0x4B41454C, // "LEAK"
 	ENTRY_HASH = 0x48534148, // "HASH"
 
-	// @Investigate
+	// Mentioned in [GC].
 	ENTRY_DELETED = 0x204C4544, // "DEL "
 	ENTRY_UPDATED = 0x20445055, // "UPD "
 
@@ -415,11 +441,12 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 	}
 }
 
-// Exports the cache from all supported file formats used by Internet Explorer.
+// Entry point for Internet Explorer's cache exporter. This function will determine where to look for the cache before
+// processing its contents.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
-// If the path to this location isn't defined, this function will try to locate it using the CSIDL value for the Temporary
+// If the path to this location isn't defined, this function will try to find it using the CSIDL value for the Temporary
 // Internet Files directory.
 //
 // @Returns: Nothing.
@@ -472,7 +499,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
 }
 
-// Exports the cache from Internet Explorer 4 through 9.
+// Exports Internet Explorer 4 through 9's cache from a given location.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
@@ -1277,36 +1304,36 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(*containers_table_id != JET_tableidNil)
 		{
 			error_code = JetCloseTable(*session_id, *containers_table_id);
-			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to close the Containers table.", error_code);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Failed to close the Containers table with the error code %ld.", error_code);
 			*containers_table_id = JET_tableidNil;
 		}
 
 		if(*database_id != JET_dbidNil)
 		{
 			error_code = JetCloseDatabase(*session_id, *database_id, 0);
-			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to close the database.", error_code);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Failed to close the database with the error code %ld.", error_code);
 			error_code = JetDetachDatabaseW(*session_id, NULL);
-			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to detach the database.", error_code);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Failed to detach the database with the error code %ld.", error_code);
 			*database_id = JET_dbidNil;
 		}
 
 		if(*session_id != JET_sesidNil)
 		{
 			error_code = JetEndSession(*session_id, 0);
-			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to end the session.", error_code);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Failed to end the session with the error code %ld.", error_code);
 			*session_id = JET_sesidNil;
 		}
 
 		if(*instance != JET_instanceNil)
 		{
 			error_code = JetTerm(*instance);
-			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Error %ld while trying to terminate the ESE instance.", error_code);
+			if(error_code != JET_errSuccess) log_print(LOG_WARNING, "Failed to terminate the ESE instance with the error code %ld.", error_code);
 			*instance = JET_instanceNil;
 		}
 
 		if(!string_is_empty(temporary_directory_path) && !delete_directory_and_contents(temporary_directory_path))
 		{
-			log_print(LOG_WARNING, "Error %lu while trying to delete the temporary recovery directory and its contents.", GetLastError());
+			log_print(LOG_WARNING, "Failed to delete the temporary recovery directory and its contents with the error code %lu.", GetLastError());
 			_ASSERT(false);
 		}
 	}
@@ -1316,7 +1343,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// @Parameters:
 	// 1. state - The value of the 'dbstate' member in the JET_DBINFOMISC database information structure.
 	//
-	// @Returns: Nothing.
+	// @Returns: The database state as a string.
 	static wchar_t* windows_nt_get_database_state_string(unsigned long state)
 	{
 		switch(state)
@@ -1330,7 +1357,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
-	// Exports the cache from Internet Explorer 10 and 11.
+	// Exports Internet Explorer 10 and 11's cache from a given location.
 	//
 	// @Parameters:
 	// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
@@ -1425,7 +1452,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %lu while trying to create the temporary recovery directory.", GetLastError());
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to create the temporary recovery directory with the error code %lu.", GetLastError());
 			return;
 		}
 
@@ -1461,7 +1488,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetCreateInstanceW(&instance, L"WebCacheExporter");
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to create the ESE instance.", error_code);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to create the ESE instance with the error code %ld.", error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
@@ -1479,7 +1506,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetInit(&instance);
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to initialize the ESE instance.", error_code);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to initialize the ESE instance with the error code %ld.", error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
@@ -1487,7 +1514,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetBeginSessionW(instance, &session_id, NULL, NULL);
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to begin the session.", error_code);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to begin the session with the error code %ld.", error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
@@ -1496,7 +1523,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetAttachDatabase2W(session_id, temporary_database_path, 0, JET_bitDbReadOnly);
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to attach the database '%ls'", error_code, temporary_database_path);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to attach the database '%ls' with the error code %ld.", temporary_database_path, error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
@@ -1504,7 +1531,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetOpenDatabaseW(session_id, temporary_database_path, NULL, &database_id, JET_bitDbReadOnly);
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the database '%ls'.", error_code, temporary_database_path);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to open the database '%ls' with the error code %ld.", temporary_database_path, error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
@@ -1512,7 +1539,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetOpenTableW(session_id, database_id, L"Containers", NULL, 0, JET_bitTableReadOnly | JET_bitTableSequential, &containers_table_id);
 		if(error_code < 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the Containers table.", error_code);
+			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to open the Containers table with the error code %ld.", error_code);
 			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
@@ -1621,7 +1648,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 						JET_RECPOS record_position = {};
 						error_code = JetGetRecordPosition(session_id, containers_table_id, &record_position, sizeof(record_position));
-						log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to retrieve column %Iu for Content record %lu in the Containers table.", container_columns[i].err, i, record_position.centriesLT);
+						log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to retrieve the '%ls' column (%Iu) for Content record %lu in the Containers table with the error code %ld.", CONTAINER_COLUMN_NAMES[i], i, record_position.centriesLT, container_columns[i].err);
 					}
 				}
 
@@ -1765,7 +1792,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 										JET_RECPOS record_position = {};
 										error_code = JetGetRecordPosition(session_id, cache_table_id, &record_position, sizeof(record_position));
-										log_print(LOG_WARNING, "Internet Explorer 10 to 11: Error %ld while trying to retrieve column %Iu for Cache record %lu in the Cache table '%ls'.", cache_columns[i].err, i, record_position.centriesLT, cache_table_name);
+										log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to retrieve column %Iu for Cache record %lu in the Cache table '%ls' with the error code %ld.", i, record_position.centriesLT, cache_table_name, cache_columns[i].err);
 									}
 								}
 
@@ -1873,12 +1900,12 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 							cache_table_id = JET_tableidNil;
 							if(error_code < 0)
 							{
-								log_print(LOG_WARNING, "Internet Explorer 10 to 11: Error %ld while trying to close the cache table '%ls'.", error_code, cache_table_name);
+								log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to close the cache table '%ls' with the error code %ld.", cache_table_name, error_code);
 							}
 						}
 						else
 						{
-							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Error %ld while trying to open the cache table '%ls'. The contents of this table will be ignored.", error_code, cache_table_name);
+							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to open the cache table '%ls' with the error code %ld. The contents of this table will be ignored.", cache_table_name, error_code);
 						}
 					}
 					else

@@ -93,7 +93,7 @@ void export_cache_entry(Exporter* exporter,
 
 	if(exporter->should_create_csv)
 	{
-		csv_print_row(arena, exporter->csv_file_handle, column_types, column_values, num_columns);
+		csv_print_row(arena, exporter->csv_file_handle, column_values, num_columns);
 	}
 
 	if(file_exists && exporter->should_copy_files)

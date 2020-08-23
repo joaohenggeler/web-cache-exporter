@@ -1,5 +1,4 @@
 #include "web_cache_exporter.h"
-#include "memory_and_file_io.h"
 #include "custom_groups.h"
 
 static const TCHAR* GROUP_FILES_DIRECTORY = TEXT("Groups");

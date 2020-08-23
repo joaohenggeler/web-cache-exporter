@@ -87,8 +87,9 @@ struct Matchable_Cache_Entry
 	TCHAR* url_to_match;
 
 	bool should_match_file_group;
-	TCHAR* matched_file_group_name;
 	bool should_match_url_group;
+
+	TCHAR* matched_file_group_name;
 	TCHAR* matched_url_group_name;
 };
 

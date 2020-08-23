@@ -2,6 +2,8 @@
 #include "memory_and_file_io.h"
 
 /*
+	This file 
+
 	TABLE OF CONTENTS:
 
 	1. MEMORY ALLOCATION
@@ -1290,6 +1292,105 @@ void safe_find_close(HANDLE* search_handle)
 	}
 }
 
+// Traverses the objects (files and directories) inside a directory, and optionally its subdirectories, given a search query for the
+// filename. When each desired file or directory is found, a given callback function is called.
+//
+// This function does not guarantee the order in which the files and directories are found.
+//
+// @Parameters:
+// 1. path - The path to the directory whose files and subdirectories will be visited.
+// 2. search_query - The file or directory's name to find. This name can include wildcard characters like an asterisk "*"" or a question
+// mark "?". To find every file and directory, use "*".
+// 3. traversal_flags - Defines which type of objects (files and/or directories) should be visited. This value should specify:
+// - TRAVERSE_FILES, to visit files.
+// - TRAVERSE_DIRECTORIES, to visit directories.
+// - TRAVERSE_FILES | TRAVERSE_DIRECTORIES, to visit both files and directories.
+// 4. should_traverse_subdirectories - True if subdirectories should be traversed too. Otherwise, false. The previous 'search_query'
+// still applies.
+// 5. callback_function - The callback function that is called every time a relevant file or directory is found. Whether or not this
+// function is called for a given object depends on the 'traversal_flags'.
+// 6. user_data - A pointer to any additional data that should be passed to the callback function. This parameter may be NULL.
+//
+// The callback function can be defined using the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @CallbackParameters:
+// 1. directory_path - The path to the directory that contains the current object.
+// 2. find_data - A pointer to the WIN32_FIND_DATA structure of the current object.
+// 3. user_data - A pointer to any additional data that was passed to traverse_directory_objects().
+//
+// @CallbackReturns: Nothing.
+//
+// @Returns: Nothing.
+void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
+								u32 traversal_flags, bool should_traverse_subdirectories,
+								Traverse_Directory_Callback* callback_function, void* user_data)
+{
+	/*
+		>>>> Traverse the files and directories that match the search query.
+	*/
+
+	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(search_path, path, search_query);
+
+	WIN32_FIND_DATA find_data = {};
+	HANDLE search_handle = FindFirstFile(search_path, &find_data);
+	
+	bool found_object = search_handle != INVALID_HANDLE_VALUE;
+	while(found_object)
+	{
+		TCHAR* filename = find_data.cFileName;
+		if(!strings_are_equal(filename, TEXT(".")) && !strings_are_equal(filename, TEXT("..")))
+		{
+			bool is_directory = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+			bool should_process_object = 	( (traversal_flags & TRAVERSE_FILES) && !is_directory )
+										|| 	( (traversal_flags & TRAVERSE_DIRECTORIES) && is_directory );
+
+			if(should_process_object)
+			{
+				callback_function(path, &find_data, user_data);
+			}
+		}
+
+		found_object = FindNextFile(search_handle, &find_data) == TRUE;
+	}
+
+	safe_find_close(&search_handle);
+
+	/*
+		>>>> Traverse every subdirectory in this directory. We can't use the same search query here, otherwise we'd exclude directories.
+	*/
+
+	if(should_traverse_subdirectories)
+	{
+		PathCombine(search_path, path, TEXT("*"));
+		search_handle = FindFirstFile(search_path, &find_data);
+		
+		found_object = search_handle != INVALID_HANDLE_VALUE;
+		while(found_object)
+		{
+			TCHAR* filename = find_data.cFileName;
+			if(!strings_are_equal(filename, TEXT(".")) && !strings_are_equal(filename, TEXT("..")))
+			{
+				bool is_directory = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+				if(is_directory)
+				{
+					TCHAR subdirectory_path[MAX_PATH_CHARS] = TEXT("");
+					PathCombine(subdirectory_path, path, filename);
+					_ASSERT(!string_is_empty(subdirectory_path));
+
+					traverse_directory_objects(	subdirectory_path, search_query,
+												traversal_flags, should_traverse_subdirectories,
+												callback_function, user_data);
+				}			
+			}
+
+			found_object = FindNextFile(search_handle, &find_data) == TRUE;
+		}
+
+		safe_find_close(&search_handle);		
+	}
+}
+
 // Creates a directory given its path, and any intermediate directories that don't exist.
 //
 // This function was created to replace SHCreateDirectoryEx() from the Shell API since it was only available from version 5.0
@@ -2095,17 +2196,6 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 										NULL);
 
 	return *result_file_handle != INVALID_HANDLE_VALUE;
-}
-
-// Closes a CSV file given its handle. After being closed, all future csv_print_header() and csv_print_row() calls will do nothing.
-//
-// @Parameters:
-// 1. csv_file_handle - The handle to the CSV file.
-// 
-// @Returns: Nothing.
-void close_csv_file(HANDLE* csv_file_handle)
-{
-	safe_close_handle(csv_file_handle);
 }
 
 // Writes the header to a CSV file using UTF-8 as the character encoding. This header string is built using the Csv_Type enumeration

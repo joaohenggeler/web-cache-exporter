@@ -206,6 +206,19 @@ do\
 }\
 while(false, false)
 
+// Defines a combination of options for traverse_directory_objects().
+enum Traversal_Flag
+{
+	TRAVERSE_FILES = 1 << 0,
+	TRAVERSE_DIRECTORIES = 1 << 1
+};
+
+#define TRAVERSE_DIRECTORY_CALLBACK(function_name) void function_name(const TCHAR* directory_path, WIN32_FIND_DATA* find_data, void* user_data)
+typedef TRAVERSE_DIRECTORY_CALLBACK(Traverse_Directory_Callback);
+void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
+								u32 traversal_flags, bool should_traverse_subdirectories,
+								Traverse_Directory_Callback* callback_function, void* user_data);
+
 void create_directories(const TCHAR* path_to_create);
 bool delete_directory_and_contents(const TCHAR* directory_path);
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
@@ -370,7 +383,6 @@ struct Csv_Entry
 const Csv_Entry NULL_CSV_ENTRY = {NULL, NULL};
 
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
-void close_csv_file(HANDLE* csv_file_handle);
 void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);
 void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values[], size_t num_columns);
 

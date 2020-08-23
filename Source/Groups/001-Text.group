@@ -1,11 +1,28 @@
 BEGIN_FILE_GROUP Server-Side Script
 
 	BEGIN_FILE_EXTENSIONS
+		; Active Server Pages (ASP) and ASP.NET
 		asp aspx cshtml vbhtml
+		
+		; ColdFusion Markup Language (CFML)
+		cfm cfc
+		
+		; Common Gateway Interface (CGI)
 		cgi
-		jsp
-		php php3 php4 php5 phtml
+		
+		; JavaServer Pages (JSP)
+		jsp jspx jspf
+		
+		; PHP
+		php phtml php3 php4 php5 php7 phps php-s pht phar
+		
+		; Server Side Includes (SSI)
 		shtml shtm stm
+	END
+
+	BEGIN_MIME_TYPES
+		; JavaServer Pages (JSP)
+		application/jsp
 	END
 
 END

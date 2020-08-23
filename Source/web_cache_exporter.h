@@ -85,6 +85,10 @@
 	#endif
 #endif
 
+#ifdef _CHAR_UNSIGNED
+	_STATIC_ASSERT(false);
+#endif
+
 typedef __int8 s8;
 typedef __int16 s16;
 typedef __int32 s32;
@@ -109,6 +113,7 @@ enum Exporter_Cache_Type
 	
 	NUM_CACHE_TYPES = 5
 };
+
 const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 {
 	TEXT("Unknown"), TEXT("All"),
@@ -160,10 +165,12 @@ struct Exporter
 };
 
 void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,
-												const Csv_Type column_types[], size_t num_columns);
+														const Csv_Type column_types[], size_t num_columns);
+
 void export_cache_entry(Exporter* exporter,
 						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename);
+
 void close_exporter_csv_file(Exporter* exporter);
 
 #endif

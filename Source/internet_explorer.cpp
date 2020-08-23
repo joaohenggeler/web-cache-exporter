@@ -1,6 +1,6 @@
 #include "web_cache_exporter.h"
-#include "memory_and_file_io.h"
 #include "internet_explorer.h"
+
 #ifndef BUILD_9X
 	// Minimum supported version for the JET Blue / ESE API used by the Internet Explorer 10 and 11's exporter:
 	// 0x0500  - Windows 2000
@@ -90,6 +90,9 @@
 	--> https://www.nirsoft.net/utils/ese_database_view.html
 	--> Used to explore an existing JET Blue / ESE database in order to figure out how to process the cache for IE 10 and 11.
 */
+
+// The name of the CSV file and the directory where the cached files will be copied to.
+static const TCHAR* OUTPUT_DIRECTORY_NAME = TEXT("IE");
 
 // The order and type of each column in the CSV file. This applies to all supported cache database file format versions.
 static const Csv_Type CSV_COLUMN_TYPES[] =
@@ -461,7 +464,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	get_full_path_name(exporter->cache_path);
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 
-	resolve_exporter_output_paths_and_create_csv_file(exporter, TEXT("IE"), CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	resolve_exporter_output_paths_and_create_csv_file(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 
 	log_print_newline();
 	PathCombine(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
@@ -748,7 +751,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 					else if(cache_directory_index == CHANNEL_DEFINITION_FORMAT_INDEX)
 					{
-						// @TODO: CDF files exist!!
+						// @TODO: use pointer to const string instead of always copying
 						// CDF files are marked with this special string since they're not stored on disk.
 						StringCchCopy(short_file_path, MAX_PATH_CHARS, TEXT("<CDF>"));
 					}

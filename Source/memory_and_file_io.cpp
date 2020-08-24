@@ -1473,7 +1473,6 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	if(error_code != 0)
 	{
 		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' and its contents with error code %d.", directory_path, error_code);
-		_ASSERT(false);
 	}
 
 	return error_code == 0;
@@ -2206,7 +2205,7 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 // @Parameters:
 // 1. arena - The Arena structure where any intermediary strings are stored.
 // 2. csv_file_handle - The handle to the CSV file.
-// 3. column_types - An array of column types used to determine the column names.
+// 3. column_types - The array of column types used to determine the column names.
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.

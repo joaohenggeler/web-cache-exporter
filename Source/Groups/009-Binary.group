@@ -18,3 +18,11 @@ BEGIN_FILE_GROUP Screensaver
 	END
 
 END
+
+BEGIN_FILE_GROUP Binary
+
+	BEGIN_MIME_TYPES
+		application/octet-stream
+	END
+
+END

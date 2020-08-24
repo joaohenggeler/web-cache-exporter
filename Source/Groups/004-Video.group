@@ -5,7 +5,7 @@ BEGIN_FILE_GROUP Video
 		52 49 46 46 __ __ __ __ 41 56 49 20
 
 		; FLV - "FLV"
-		46 4C 56
+		46 4C 56 01
 	END
 
 	BEGIN_MIME_TYPES

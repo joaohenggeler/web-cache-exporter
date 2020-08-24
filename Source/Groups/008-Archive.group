@@ -11,10 +11,48 @@ BEGIN_FILE_GROUP ZIP
 
 	BEGIN_MIME_TYPES
 		application/zip
+		application/x-zip-compressed
 	END
 
 	BEGIN_FILE_EXTENSIONS
 		zip
+	END
+
+END
+
+BEGIN_FILE_GROUP RAR
+
+	BEGIN_FILE_SIGNATURES
+		; "Rar!..." for version 4
+		52 61 72 21 1A 07 00
+		; "Rar!...." for version 5
+		52 61 72 21 1A 07 01 00
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-rar-compressed
+		application/vnd.rar
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		rar
+	END
+
+END
+
+BEGIN_FILE_GROUP 7-Zip
+
+	BEGIN_FILE_SIGNATURES
+		; "7z¼¯'."
+		37 7A BC AF 27 1C
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-7z-compressed
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		7z
 	END
 
 END

@@ -5,8 +5,9 @@ BEGIN_FILE_GROUP Image
 		; BMP - "BM"
 		42 4D
 
-		; GIF - "GIF8" to match "GIF87a" and "GIF89a"
-		47 49 46 38
+		; GIF - "GIF87a" and "GIF89a"
+		47 49 46 38 37 61
+		47 49 46 38 39 61
 
 		; JPEG
 		FF D8 FF DB

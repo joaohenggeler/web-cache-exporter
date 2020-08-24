@@ -20,14 +20,26 @@
 	maintain compatibility with Windows 98 and ME. This was the first real C/C++ program I wrote outside of university assignments
 	so it may not do certain things in the most optimal way.
 
-	- Each exporter is located in a .cpp file called "<Browser Name>.cpp" for web browsers and "<Plugin Name>_plugin.cpp" for web
-	plugins. For example, "internet_explorer.cpp" and "shockwave_plugin.cpp".
+	- The exporters are located in a .cpp file called "<Browser Name>.cpp" for web browsers and "<Plugin Name>_plugin.cpp" for web
+	plugins. For example, "internet_explorer.cpp" and "shockwave_plugin.cpp". Each one is free to implement how they read their
+	respective cache formats in the way that best suits the data, exposing one function called export_specific_or_default_<Name>_cache
+	that takes the Exporter as a parameter.
 
 	- The "memory_and_file_io.cpp" file defines functions for memory management, file I/O, date time formatting, string, path, and
 	URL manipulation, etc. The "custom_groups.cpp" file defines the functions used to load .group files, and match each cache entry
 	to a file or URL group. These are simple text files that allow you to label each cache entry based on their MIME types, file
 	extensions, file signatures, and URLs. These are useful to identify files that belong to web plugins like Flash or Shockwave,
 	or that came from certain websites like gaming portals.
+
+	- When working with intermediary strings, this application will use narrow ANSI strings on Windows 98 and ME, and wide UTF-16
+	strings on Windows 2000 to 10. Any files that are stored on disk use UTF-8 as the character encoding. This includes source
+	files, READMEs, group files, CSV files, the log file, etc.
+
+	- All Windows paths that are used by this application are limited to MAX_PATH (260) characters. Some exporter functions used
+	to extended this limit on the Windows 2000 to 10 builds by using the "\\?\" prefix. However, not all functions in the Win32
+	API support it (e.g. the Shell API), and it can also be difficult to delete any files or directories that exceed this limit
+	on the supported Windows versions. Since the purpose of this application is to recover lost web media by asking the average
+	user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
 */
@@ -41,7 +53,7 @@
 */
 
 static const TCHAR* LOG_FILE_NAME = TEXT("WCE.log");
-static const TCHAR* DEFAULT_EXPORT_DIRECTORY = TEXT("ExportedCache");
+static const TCHAR* DEFAULT_EXPORT_DIRECTORY_NAME = TEXT("ExportedCache");
 static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Arguments] <Export Argument>\n"
 												"\n"
 												"########## [1] AVAILABLE EXPORT ARGUMENTS: -export-<Cache Type> [Optional Cache path] [Optional Output Path]\n"
@@ -67,6 +79,8 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"-no-create-csv    to stop the exporter from creating CSV files.\n"
 												"\n"
+												"-overwrite    to delete the previous output folder before running.\n"
+												"\n"
 												"-hint-ie <Local AppData Path>    Only for Internet Explorer 10 to 11 and Microsoft Edge (i.e. if -export-ie or -find-and-export-all are used on a modern Windows version), and if your not exporting from a default location (i.e. if the cache was copied from another computer).\n"
 												"    This is used to specify the absolute path to the Local AppData folder of the computer where the cache originated.\n"
 												"    If this is option is not used, the exporter will try to guess this location.\n"
@@ -79,7 +93,7 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"WCE.exe -no-create-csv -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -find-and-export-all \"My Cache\""
 												;
 
-// Skips to the second dash in a command line argument. For example, "-export-ie" -> "ie".
+// Skips to the second dash in a command line argument. For example, "-export-ie" -> "-ie".
 //
 // @Parameters:
 // 1. str - The command line argument string.
@@ -117,13 +131,13 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	bool success = true;
 	bool seen_export_option = false;
 
+	// Set any options that shouldn't be zero, false, or empty strings by default.
 	exporter->should_copy_files = true;
 	exporter->should_create_csv = true;
 	exporter->csv_file_handle = INVALID_HANDLE_VALUE;
 
 	// Skip the first argument which contains the executable's name.
-	int i;
-	for(i = 1; i < num_arguments; ++i)
+	for(int i = 1; i < num_arguments; ++i)
 	{
 		TCHAR* option = arguments[i];
 
@@ -135,9 +149,13 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			exporter->should_create_csv = false;
 		}
-		else if(strings_are_equal(option, TEXT("-merge-copied-files")))
+		else if(strings_are_equal(option, TEXT("-overwrite")))
 		{
-			exporter->should_merge_copied_files = true;
+			exporter->should_overwrite_previous_output = true;
+		}
+		else if(strings_are_equal(option, TEXT("-filter-by-groups")))
+		{
+			exporter->should_filter_by_groups = true;
 		}
 		else if(strings_are_equal(option, TEXT("-hint-ie")))
 		{
@@ -147,6 +165,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 				StringCchCopy(exporter->ie_hint_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
 
+			// Skip the mandatory path value.
 			i += 1;
 		}
 		else if(strings_are_equal(option, TEXT("-find-and-export-all")))
@@ -157,17 +176,19 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+1]);
 			}
-			PathAppend(exporter->output_path, DEFAULT_EXPORT_DIRECTORY);
-
+			else
+			{
+				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, DEFAULT_EXPORT_DIRECTORY_NAME);
+			}
+	
 			exporter->is_exporting_from_default_locations = true;
-
 			seen_export_option = true;
 			break;
 		}
 		else if(string_starts_with(option, TEXT("-export")))
 		{
 			TCHAR* cache_type = skip_to_suboption(option);
-			//char* cache_version = skip_to_suboption(cache_type);
+
 			if(cache_type == NULL)
 			{
 				log_print(LOG_ERROR, "Missing web cache type in command line option '%s'", option);
@@ -195,19 +216,23 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 				success = false;
 			}
 
+			bool was_given_cache_path = false;
 			if(i+1 < num_arguments && !string_is_empty(arguments[i+1]))
 			{
 				StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, arguments[i+1]);
+				was_given_cache_path = true;
 			}
 
 			if(i+2 < num_arguments && !string_is_empty(arguments[i+2]))
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
 			}
-			PathAppend(exporter->output_path, DEFAULT_EXPORT_DIRECTORY);
+			else
+			{
+				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, DEFAULT_EXPORT_DIRECTORY_NAME);
+			}
 
-			exporter->is_exporting_from_default_locations = string_is_empty(exporter->cache_path);
-			
+			exporter->is_exporting_from_default_locations = !was_given_cache_path;
 			seen_export_option = true;
 			break;
 		}
@@ -215,22 +240,16 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			log_print(LOG_ERROR, "Unknown command line option '%s'", option);
 			console_print("Unknown command line option '%s'\n", option);
+
 			success = false;
 			break;
 		}
 	}
 
-	int num_extra_arguments = (num_arguments - 1) - i;
-	if(num_extra_arguments > 0)
-	{
-		console_print("Warning: Ignoring the %d extra arguments after the export option.", num_extra_arguments);
-		log_print(LOG_WARNING, "Argument Parsing: Ignoring the %d extra arguments after the export option.", num_extra_arguments);
-	}
-
 	if(!seen_export_option)
 	{
+		console_print("Missing the -export option.");
 		log_print(LOG_ERROR, "Argument Parsing: The main -export option was not found.");
-		console_print("Missing the -export option.\n");
 		success = false;
 	}
 
@@ -307,7 +326,11 @@ static void clean_up(Exporter* exporter)
 {
 	if(exporter->was_temporary_exporter_directory_created)
 	{
-		exporter->was_temporary_exporter_directory_created = !delete_directory_and_contents(exporter->exporter_temporary_path);
+		if(!delete_directory_and_contents(exporter->exporter_temporary_path))
+		{
+			console_print("Warning: Failed to delete the temporary exporter directory located in '%s'.\nYou may want to delete this directory yourself.", exporter->exporter_temporary_path);
+			log_print(LOG_ERROR, "Clean Up: Failed to delete the temporary exporter directory in '%s'.", exporter->exporter_temporary_path);
+		}
 	}
 
 	#ifndef BUILD_9X
@@ -463,7 +486,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
 	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Should Merge Copied Files: %hs", (exporter.should_merge_copied_files) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", (exporter.should_overwrite_previous_output) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
 	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
@@ -488,6 +511,21 @@ int _tmain(int argc, TCHAR* argv[])
 	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
 	{
 		log_print(LOG_INFO, "Startup: No cache path specified. Exporting the cache from any existing default directories.");
+	}
+
+	if(exporter.should_overwrite_previous_output)
+	{
+		TCHAR* directory_name = PathFindFileName(exporter.output_path);
+		if(delete_directory_and_contents(exporter.output_path))
+		{
+			console_print("Deleted the previous output directory '%s' before starting.", directory_name);
+			log_print(LOG_INFO, "Startup: Deleted the previous output directory successfully.");
+		}
+		else
+		{	
+			console_print("Warning: Failed to delete the previous output directory '%s'.", directory_name);
+			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s' with the error code %lu.", directory_name, GetLastError());
+		}
 	}
 
 	log_print_newline();
@@ -527,14 +565,10 @@ int _tmain(int argc, TCHAR* argv[])
 		} break;
 	}
 
+	console_print("Finished running:\n- Created %I32u CSV files.\n- Processed %I32u cached files.\n- Copied %I32u cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
 	log_print_newline();
 	log_print(LOG_INFO, "Finished Running: Created %I32u CSV files. Processed %I32u cache entries. Copied %I32u cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
-
-	console_print("Finished running:");
-	console_print("- Created %I32u CSV files.", exporter.num_csv_files_created);
-	console_print("- Processed %I32u cached files.", exporter.num_processed_files);
-	console_print("- Copied %I32u cached files.", exporter.num_copied_files);
-
+	
 	clean_up(&exporter);
 
 	return 0;
@@ -550,20 +584,20 @@ int _tmain(int argc, TCHAR* argv[])
 
 //@TODO: cleanup
 
-// Resolves the exporter's output path for copying files, while also creating a CSV file with a given header.
+// Resolves the exporter's output paths for copying files, while also creating a CSV file with a given header.
 // This function should be called by each exporter before processing any cached files.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure where the resolved output paths and CSV file's handle will be stored.
 // 2. cache_identifier - The name of the output directory (for copying files) and the CSV file.
-// 3. column_types - An array of column types used to determine the column names for the CSV file.
+// 3. column_types - The array of column types used to determine the column names for the CSV file.
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
 void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,
 														const Csv_Type column_types[], size_t num_columns)
 {
-	Arena* arena = &(exporter->temporary_arena);
+	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	get_full_path_name(exporter->output_path);
 	
@@ -576,34 +610,44 @@ void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, cons
 	if(exporter->should_create_csv && create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle)))
 	{
 		++(exporter->num_csv_files_created);
-		csv_print_header(arena, exporter->csv_file_handle, column_types, num_columns);
-		clear_arena(arena);
+		csv_print_header(temporary_arena, exporter->csv_file_handle, column_types, num_columns);
+		clear_arena(temporary_arena);
 	}
 }
 
-// Exports a cache entry by copying its file to the output location using the original website's directory structure, and by
-// adding a new row to the CSV file. This function will also match the cache entry to any loaded group files.
+// Exports a cache entry by copying its file to the output location using the original website's directory structure, and by adding a
+// new row to the CSV file. This function will also match the cache entry to any loaded group files.
 //
 // The following CSV columns are automatically handled by this function, and don't need to be set explicitly:
 // - CSV_MISSING_FILE - determined using the 'full_entry_path' parameter.
 // - CSV_CUSTOM_FILE_GROUP - determined using the 'full_entry_path' parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
 // - CSV_CUSTOM_URL_GROUP - determined using the 'entry_url' parameter.
 //
+// These array elements should be set to NULL_CSV_ENTRY. For CSV columns that aren't related to group files, you can override this
+// behavior by explicitly setting their value instead of using NULL_CSV_ENTRY.
+//
 // @Parameters:
 // 1. exporter - The Exporter structure 
-// 2. column_types - 
-// 3. column_values - 
-// 4. num_columns - 
-// 5. full_entry_path - 
-// 6. entry_url - 
-// 7. entry_filename - 
+// 2. column_types - The array of column types used to match each value to a type.
+// 3. column_values - The array of values to write. Some values don't need to set explicitly if their respective column type is handled
+// automatically.
+// 4. num_columns - The number of elements in these arrays.
+// 5. full_entry_path - The absolute path to the cached file to copy. This file may or may not exist on disk. This parameter shouldn't
+// be NULL.
+// 6. entry_url - The cached file's original URL. This is used to build the copy destination's directory structure. This parameter may
+// be NULL.
+// 7. entry_filename - The cached file's original filename. This value is used to determine the copy destination's filename. This
+// parameter shouldn't be NULL.
 // 
 // @Returns: Nothing.
 void export_cache_entry(Exporter* exporter,
 						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename)
 {
-	Arena* arena = &(exporter->temporary_arena);
+	_ASSERT(full_entry_path != NULL);
+	_ASSERT(entry_filename != NULL);
+
+	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	bool file_exists = does_file_exist(full_entry_path);
 	++(exporter->num_processed_files);
@@ -617,6 +661,10 @@ void export_cache_entry(Exporter* exporter,
 
 	for(size_t i = 0; i < num_columns; ++i)
 	{
+		// Allow each exporter to override how certain values are set.
+		const TCHAR* NULL_VALUE = NULL_CSV_ENTRY.value;
+		TCHAR* value = column_values[i].value;
+
 		switch(column_types[i])
 		{
 			case(CSV_CUSTOM_FILE_GROUP):
@@ -631,17 +679,17 @@ void export_cache_entry(Exporter* exporter,
 
 			case(CSV_CONTENT_TYPE):
 			{
-				entry_to_match.mime_type_to_match = column_values[i].value;
+				entry_to_match.mime_type_to_match = value;
 			} break;
 
 			case(CSV_FILE_EXTENSION):
 			{
-				entry_to_match.file_extension_to_match = column_values[i].value;
+				entry_to_match.file_extension_to_match = value;
 			} break;
 
 			case(CSV_MISSING_FILE):
 			{
-				column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+				if(value == NULL_VALUE) column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
 			} break;
 		}
 	}
@@ -649,7 +697,8 @@ void export_cache_entry(Exporter* exporter,
 	entry_to_match.should_match_file_group = (file_group_index != -1);
 	entry_to_match.should_match_url_group = (url_group_index != -1);
 
-	if(match_cache_entry_to_groups(arena, exporter->custom_groups, &entry_to_match))
+	bool matched_group = match_cache_entry_to_groups(temporary_arena, exporter->custom_groups, &entry_to_match);
+	if(matched_group)
 	{
 		if(file_group_index != -1)
 		{
@@ -662,20 +711,22 @@ void export_cache_entry(Exporter* exporter,
 		}
 	}
 
-	if(exporter->should_create_csv)
+	bool match_allows_for_exporting_entry = (!exporter->should_filter_by_groups) || (exporter->should_filter_by_groups && matched_group);
+
+	if(exporter->should_create_csv && match_allows_for_exporting_entry)
 	{
-		csv_print_row(arena, exporter->csv_file_handle, column_values, num_columns);
+		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, num_columns);
 	}
 
-	if(file_exists && exporter->should_copy_files)
+	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)
 	{
-		if(copy_file_using_url_directory_structure(arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename))
+		if(copy_file_using_url_directory_structure(temporary_arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename))
 		{
 			++(exporter->num_copied_files);
 		}
 	}
 
-	clear_arena(arena);
+	clear_arena(temporary_arena);
 }
 
 // Closes the exporter's current CSV file. This file should be previously created and opened by calling resolve_exporter_output_paths_and_create_csv_file().

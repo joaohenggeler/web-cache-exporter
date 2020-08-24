@@ -4,8 +4,6 @@ REM xxx
 
 SETLOCAL
 PUSHD "%~dp0"
-
-	RMDIR /S /Q "ExportedCache"
 	
 	SET "CLEAN_BUILD=Yes"
 	REM Debug or Release
@@ -29,7 +27,7 @@ PUSHD "%~dp0"
 	SET "THIRD_PARTY_LIBRARIES_PATH_64=%THIRD_PARTY_SOURCE_PATH%\Lib\x64"
 
 	REM /MTd defines the _DEBUG macro
-	SET "COMPILER_OPTIONS=/W4 /WX /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
+	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
 	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT"
 	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D DEBUG /D NDEBUG /D _DEBUG"
 	SET "COMPILER_OPTIONS_WIN_NT_ONLY="
@@ -66,9 +64,9 @@ PUSHD "%~dp0"
 	SET "DEBUG_BUILD_DIR_64=%DEBUG_BUILD_DIR%\Build-x86-64"
 	SET "DEBUG_BUILD_DIR_9X_32=%DEBUG_BUILD_DIR%\Build-98-ME-x86-32"
 
-	SET "EXE_FILENAME_32=Web-Cache-Exporter-x86-32.exe"
-	SET "EXE_FILENAME_64=Web-Cache-Exporter-x86-64.exe"
-	SET "EXE_FILENAME_9X_32=Web-Cache-Exporter-98-ME-x86-32.exe"
+	SET "EXE_FILENAME_32=WCE32.exe"
+	SET "EXE_FILENAME_64=WCE64.exe"
+	SET "EXE_FILENAME_9X_32=WCE9x32.exe"
 
 	REM ---------------------------------------------------------------------------
 

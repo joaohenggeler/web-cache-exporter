@@ -20,6 +20,9 @@
 	@Resources: TOMYSSHADOW's extensive knowledge of Macromedia / Adobe Director: https://github.com/tomysshadow
 
 	@Tools: None.
+
+	But I did use the Director game "Adventure Elf" (developed by Blockdot and published by Kewlbox.com) to test the Xtras export
+	feature.
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
@@ -173,7 +176,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_file_callback)
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
 		{filename}, {file_extension}, {file_size_string},
-		{last_write_time}, {last_access_time}, {creation_time},
+		{last_write_time}, {creation_time}, {last_access_time},
 		{director_file_type},
 		NULL_CSV_ENTRY
 	};

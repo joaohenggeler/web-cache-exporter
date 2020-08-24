@@ -107,6 +107,27 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // ----------------------------------------------------------------------------------------------------
 
+// The same values as above but for a "raw" unprocessed export of Internet Explorer 4 to 9's cache. This will copy every file that's
+// stored in the cache directory and its subdirectories, without relying on the index.dat file. This is useful since its been noted
+// that IE 6 and older don't always properly delete some of their cached files, meaning we could potentially recover 
+//
+// @Future: This is hardcoded for now, but in the future there could be an option to also export this raw version for every cache type.
+// However, not every cache type lends itself to this kind of operation (e.g. if we're missing the database file, we might not even
+// be able to find the files themselves). For now, we'll only do this for IE 4 through 9.
+
+static const TCHAR* RAW_OUTPUT_DIRECTORY_NAME = TEXT("IE-RAW");
+// Notice how we have less information due to not relying on the index/database file. We only know the file's properties.
+static const Csv_Type RAW_CSV_COLUMN_TYPES[] =
+{
+	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
+	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_LOCATION_ON_CACHE,
+	CSV_CUSTOM_FILE_GROUP
+};
+static const size_t RAW_CSV_NUM_COLUMNS = _countof(RAW_CSV_COLUMN_TYPES);
+
+// ----------------------------------------------------------------------------------------------------
+
 // @Format: Various constants for index.dat.
 static const size_t NUM_SIGNATURE_CHARS = 28;
 static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
@@ -453,6 +474,10 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 // Internet Files directory.
 //
 // @Returns: Nothing.
+static void export_internet_explorer_4_to_9_cache(Exporter* exporter);
+static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter);
+static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix);
+
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
 	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, exporter->cache_path))
@@ -464,42 +489,121 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	get_full_path_name(exporter->cache_path);
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 
+	bool ie_4_to_9_cache_exists = false;
+
 	resolve_exporter_output_paths_and_create_csv_file(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
-
-	log_print_newline();
-	PathCombine(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
-	export_internet_explorer_4_to_9_cache(exporter);
-
-	log_print_newline();
-	PathCombine(exporter->index_path, exporter->cache_path, TEXT("Content.IE5\\index.dat"));
-	export_internet_explorer_4_to_9_cache(exporter);
-
-	log_print_newline();
-	PathCombine(exporter->index_path, exporter->cache_path, TEXT("Low\\Content.IE5\\index.dat"));
-	export_internet_explorer_4_to_9_cache(exporter);
-
-	#ifndef BUILD_9X
-
-		if(exporter->is_exporting_from_default_locations)
-		{
-			PathCombineW(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
-		}
-
-		log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
+	{
+		log_print_newline();
+		PathCombine(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
+		export_internet_explorer_4_to_9_cache(exporter);
+		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
 
 		log_print_newline();
-		PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV01.dat");
-		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
+		PathCombine(exporter->index_path, exporter->cache_path, TEXT("Content.IE5\\index.dat"));
+		export_internet_explorer_4_to_9_cache(exporter);
+		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
 
 		log_print_newline();
-		PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV24.dat");
-		windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
-		
-	#endif
+		PathCombine(exporter->index_path, exporter->cache_path, TEXT("Low\\Content.IE5\\index.dat"));
+		export_internet_explorer_4_to_9_cache(exporter);
+		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
 
+		#ifndef BUILD_9X
+
+			if(exporter->is_exporting_from_default_locations)
+			{
+				PathCombineW(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
+			}
+
+			log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
+
+			log_print_newline();
+			PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV01.dat");
+			windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
+
+			log_print_newline();
+			PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV24.dat");
+			windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
+			
+		#endif
+
+	}
 	close_exporter_csv_file(exporter);
 
+	if(ie_4_to_9_cache_exists)
+	{
+		resolve_exporter_output_paths_and_create_csv_file(exporter, RAW_OUTPUT_DIRECTORY_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
+		{
+			log_print_newline();
+			export_raw_internet_explorer_4_to_9_cache(exporter);		
+		}
+		close_exporter_csv_file(exporter);		
+	}
+
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
+}
+
+// Exports Internet Explorer 4 through 9's cache from a given location without using the index.dat file. This will be used to perform
+// a "raw" export, were the files are copied and the CSV is created without relying on the metadata in the index.dat file.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
+//
+// @Returns: Nothing.
+static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback);
+static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter)
+{
+	log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
+	traverse_directory_objects(	exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true,
+								find_internet_explorer_4_to_9_cache_files_callback, exporter);
+}
+
+// Called every time a file is found in Internet Explorer 4 to 9's cache directory.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: Nothing.
+static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback)
+{
+	TCHAR* filename = find_data->cFileName;
+	// Skip the index.dat file itself. We only want the cached files.
+	if(strings_are_equal(filename, TEXT("index.dat"), true)) return;
+
+	TCHAR* file_extension = skip_to_file_extension(filename);
+
+	u64 file_size = combine_high_and_low_u32s_into_u64(find_data->nFileSizeHigh, find_data->nFileSizeLow);
+	TCHAR file_size_string[MAX_INT64_CHARS] = TEXT("");
+	convert_u64_to_string(file_size, file_size_string);
+
+	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	format_filetime_date_time(find_data->ftLastWriteTime, last_write_time);
+
+	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	format_filetime_date_time(find_data->ftCreationTime, creation_time);
+	
+	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	format_filetime_date_time(find_data->ftLastAccessTime, last_access_time);
+
+	// Despite not using the index.dat file, we can find out where we're located on the cache.
+	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR* directory_name = PathFindFileName(directory_path);
+	PathCombine(short_file_path, directory_name, filename);
+
+	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(full_file_path, directory_path, filename);
+
+	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	{
+		{filename}, {file_extension}, {file_size_string},
+		{last_write_time}, {creation_time}, {last_access_time},
+		{short_file_path},
+		NULL_CSV_ENTRY
+	};
+
+	Exporter* exporter = (Exporter*) user_data;
+	export_cache_entry(	exporter,
+						RAW_CSV_COLUMN_TYPES, csv_row, RAW_CSV_NUM_COLUMNS,
+						full_file_path, NULL, filename);
 }
 
 // Exports Internet Explorer 4 through 9's cache from a given location.
@@ -508,7 +612,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 // 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
 //
 // @Returns: Nothing.
-void export_internet_explorer_4_to_9_cache(Exporter* exporter)
+static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 {
 	Arena* arena = &(exporter->temporary_arena);
 
@@ -601,7 +705,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		SAFE_UNMAP_VIEW_OF_FILE(index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
-		return;	
+		return;
 	}
 	
 	// Go through each bit to check if a particular block was allocated. If so, we'll skip to that block and handle
@@ -724,6 +828,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 					
 					TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+					TCHAR* short_file_path_pointer = short_file_path;
 					TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
@@ -751,9 +856,8 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 					else if(cache_directory_index == CHANNEL_DEFINITION_FORMAT_INDEX)
 					{
-						// @TODO: use pointer to const string instead of always copying
 						// CDF files are marked with this special string since they're not stored on disk.
-						StringCchCopy(short_file_path, MAX_PATH_CHARS, TEXT("<CDF>"));
+						short_file_path_pointer = TEXT("<CDF>");
 					}
 					else
 					{
@@ -776,7 +880,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{filename}, {url}, {file_extension}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path}, NULL_CSV_ENTRY,
+						{num_hits}, {short_file_path_pointer}, NULL_CSV_ENTRY,
 						NULL_CSV_ENTRY, NULL_CSV_ENTRY
 					};
 
@@ -1360,6 +1464,54 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
+	// Helper structure to pass some values to find_internet_explorer_10_to_11_ese_files_callback(). 
+	struct Copy_Ese_File_Params
+	{
+		wchar_t* temporary_directory_path;
+		Arena* arena;
+	};
+
+	// Called every time an ESE file is found in the database's directory in order to copy them to our own temporary location.
+	// We'll later attempt to start the recovery steps for the database in the exporter's temporary directory.
+	//
+	// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+	//
+	// @Returns: Nothing.
+	static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_10_to_11_ese_files_callback)
+	{
+		Copy_Ese_File_Params* copy_ese_file_params = (Copy_Ese_File_Params*) user_data;
+		
+		Arena* arena = copy_ese_file_params->arena;
+		wchar_t* temporary_directory_path = copy_ese_file_params->temporary_directory_path;
+
+		wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
+		PathCombineW(copy_source_path, directory_path, find_data->cFileName);
+
+		wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
+		PathCombineW(copy_destination_path, temporary_directory_path, find_data->cFileName);
+
+		// Attempt to copy the ESE file normally...
+		if(!CopyFile(copy_source_path, copy_destination_path, FALSE))
+		{
+			// ...or forcibily copy it if it's being used by another process.
+			// In practice, this will be used for the" WebCache<base>.dat" and "<base>.log" files, where <base> is
+			// the ESE prefix passed to the exporter function (e.g. "V01").
+			if(GetLastError() == ERROR_SHARING_VIOLATION)
+			{
+				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", find_data->cFileName);
+
+				if(!windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
+				{
+					log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to forcibly copy the database file '%ls' to the temporary recovery directory.", find_data->cFileName);
+				}
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", find_data->cFileName, GetLastError());
+			}
+		}
+	}
+
 	// Exports Internet Explorer 10 and 11's cache from a given location.
 	//
 	// @Parameters:
@@ -1369,7 +1521,7 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// use the prefix "V01", as seen in the files next to this one (e.g. the transaction log file "V01.log").
 	//
 	// @Returns: Nothing.
-	void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
+	static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
 	{
 		Arena* arena = &(exporter->temporary_arena);
 		wchar_t* index_filename = PathFindFileNameW(exporter->index_path);
@@ -1400,58 +1552,18 @@ void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		// the three character base name (e.g. "V01") that is used in their filenames.
 		
 		wchar_t index_directory_path[MAX_PATH_CHARS] = L"";
-		PathCombineW(index_directory_path, exporter->index_path, TEXT(".."));
+		PathCombineW(index_directory_path, exporter->index_path, L"..");
 
 		// Find and copy every ESE file in the database's directory to our temporary one.
 		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
 		if(create_temporary_directory(exporter->exporter_temporary_path, temporary_directory_path))
 		{
-			wchar_t search_path[MAX_PATH_CHARS] = L"";
-			PathCombineW(search_path, index_directory_path, L"*");
-
-			WIN32_FIND_DATAW file_find_data = {};
-			HANDLE search_handle = FindFirstFileW(search_path, &file_find_data);
+			Copy_Ese_File_Params copy_ese_file_params = {};
+			copy_ese_file_params.arena = arena;
+			copy_ese_file_params.temporary_directory_path = temporary_directory_path;
 			
-			bool found_file = search_handle != INVALID_HANDLE_VALUE;
-			while(found_file)
-			{
-				// Ignore the  "." and ".." files, and any directories.
-				if( ((file_find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
-					&& !strings_are_equal(file_find_data.cFileName, L".")
-					&& !strings_are_equal(file_find_data.cFileName, L".."))
-				{
-					wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
-					PathCombineW(copy_source_path, index_directory_path, file_find_data.cFileName);
-	
-					wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
-					PathCombineW(copy_destination_path, temporary_directory_path, file_find_data.cFileName);
-
-					// Attempt to copy the ESE file normally...
-					if(!CopyFile(copy_source_path, copy_destination_path, FALSE))
-					{
-						// ...or forcibily copy it if it's being used by another process.
-						// In practice, this will be used for the" WebCache<base>.dat" and "<base>.log" files, where <base> is
-						// the ESE prefix passed to this function (e.g. "V01").
-						if(GetLastError() == ERROR_SHARING_VIOLATION)
-						{
-							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", file_find_data.cFileName);
-
-							if(!windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
-							{
-								log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to forcibly copy the database file '%ls' to the temporary recovery directory.", file_find_data.cFileName);
-							}
-						}
-						else
-						{
-							log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", file_find_data.cFileName, GetLastError());
-						}
-					}
-				}
-
-				found_file = FindNextFile(search_handle, &file_find_data) == TRUE;
-			}
-
-			safe_find_close(&search_handle);
+			traverse_directory_objects(	index_directory_path, L"*", TRAVERSE_FILES, false,
+										find_internet_explorer_10_to_11_ese_files_callback, &copy_ese_file_params);
 		}
 		else
 		{

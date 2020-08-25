@@ -102,7 +102,8 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
 size_t string_size(const char* str);
 size_t string_size(const wchar_t* str);
 
-size_t string_length(const TCHAR* str);
+size_t string_length(const char* str);
+size_t string_length(const wchar_t* str);
 
 bool string_is_empty(const char* str);
 bool string_is_empty(const wchar_t* str);
@@ -228,7 +229,8 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
-bool read_first_file_bytes(const TCHAR* path, void* file_buffer, u32 num_bytes_to_read);
+bool read_first_file_bytes(	const TCHAR* path, void* file_buffer, u32 num_bytes_to_read,
+							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)

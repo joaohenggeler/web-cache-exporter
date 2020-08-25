@@ -116,7 +116,7 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 // If the path to this location isn't defined, this function will look in the current Temporary Files directory.
 //
 // @Returns: Nothing.
-static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_file_callback);
+static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback);
 void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 {
 	if(exporter->is_exporting_from_default_locations)
@@ -133,8 +133,8 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 
 	resolve_exporter_output_paths_and_create_csv_file(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	
-	traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_file_callback, exporter);
-	traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_file_callback, exporter);
+	traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, exporter);
+	traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, exporter);
 	
 	close_exporter_csv_file(exporter);
 	
@@ -146,7 +146,7 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
 // @Returns: Nothing.
-static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_file_callback)
+static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
 	TCHAR* file_extension = skip_to_file_extension(filename);
@@ -182,7 +182,5 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_file_callback)
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(	exporter,
-						CSV_COLUMN_TYPES, csv_row, CSV_NUM_COLUMNS,
-						full_file_path, NULL, filename);
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename);
 }

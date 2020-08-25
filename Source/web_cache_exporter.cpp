@@ -1,6 +1,7 @@
 #include "web_cache_exporter.h"
 #include "internet_explorer.h"
 #include "shockwave_plugin.h"
+#include "explore_files.h"
 
 /*
 	This file defines the exporter's startup operations (parsing command line options, allocating memory, etc) and any common
@@ -167,6 +168,34 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 			// Skip the mandatory path value.
 			i += 1;
+		}
+		else if(strings_are_equal(option, TEXT("-explore-files")))
+		{
+			exporter->cache_type = CACHE_EXPLORE;
+
+			if(i+1 < num_arguments && !string_is_empty(arguments[i+1]))
+			{
+				StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, arguments[i+1]);
+			}
+			else
+			{
+				success = false;
+				console_print("The -explore-files option requires a non-empty path.");
+				log_print(LOG_ERROR, "Argument Parsing: The -explore-files option was given a non-empty path.");
+			}
+
+			if(i+2 < num_arguments && !string_is_empty(arguments[i+2]))
+			{
+				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, arguments[i+2]);
+			}
+			else
+			{
+				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, DEFAULT_EXPORT_DIRECTORY_NAME);
+			}
+
+			exporter->is_exporting_from_default_locations = false;
+			seen_export_option = true;
+			break;
 		}
 		else if(strings_are_equal(option, TEXT("-find-and-export-all")))
 		{
@@ -363,23 +392,6 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.",
 							EXPORTER_BUILD_TARGET, EXPORTER_BUILD_VERSION, EXPORTER_BUILD_MODE);
 
-	if(argc <= 1)
-	{
-		console_print("No command line options supplied.");
-		console_print("%hs", COMMAND_LINE_HELP_MESSAGE);
-
-		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and terminate.");
-		clean_up(&exporter);
-		return 1;
-	}
-
-	if(!parse_exporter_arguments(argc, argv, &exporter))
-	{
-		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will terminate.");
-		clean_up(&exporter);
-		return 1;
-	}
-
 	exporter.os_version.dwOSVersionInfoSize = sizeof(exporter.os_version);
 	if(GetVersionEx(&exporter.os_version))
 	{
@@ -401,6 +413,23 @@ int _tmain(int argc, TCHAR* argv[])
 		find_internet_explorer_version(ie_version, sizeof(ie_version));
 		log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);
 		log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
+	}
+
+	if(argc <= 1)
+	{
+		console_print("No command line options supplied.");
+		console_print("%hs", COMMAND_LINE_HELP_MESSAGE);
+
+		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and terminate.");
+		clean_up(&exporter);
+		return 1;
+	}
+
+	if(!parse_exporter_arguments(argc, argv, &exporter))
+	{
+		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will terminate.");
+		clean_up(&exporter);
+		return 1;
 	}
 
 	{
@@ -523,7 +552,7 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 		else
 		{	
-			console_print("Warning: Failed to delete the previous output directory '%s'.", directory_name);
+			console_print("Warning: Could not delete the previous output directory '%s'.", directory_name);
 			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s' with the error code %lu.", directory_name, GetLastError());
 		}
 	}
@@ -558,6 +587,14 @@ int _tmain(int argc, TCHAR* argv[])
 			export_specific_or_default_shockwave_plugin_cache(&exporter);
 		} break;
 
+		case(CACHE_EXPLORE):
+		{
+			_ASSERT(!exporter.is_exporting_from_default_locations);
+			_ASSERT(!string_is_empty(exporter.cache_path));
+
+			export_explored_files(&exporter);
+		} break;
+
 		default:
 		{
 			log_print(LOG_ERROR, "Startup: Attempted to export the cache from '%s' using the unhandled cache type %d.", exporter.cache_path, exporter.cache_type);
@@ -565,9 +602,9 @@ int _tmain(int argc, TCHAR* argv[])
 		} break;
 	}
 
-	console_print("Finished running:\n- Created %I32u CSV files.\n- Processed %I32u cached files.\n- Copied %I32u cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
+	console_print("Finished running:\n- Created %Iu CSV files.\n- Processed %Iu cached files.\n- Copied %Iu cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
 	log_print_newline();
-	log_print(LOG_INFO, "Finished Running: Created %I32u CSV files. Processed %I32u cache entries. Copied %I32u cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
+	log_print(LOG_INFO, "Finished Running: Created %Iu CSV files. Processed %Iu cache entries. Copied %Iu cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
 	
 	clean_up(&exporter);
 
@@ -613,6 +650,9 @@ void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, cons
 		csv_print_header(temporary_arena, exporter->csv_file_handle, column_types, num_columns);
 		clear_arena(temporary_arena);
 	}
+
+	exporter->num_csv_columns = num_columns;
+	exporter->csv_column_types = column_types;
 }
 
 // Exports a cache entry by copying its file to the output location using the original website's directory structure, and by adding a
@@ -628,21 +668,17 @@ void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, cons
 //
 // @Parameters:
 // 1. exporter - The Exporter structure 
-// 2. column_types - The array of column types used to match each value to a type.
-// 3. column_values - The array of values to write. Some values don't need to set explicitly if their respective column type is handled
+// 2. column_values - The array of values to write. Some values don't need to set explicitly if their respective column type is handled
 // automatically.
-// 4. num_columns - The number of elements in these arrays.
-// 5. full_entry_path - The absolute path to the cached file to copy. This file may or may not exist on disk. This parameter shouldn't
+// 3. full_entry_path - The absolute path to the cached file to copy. This file may or may not exist on disk. This parameter shouldn't
 // be NULL.
-// 6. entry_url - The cached file's original URL. This is used to build the copy destination's directory structure. This parameter may
+// 4. entry_url - The cached file's original URL. This is used to build the copy destination's directory structure. This parameter may
 // be NULL.
-// 7. entry_filename - The cached file's original filename. This value is used to determine the copy destination's filename. This
+// 5. entry_filename - The cached file's original filename. This value is used to determine the copy destination's filename. This
 // parameter shouldn't be NULL.
 // 
 // @Returns: Nothing.
-void export_cache_entry(Exporter* exporter,
-						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
-						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename)
+void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename)
 {
 	_ASSERT(full_entry_path != NULL);
 	_ASSERT(entry_filename != NULL);
@@ -659,13 +695,13 @@ void export_cache_entry(Exporter* exporter,
 	SSIZE_T file_group_index = -1;
 	SSIZE_T url_group_index = -1;
 
-	for(size_t i = 0; i < num_columns; ++i)
+	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		// Allow each exporter to override how certain values are set.
 		const TCHAR* NULL_VALUE = NULL_CSV_ENTRY.value;
 		TCHAR* value = column_values[i].value;
 
-		switch(column_types[i])
+		switch(exporter->csv_column_types[i])
 		{
 			case(CSV_CUSTOM_FILE_GROUP):
 			{
@@ -715,7 +751,7 @@ void export_cache_entry(Exporter* exporter,
 
 	if(exporter->should_create_csv && match_allows_for_exporting_entry)
 	{
-		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, num_columns);
+		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, exporter->num_csv_columns);
 	}
 
 	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)

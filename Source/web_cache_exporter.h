@@ -136,18 +136,19 @@ enum Cache_Type
 {
 	CACHE_UNKNOWN = 0,
 	CACHE_ALL = 1,
+	CACHE_EXPLORE = 2,
 
-	CACHE_INTERNET_EXPLORER = 2,
-	CACHE_SHOCKWAVE_PLUGIN = 3,
-	CACHE_JAVA_PLUGIN = 4,
+	CACHE_INTERNET_EXPLORER = 3,
+	CACHE_SHOCKWAVE_PLUGIN = 4,
+	CACHE_JAVA_PLUGIN = 5,
 	
-	NUM_CACHE_TYPES = 5
+	NUM_CACHE_TYPES = 6
 };
 
-// An array that maps the previous values to TCHAR strings.
+// An array that maps the previous values to full names.
 const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 {
-	TEXT("Unknown"), TEXT("All"),
+	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
 	TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
 };
 
@@ -200,6 +201,10 @@ struct Exporter
 	// General purpose variables that are freely changed by each cache exporter:
 	// - The currently open CSV file.
 	HANDLE csv_file_handle;
+	// - The number of columns in the CSV file.
+	size_t num_csv_columns;
+	// - The types of each column as an arrayof length 'num_csv_columns'.
+	const Csv_Type* csv_column_types;
 	// - The path to the base directory where the cached files will be copied to.
 	TCHAR output_copy_path[MAX_PATH_CHARS];
 	// - The path to the currently open CSV file.
@@ -209,17 +214,15 @@ struct Exporter
 	TCHAR index_path[MAX_PATH_CHARS];
 
 	// Used to count how many cache files were exported.
-	u32 num_csv_files_created;
-	u32 num_processed_files;
-	u32 num_copied_files;
+	size_t num_csv_files_created;
+	size_t num_processed_files;
+	size_t num_copied_files;
 };
 
 void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,
 														const Csv_Type column_types[], size_t num_columns);
 
-void export_cache_entry(Exporter* exporter,
-						const Csv_Type column_types[], Csv_Entry column_values[], size_t num_columns,
-						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename);
+void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename);
 
 void close_exporter_csv_file(Exporter* exporter);
 

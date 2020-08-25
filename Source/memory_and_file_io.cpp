@@ -452,9 +452,14 @@ size_t string_size(const wchar_t* str)
 // 1. str - The string.
 //
 // @Returns: The number of characters in the string.
-size_t string_length(const TCHAR* str)
+size_t string_length(const char* str)
 {
-	return _tcslen(str);
+	return strlen(str);
+}
+
+size_t string_length(const wchar_t* str)
+{
+	return wcslen(str);
 }
 
 // Checks if a string is empty.
@@ -1838,15 +1843,19 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 // 1. file_path - The path to the file to read.
 // 2. file_buffer - The buffer that will receive the read bytes.
 // 3. num_bytes_to_read - The size of the buffer.
+// 4. optional_allow_reading_fewer_bytes - An optional parameter that specifies if this function is allowed to read fewer bytes than
+// the ones requested. This value defaults to false.
+// 5. optional_result_num_bytes_read - An optional parameter that receives number of bytes read. This value defaults to NULL.
 // 
 // @Returns: True if the file's contents were read successfully. Otherwise, false.
 // This function fails under the following conditions:
 // 1. The requested number of bytes is zero.
-// 2. The path to the file is empty.
-// 3. It read less bytes than the specified value.
-bool read_first_file_bytes(const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read)
+// 2. The path to the file is empty or NULL.
+// 3. It read fewer bytes than the specified value and optional_allow_reading_fewer_bytes is false or not specified.
+bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
+							bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
-	if(num_bytes_to_read == 0 || string_is_empty(file_path)) return false;
+	if(num_bytes_to_read == 0 || file_path == NULL || string_is_empty(file_path)) return false;
 
 	bool success = false;
 	HANDLE file_handle = CreateFile( file_path,
@@ -1860,9 +1869,11 @@ bool read_first_file_bytes(const TCHAR* file_path, void* file_buffer, u32 num_by
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
 		DWORD num_bytes_read = 0;
-		success = (ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, NULL) == TRUE)
-				&& (num_bytes_read == num_bytes_to_read);
+		success = ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, NULL)
+				&& ( (num_bytes_read == num_bytes_to_read) || optional_allow_reading_fewer_bytes );
 		safe_close_handle(&file_handle);
+
+		if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = num_bytes_read;
 	}
 
 	return success;

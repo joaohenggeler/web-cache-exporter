@@ -592,7 +592,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, filename);
 
-	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	Csv_Entry csv_row[RAW_CSV_NUM_COLUMNS] =
 	{
 		{filename}, {file_extension}, {file_size_string},
 		{last_write_time}, {creation_time}, {last_access_time},
@@ -601,9 +601,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(	exporter,
-						RAW_CSV_COLUMN_TYPES, csv_row, RAW_CSV_NUM_COLUMNS,
-						full_file_path, NULL, filename);
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename);
 }
 
 // Exports Internet Explorer 4 through 9's cache from a given location.
@@ -884,9 +882,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						NULL_CSV_ENTRY, NULL_CSV_ENTRY
 					};
 
-					export_cache_entry(	exporter,
-										CSV_COLUMN_TYPES, csv_row, CSV_NUM_COLUMNS,
-										full_file_path, url, filename);
+					export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 
 				} // Intentional fallthrough.
 
@@ -1998,9 +1994,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 										NULL_CSV_ENTRY, NULL_CSV_ENTRY
 									};
 
-									export_cache_entry(	exporter,
-														CSV_COLUMN_TYPES, csv_row, CSV_NUM_COLUMNS,
-														full_file_path, url, filename);
+									export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 								}
 								
 								// Move to the next cache record.

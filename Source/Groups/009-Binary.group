@@ -2,6 +2,7 @@ BEGIN_FILE_GROUP Executable
 
 	BEGIN_MIME_TYPES
 		application/exe
+		application/x-msdownload
 	END
 
 	BEGIN_FILE_EXTENSIONS

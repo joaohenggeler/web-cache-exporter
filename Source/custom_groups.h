@@ -1,6 +1,8 @@
 #ifndef CUSTOM_GROUPS_H
 #define CUSTOM_GROUPS_H
 
+// The types of the various groups.
+// See: load_group_file().
 enum Group_Type
 {
 	GROUP_NONE = 0,
@@ -9,6 +11,8 @@ enum Group_Type
 	NUM_GROUP_TYPES = 3
 };
 
+// The types of the various lists in a file or URL group.
+// See: load_group_file().
 enum List_Type
 {
 	LIST_NONE = 0,
@@ -22,6 +26,7 @@ enum List_Type
 	NUM_LIST_TYPES = 5
 };
 
+// Two arrays that map the previous values to full names.
 const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {TEXT(""), TEXT("File"), TEXT("URL")};
 const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
 {
@@ -30,6 +35,7 @@ const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
 	TEXT("Domains")
 };
 
+// A structure that represents a file signature. Wildcards may be used to match any byte when comparing file signatures.
 struct File_Signature
 {
 	u32 num_bytes;
@@ -37,12 +43,16 @@ struct File_Signature
 	bool* is_wildcard;
 };
 
+// A structure that represents a domain. We only compare the host and path components of two URLs.
 struct Domain
 {
 	TCHAR* host;
 	TCHAR* path;
 };
 
+// A structure that represents a file or URL group. Each group type contains arrays with different information that is used to
+// match cached files to a given group name.
+// See: load_group_file().
 struct Group
 {
 	Group_Type type;
@@ -70,6 +80,8 @@ struct Group
 	};
 };
 
+// A structure that contains every loaded group and a sufficiently large buffer for all file signatures.
+// See: load_all_group_files().
 struct Custom_Groups
 {
 	u8* file_signature_buffer;
@@ -79,6 +91,8 @@ struct Custom_Groups
 	Group groups[ANYSIZE_ARRAY];
 };
 
+// A structure that is used to both pass parameters and receive the results of a cache entry match.
+// See: match_cache_entry_to_groups().
 struct Matchable_Cache_Entry
 {
 	TCHAR* full_file_path;

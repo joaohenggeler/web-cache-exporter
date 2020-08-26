@@ -43,6 +43,15 @@
 	user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
+
+	@TODO:
+
+	- Add support for the Java Plugin.
+	- Document and refactor custom_groups.h and custom_groups.cpp.
+	- Document and refactor explore_files.h and explore_files.cpp.
+	- Add the -filter-by-all-groups and -filter-by-group-files <Space Delimited Filename List> options.
+	- Correct reserved filenames (AUX, CON, NUL, etc) when copying files.
+	- Fix URL partitioning for cases like "file:///C:\Path\File.ext", where there's an empty authority.
 */
 
 /*
@@ -90,8 +99,9 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"########## [2] EXAMPLES:\n"
 												"\n"
 												"WCE.exe -no-copy-files -export-shockwave\n"
+												"WCE.exe -overwrite -export-shockwave\n"
 												"WCE.exe -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -export-ie \"C:\\PathToTheCache\"\n"
-												"WCE.exe -no-create-csv -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -find-and-export-all \"My Cache\""
+												"WCE.exe -overwrite -no-create-csv -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -find-and-export-all \"My Cache\""
 												;
 
 // Skips to the second dash in a command line argument. For example, "-export-ie" -> "-ie".

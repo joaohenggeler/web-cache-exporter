@@ -341,6 +341,19 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 	}
 }
 
+// Loads a specific group file on disk, while also keeping track of the total number of processed groups and the maximum file signature
+// size in bytes.
+//
+// @Parameters:
+// 1. permanent_arena - The Arena structure that will receive the loaded group data.
+// 2. temporary_arena - The Arena structure where any intermediary strings are stored.
+// 3. file_path - The path of the group file to load.
+// 4. group_array - The preallocated group array. Each group loads its data to a specific index, which is tracked by 'num_processed_groups'.
+// 5. num_processed_groups - The current total number of processed groups.
+// 6. max_num_file_signature_bytes - The current maximum file signature size. This is later used to allocate an array that is just large
+// enough to load each processed file signature.
+//
+// @Returns: Nothing.
 void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 					 const TCHAR* file_path, Group* group_array, u32* num_processed_groups, u32* max_num_file_signature_bytes)
 {
@@ -363,7 +376,6 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 
 	// Keep track of which group we're loading data to.
 	Group_Type current_group_type = GROUP_NONE;
-	
 	Group* group = NULL;
 
 	// Keep track of the strings that are loaded from each list type. These are kept contiguously in memory, so this address points
@@ -396,12 +408,15 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 		{
 			switch(current_list_type)
 			{
+				// Aggregate the group's file signatures.
 				case(LIST_FILE_SIGNATURES):
 				{
+					// Create a file signature array.
 					File_Signature** file_signatures = push_arena(permanent_arena, num_file_signatures * sizeof(File_Signature*), File_Signature*);
 					
 					for(u32 i = 0; i < num_file_signatures; ++i)
 					{
+						// Create each file signature by converting each space delimited string to a byte or wildcard.
 						++(group->file_info.num_file_signatures);
 						File_Signature* signature = push_arena(permanent_arena, sizeof(File_Signature), File_Signature);
 
@@ -412,6 +427,8 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							num_bytes = MAX_FILE_SIGNATURE_BUFFER_SIZE;
 						}
 
+						// Keep track of the global maximum signature size. This will allow us to allocate a file buffer
+						// capable of holding any file signature we need.
 						if(num_bytes > *max_num_file_signature_bytes)
 						{
 							*max_num_file_signature_bytes = num_bytes;
@@ -469,8 +486,10 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 					file_signature_strings = NULL;
 				} break;
 
+				// Aggregate the group's MIME types.
 				case(LIST_MIME_TYPES):
 				{
+					// Create a MIME type array.
 					group->file_info.mime_types = build_array_from_contiguous_strings(permanent_arena, mime_type_strings, num_mime_types);
 					group->file_info.num_mime_types = num_mime_types;
 
@@ -478,8 +497,10 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 					mime_type_strings = NULL;
 				} break;
 
+				// Aggregate the group's file extensions.
 				case(LIST_FILE_EXTENSIONS):
 				{
+					// Create a file extension array.
 					group->file_info.file_extensions = build_array_from_contiguous_strings(permanent_arena, file_extension_strings, num_file_extensions);
 					group->file_info.num_file_extensions = num_file_extensions;
 
@@ -487,12 +508,15 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 					file_extension_strings = NULL;
 				} break;
 
+				// Aggregate the group's domains.
 				case(LIST_DOMAINS):
 				{
+					// Create a domain array.
 					Domain** domains = push_arena(permanent_arena, num_domains * sizeof(Domain*), Domain*);
 					
 					for(u32 i = 0; i < num_domains; ++i)
 					{
+						// Create each domain by splitting the host and path URL components.
 						++(group->url_info.num_domains);
 						Domain* domain = push_arena(permanent_arena, sizeof(Domain), Domain);
 
@@ -536,13 +560,14 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 		{
 			switch(current_group_type)
 			{
-				// Add a new group.
+				// Found the start of a new group.
 				case(GROUP_NONE):
 				{
 					char* group_name = NULL;
 					char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
 					if(group_type != NULL && group_name != NULL)
 					{
+						// Find the group's type.
 						if(strings_are_equal(group_type, BEGIN_FILE_GROUP))
 						{
 							current_group_type = GROUP_FILE;
@@ -560,6 +585,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 						if(current_group_type != GROUP_NONE)
 						{
 							// Get this group's index in the global custom groups array.
+							// This will allow us to use this group's preallocated Group structure.
 							u32 group_idx = *num_processed_groups;
 							++(*num_processed_groups);
 							group = &group_array[group_idx];
@@ -567,6 +593,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							group->type = current_group_type;
 							group->name = copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
 
+							// Clear the data for each group type.
 							if(current_group_type == GROUP_FILE)
 							{
 								ZeroMemory(&(group->file_info), sizeof(group->file_info));
@@ -588,6 +615,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 				{
 					switch(current_list_type)
 					{
+						// Found the start of a list.
 						case(LIST_NONE):
 						{
 							if(strings_are_equal(line, BEGIN_FILE_SIGNATURES))
@@ -608,6 +636,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							}
 						} break;
 
+						// Add each file signature (one per line).
 						case(LIST_FILE_SIGNATURES):
 						{
 							// File signatures are processed differently from MIME types and file extensions.
@@ -617,6 +646,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							copy_utf_8_string_to_tchar(temporary_arena, temporary_arena, line);
 						} break;
 
+						// Add each MIME type (multiple per line).
 						case(LIST_MIME_TYPES):
 						{
 							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
@@ -624,6 +654,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 															&mime_type_strings, &num_mime_types);
 						} break;
 
+						// Add each file extension (multiple per line).
 						case(LIST_FILE_EXTENSIONS):
 						{
 							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
@@ -638,6 +669,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 				{
 					switch(current_list_type)
 					{
+						// Found the start of a list.
 						case(LIST_NONE):
 						{
 							if(strings_are_equal(line, BEGIN_DOMAINS))
@@ -650,9 +682,9 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							}
 						} break;
 
+						// Add each domain (one per line).
 						case(LIST_DOMAINS):
 						{
-							// @TODO
 							++num_domains;
 							if(domain_strings == NULL) domain_strings = push_arena(temporary_arena, 0, TCHAR);
 							copy_utf_8_string_to_tchar(temporary_arena, temporary_arena, line);
@@ -673,7 +705,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 
 	if(current_group_type != GROUP_NONE)
 	{
-				console_print("Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
+		console_print("Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 		log_print(LOG_WARNING, "Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 	}
 
@@ -867,8 +899,10 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 					File_Signature* signature = group.file_info.file_signatures[j];
 					_ASSERT(signature->num_bytes <= custom_groups->file_signature_buffer_size);
 
-					if(compare_file_bytes_using_wildcards(	custom_groups->file_signature_buffer, file_signature_size,
-															signature->bytes, signature->is_wildcard, signature->num_bytes))
+					// Skip invalid file signatures.
+					if(signature->bytes != NULL
+						&& compare_file_bytes_using_wildcards(	custom_groups->file_signature_buffer, file_signature_size,
+																signature->bytes, signature->is_wildcard, signature->num_bytes))
 					{
 						matched_file_group_name = group.name;
 					}

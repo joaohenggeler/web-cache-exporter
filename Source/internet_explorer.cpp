@@ -491,7 +491,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 
 	bool ie_4_to_9_cache_exists = false;
 
-	resolve_exporter_output_paths_and_create_csv_file(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print_newline();
 		PathCombine(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
@@ -528,16 +528,16 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		#endif
 
 	}
-	close_exporter_csv_file(exporter);
+	terminate_cache_exporter(exporter);
 
 	if(ie_4_to_9_cache_exists)
 	{
-		resolve_exporter_output_paths_and_create_csv_file(exporter, RAW_OUTPUT_DIRECTORY_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
+		initialize_cache_exporter(exporter, RAW_OUTPUT_DIRECTORY_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
 		{
 			log_print_newline();
 			export_raw_internet_explorer_4_to_9_cache(exporter);		
 		}
-		close_exporter_csv_file(exporter);		
+		terminate_cache_exporter(exporter);		
 	}
 
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
@@ -597,7 +597,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 		{filename}, {file_extension}, {file_size_string},
 		{last_write_time}, {creation_time}, {last_access_time},
 		{short_file_path},
-		NULL_CSV_ENTRY
+		{NULL}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
@@ -878,8 +878,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{filename}, {url}, {file_extension}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path_pointer}, NULL_CSV_ENTRY,
-						NULL_CSV_ENTRY, NULL_CSV_ENTRY
+						{num_hits}, {short_file_path_pointer}, {NULL},
+						{NULL}, {NULL}
 					};
 
 					export_cache_entry(exporter, csv_row, full_file_path, url, filename);
@@ -1990,8 +1990,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 										{filename}, {url}, {file_extension}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-										{num_hits}, {short_file_path}, NULL_CSV_ENTRY,
-										NULL_CSV_ENTRY, NULL_CSV_ENTRY
+										{num_hits}, {short_file_path}, {NULL},
+										{NULL}, {NULL}
 									};
 
 									export_cache_entry(exporter, csv_row, full_file_path, url, filename);

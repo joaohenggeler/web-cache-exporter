@@ -167,6 +167,11 @@ struct Exporter
 	bool should_create_csv;
 	bool should_overwrite_previous_output;
 	bool should_filter_by_groups;
+
+	bool should_load_specific_groups_files;
+	size_t num_group_filenames_to_load;
+	TCHAR** group_filenames_to_load;
+	
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
@@ -176,10 +181,10 @@ struct Exporter
 	TCHAR output_path[MAX_PATH_CHARS];
 	bool is_exporting_from_default_locations;
 
-	// The current Windows version. Used to determine how much memory to allocate for the two arenas below.
+	// The current Windows version. Used to determine how much memory to allocate for the temporary memory.
 	OSVERSIONINFO os_version;
 
-	// The permanent memory arena that is not cleared throughout the application's execution.
+	// The permanent memory arena that persists throughout the application's execution.
 	Arena permanent_arena;
 	// The temporary memory arena that is used and overwritten when processing each cached file.
 	Arena temporary_arena;
@@ -219,11 +224,11 @@ struct Exporter
 	size_t num_copied_files;
 };
 
-void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,
+void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
 														const Csv_Type column_types[], size_t num_columns);
 
 void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename);
 
-void close_exporter_csv_file(Exporter* exporter);
+void terminate_cache_exporter(Exporter* exporter);
 
 #endif

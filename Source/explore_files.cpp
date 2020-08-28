@@ -2,7 +2,10 @@
 #include "explore_files.h"
 
 /*
-	TODO
+	This file defines a simple cache exporter that processes any files in a given directory and its subdirectories. It does not
+	correspond to any specfic web browser or plugin, and is instead used to explore the contents of directories that may contain
+	relevant files formats. For example, a directory that may contain the cache of an obscure web plugin. This is useful when
+	combined with group files, which allow you to potentially find the types of files based on their file signatures.
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
@@ -13,11 +16,16 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_LOCATION_ON_CACHE,
+	CSV_LOCATION_ON_DISK,
 	CSV_CUSTOM_FILE_GROUP
 };
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
+// Called every time a file is found in the specified directory and subdirectories. Used to export every file.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
@@ -45,19 +53,26 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 		{filename}, {file_extension}, {file_size_string},
 		{last_write_time}, {creation_time}, {last_access_time},
 		{full_file_path},
-		NULL_CSV_ENTRY
+		{NULL}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename);
 }
 
+// Entry point for the file explorer exporter. This function assumes that the exporter's cache location was passed via the
+// command line arguments.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the files should be exported.
+//
+// @Returns: Nothing.
 void export_explored_files(Exporter* exporter)
 {
-	get_full_path_name(exporter->cache_path);
-	log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);
-
-	resolve_exporter_output_paths_and_create_csv_file(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
-	traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, explore_files_callback, exporter);
-	close_exporter_csv_file(exporter);
+	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	{
+		log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);
+		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, explore_files_callback, exporter);
+	}
+	terminate_cache_exporter(exporter);
 }

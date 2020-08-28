@@ -483,7 +483,7 @@ bool string_is_empty(const wchar_t* str)
 // @Parameters:
 // 1. str_1 - The first string.
 // 2. str_2 - The second string.
-// 3. optional_case_insensitive - An optional parameter that specifies if the comparision should be case insensitive (true) or not (false).
+// 3. optional_case_insensitive - An optional parameter that specifies if the comparison should be case insensitive (true) or not (false).
 // This value defaults to false.
 //
 // @Returns: True if the strings are equal. Otherwise, false.
@@ -505,7 +505,7 @@ bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional
 // 1. str_1 - The first string.
 // 2. str_2 - The second string.
 // 3. max_num_chars - The maximum number of characters to compare.
-// 4. optional_case_insensitive - An optional parameter that specifies if the comparision should be case insensitive (true) or not (false).
+// 4. optional_case_insensitive - An optional parameter that specifies if the comparison should be case insensitive (true) or not (false).
 // This value defaults to false.
 //
 // @Returns: True if the strings are equal up to that number of characters. Otherwise, false.
@@ -526,7 +526,7 @@ bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_
 // @Parameters:
 // 1. str - The string to check.
 // 2. prefix - The prefix string to use.
-// 3. optional_case_insensitive - An optional parameter that specifies if the comparision should be case insensitive (true) or not (false).
+// 3. optional_case_insensitive - An optional parameter that specifies if the comparison should be case insensitive (true) or not (false).
 // This value defaults to false.
 //
 // @Returns: True if the string begins with that prefix. Otherwise, false.
@@ -541,7 +541,7 @@ bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_cas
 // @Parameters:
 // 1. str - The string to check.
 // 2. suffix - The suffix string to use.
-// 3. optional_case_insensitive - An optional parameter that specifies if the comparision should be case insensitive (true) or not (false).
+// 3. optional_case_insensitive - An optional parameter that specifies if the comparison should be case insensitive (true) or not (false).
 // This value defaults to false.
 //
 // @Returns: True if the string ends with that suffix. Otherwise, false.
@@ -720,6 +720,41 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		return wide_string;
 	#endif
+}
+
+// Skips to the null terminator character in a string.
+//
+// @Parameters:
+// 1. str - The string.
+//
+// @Returns: The end of the string.
+TCHAR* skip_to_end_of_string(TCHAR* str)
+{
+	while(*str != TEXT('\0')) ++str;
+	return str;
+}
+
+// Creates an array of strings based on a number of strings that are contiguously stored in memory.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the string array.
+// 2. first_string - The first string that is contiguously stored in memory with any remaining ones. The next string starts after the
+// previous one's null terminator.
+// 3. num_strings - The number of strings.
+//
+// @Returns: The array of strings with a length of 'num_strings'.
+TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings)
+{
+	TCHAR** string_array = push_arena(arena, num_strings * sizeof(TCHAR*), TCHAR*);
+
+	for(u32 i = 0; i < num_strings; ++i)
+	{
+		string_array[i] = first_string;
+		first_string = skip_to_end_of_string(first_string);
+		++first_string;
+	}
+
+	return string_array;
 }
 
 /*
@@ -1219,6 +1254,53 @@ static void truncate_path_components(TCHAR* path)
 	}
 }
 
+// Called by bsearch() to search the reserved filename array.
+static int compare_reserved_filenames(const void* filename_pointer, const void* reserved_filename_pointer)
+{
+	const TCHAR* filename = *((TCHAR**) filename_pointer);
+	const TCHAR* reserved_filename = *((TCHAR**) reserved_filename_pointer);
+	return _tcsncicmp(filename, reserved_filename, string_length(reserved_filename));
+}
+
+// Checks if a filename begins with a reserved name and corrects so it may be used by certain functions from the Win32 API (like
+// CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths. This correction is done by replacing the first
+// character with an underscore. The comparison between the filename and reserved name is case insensitive.
+//
+// For example, consider the reserved names AUX, NUL, and CON:
+//
+// - "file.ext" -> "file.ext"
+// - "AUX" 		-> "_UX"
+// - "Nul.txt" 	-> "_ul.txt"
+// - "con abc" 	-> "_on abc"
+//
+// See the "Naming Files, Paths, and Namespaces" in the Win32 API Reference.
+//
+// @Parameters:
+// 1. filename - The filename to modify.
+//
+// @Returns: Nothing.
+static void correct_reserved_filename(TCHAR* filename)
+{
+	const TCHAR* const SORTED_RESERVED_FILENAMES[] =
+	{
+		TEXT("AUX"),
+		TEXT("COM1"), TEXT("COM2"), TEXT("COM3"), TEXT("COM4"), TEXT("COM5"), TEXT("COM6"), TEXT("COM7"), TEXT("COM8"), TEXT("COM9"),
+		TEXT("CON"),
+		TEXT("LPT1"), TEXT("LPT2"), TEXT("LPT3"), TEXT("LPT4"), TEXT("LPT5"), TEXT("LPT6"), TEXT("LPT7"), TEXT("LPT8"), TEXT("LPT9"),
+		TEXT("NUL"),
+		TEXT("PRN")
+	};
+	size_t NUM_RESERVED_FILENAMES = _countof(SORTED_RESERVED_FILENAMES);
+
+	void* search_result = bsearch(	&filename, SORTED_RESERVED_FILENAMES,
+									NUM_RESERVED_FILENAMES, sizeof(TCHAR*),
+									compare_reserved_filenames);
+	if(search_result != NULL)
+	{
+		*filename = TEXT('_');
+	}
+}
+
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
@@ -1641,6 +1723,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
 	correct_url_path_characters(corrected_filename);
 	truncate_path_components(corrected_filename);
+	correct_reserved_filename(corrected_filename);
 
 	// Copy Target = Base Destination Path + Url Converted To Path (if it exists) + Filename
 	bool build_target_success = PathAppend(full_copy_target_path, corrected_filename) == TRUE;

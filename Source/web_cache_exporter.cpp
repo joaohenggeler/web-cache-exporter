@@ -47,9 +47,8 @@
 	@TODO:
 
 	- Add support for the Java Plugin.
-	- Document and refactor custom_groups.h and custom_groups.cpp.
-	- Document and refactor explore_files.h and explore_files.cpp.
-	- Add the -filter-by-all-groups and -filter-by-group-files <Space Delimited Filename List> options.
+	- Handle export_cache_entry() with missing file_paths and filenames.
+
 	- Correct reserved filenames (AUX, CON, NUL, etc) when copying files.
 	- Fix URL partitioning for cases like "file:///C:\Path\File.ext", where there's an empty authority.
 */
@@ -66,11 +65,15 @@ static const TCHAR* LOG_FILE_NAME = TEXT("WCE.log");
 static const TCHAR* DEFAULT_EXPORT_DIRECTORY_NAME = TEXT("ExportedCache");
 static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Arguments] <Export Argument>\n"
 												"\n"
-												"########## [1] AVAILABLE EXPORT ARGUMENTS: -export-<Cache Type> [Optional Cache path] [Optional Output Path]\n"
+												"########## [1] AVAILABLE EXPORT ARGUMENTS: <Export Option> [Optional Cache Path] [Optional Output Path]\n"
 												"\n"
 												"-export-ie    to export the WinINet cache, including Internet Explorer 4 to 11 and Microsoft Edge.\n"
 												"\n"
 												"-export-shockwave    to export the Shockwave Player cache.\n"
+												"\n"
+												"-find-and-export-all    to export all of the above at once. This option does not have an optional cache path argument.\n"
+												"\n"
+												"-explore-files    to export the files in a directory and its subdirectories. This option must have the cache path argument.\n"
 												"\n"
 												"########## [1] EXAMPLES:\n"
 												"\n"
@@ -81,6 +84,8 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"WCE.exe -export-ie \"C:\\PathToTheCache\" \"\" (choose the cache path but use the default output path)\n"
 												"WCE.exe -find-and-export-all\n"
 												"WCE.exe -find-and-export-all \"My Cache\"\n"
+												"WCE.exe -explore-files \"C:\\PathToExplore\"\n"
+												"WCE.exe -explore-files \"C:\\PathToExplore\" \"My Exploration\"\n"
 												"\n"
 												"\n"
 												"########## [2] AVAILABLE OPTIONAL ARGUMENTS: Put them before the export option.\n"
@@ -91,6 +96,10 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"-overwrite    to delete the previous output folder before running.\n"
 												"\n"
+												"-filter-by-groups    to only export files that match any loaded groups.\n"
+												"\n"
+												"-load-group-files \"<Group Files>\"    to only load specific group files, separated by spaces and without the .group extension. By default, this application will load all group files.\n"
+												"\n"
 												"-hint-ie <Local AppData Path>    Only for Internet Explorer 10 to 11 and Microsoft Edge (i.e. if -export-ie or -find-and-export-all are used on a modern Windows version), and if your not exporting from a default location (i.e. if the cache was copied from another computer).\n"
 												"    This is used to specify the absolute path to the Local AppData folder of the computer where the cache originated.\n"
 												"    If this is option is not used, the exporter will try to guess this location.\n"
@@ -100,8 +109,11 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"WCE.exe -no-copy-files -export-shockwave\n"
 												"WCE.exe -overwrite -export-shockwave\n"
+												"WCE.exe -filter-by-groups -find-and-export-all\n"
+												"WCE.exe -load-group-files \"FileA FileB\" -find-and-export-all\n"
 												"WCE.exe -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -export-ie \"C:\\PathToTheCache\"\n"
-												"WCE.exe -overwrite -no-create-csv -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -find-and-export-all \"My Cache\""
+												"\n"
+												"WCE.exe -overwrite -no-create-csv -filter-by-groups -load-group-files \"FileA FileB\" -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -find-and-export-all \"My Cache\""
 												;
 
 // Skips to the second dash in a command line argument. For example, "-export-ie" -> "-ie".
@@ -142,6 +154,8 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	bool success = true;
 	bool seen_export_option = false;
 
+	Arena* arena = &(exporter->temporary_arena);
+
 	// Set any options that shouldn't be zero, false, or empty strings by default.
 	exporter->should_copy_files = true;
 	exporter->should_create_csv = true;
@@ -168,16 +182,42 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			exporter->should_filter_by_groups = true;
 		}
+		else if(strings_are_equal(option, TEXT("-load-group-files")))
+		{
+			exporter->should_load_specific_groups_files = true;
+
+			if(i+1 < num_arguments)
+			{
+				TCHAR* group_filenames = push_string_to_arena(arena, arguments[i+1]);
+				i += 1;
+
+				const TCHAR* FILENAME_DELIMITER = TEXT(" ");
+				TCHAR* remaining_filenames = NULL;
+				TCHAR* filename = _tcstok_s(group_filenames, FILENAME_DELIMITER, &remaining_filenames);
+
+				u32 num_filenames = 0;
+				TCHAR* first_filename = push_arena(arena, 0, TCHAR);
+				while(filename != NULL)
+				{
+					++num_filenames;
+					size_t size = string_size(filename);
+					push_and_copy_to_arena(arena, size, u8, filename, size);
+
+					filename = _tcstok_s(NULL, FILENAME_DELIMITER, &remaining_filenames);					
+				}
+
+				exporter->num_group_filenames_to_load = num_filenames;
+				exporter->group_filenames_to_load = build_array_from_contiguous_strings(arena, first_filename, num_filenames);
+			}			
+		}
 		else if(strings_are_equal(option, TEXT("-hint-ie")))
 		{
 			exporter->should_use_ie_hint = true;
-			if(i+1 < num_arguments && !string_is_empty(arguments[i+1]))
+			if(i+1 < num_arguments)
 			{
 				StringCchCopy(exporter->ie_hint_path, MAX_PATH_CHARS, arguments[i+1]);
+				i += 1;
 			}
-
-			// Skip the mandatory path value.
-			i += 1;
 		}
 		else if(strings_are_equal(option, TEXT("-explore-files")))
 		{
@@ -299,6 +339,13 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		success = false;
 	}
 
+	if(exporter->should_load_specific_groups_files && exporter->num_group_filenames_to_load == 0)
+	{
+		console_print("The -load-group-files option requires one or more group filenames as its argument.");
+		log_print(LOG_ERROR, "Argument Parsing: The -load-group-files option was used without passing its value.");
+		success = false;
+	}
+
 	if(exporter->should_use_ie_hint && string_is_empty(exporter->ie_hint_path))
 	{
 		console_print("The -hint-ie option requires a path as its argument.");
@@ -388,7 +435,23 @@ static void clean_up(Exporter* exporter)
 }
 
 /*
-	>>>> The Web Cache Exporter's entry point.
+	The Web Cache Exporter's entry point. Order of operations:
+	
+	>>>> 1. Create the log file.
+	>>>> 2. Find the current Windows version, Internet Explorer version, and ANSI code page.
+	>>>> 3. Check if any command line options were passed. If not, terminate.
+	>>>> 4. Create the temporary memory arena based on the current Windows version. On error, terminate.
+	>>>> 5. Parse the command line options. If an option is incorrect, terminate.
+	>>>> 6. Find the current executable's directory path.
+	>>>> 7. Find the number of groups defined in the group files located on the executable's directory path,
+	and how much memory is roughly required.
+	>>>> 8. Create the permanent memory arena based on the number of group files. On error, terminate.
+	>>>> 9. Dynamically load any necessary functions.
+	>>>> 10. Find the location of the Temporary Files and Application Data directories.
+	>>>> 11. Delete the previous output directory if requested in the command line options.
+	>>>> 12. Start exporting the cache based on the command line options.
+	>>>> 13. Perform any clean up operations after finishing exporting. These are also done when any of the
+	previous errors occur.
 */
 int _tmain(int argc, TCHAR* argv[])
 {
@@ -435,6 +498,19 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
+	{
+		size_t temporary_memory_size = get_temporary_memory_size_for_os_version(&exporter);
+		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
+
+		if(!create_arena(&exporter.temporary_arena, temporary_memory_size))
+		{
+			console_print("Could not allocate enough temporary memory to run the program.");
+			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
+			clean_up(&exporter);
+			return 1;
+		}
+	}
+
 	if(!parse_exporter_arguments(argc, argv, &exporter))
 	{
 		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will terminate.");
@@ -461,19 +537,6 @@ int _tmain(int argc, TCHAR* argv[])
 		{
 			console_print("Could not allocate enough permanent memory to run the program.");
 			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", permanent_memory_size);
-			clean_up(&exporter);
-			return 1;
-		}
-
-		// ----------------------------------------------------------------------------------------------------
-
-		size_t temporary_memory_size = get_temporary_memory_size_for_os_version(&exporter);
-		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
-
-		if(!create_arena(&exporter.temporary_arena, temporary_memory_size))
-		{
-			console_print("Could not allocate enough temporary memory to run the program.");
-			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
 			clean_up(&exporter);
 			return 1;
 		}
@@ -567,6 +630,10 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 	}
 
+	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around
+	// should be stored in the permanent arena.
+	clear_arena(&(exporter.temporary_arena));
+
 	log_print_newline();
 	
 	switch(exporter.cache_type)
@@ -629,10 +696,13 @@ int _tmain(int argc, TCHAR* argv[])
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-//@TODO: cleanup
-
-// Resolves the exporter's output paths for copying files, while also creating a CSV file with a given header.
-// This function should be called by each exporter before processing any cached files.
+// Initializes a cache exporter by performing the following:
+// - determining the fully qualified version of the cache path.
+// - resolving the exporter's output paths for copying cache entries and creating CSV files.
+// - creating a CSV file with a given header.
+//
+// This function should be called by each exporter before processing any cached files, and may be called multiple times by the same
+// exporter. After finishing exporting, the terminate_cache_exporter() function should be called.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure where the resolved output paths and CSV file's handle will be stored.
@@ -641,10 +711,12 @@ int _tmain(int argc, TCHAR* argv[])
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, const TCHAR* cache_identifier,
+void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
 														const Csv_Type column_types[], size_t num_columns)
 {
 	Arena* temporary_arena = &(exporter->temporary_arena);
+
+	get_full_path_name(exporter->cache_path);
 
 	get_full_path_name(exporter->output_path);
 	
@@ -673,8 +745,8 @@ void resolve_exporter_output_paths_and_create_csv_file(	Exporter* exporter, cons
 // - CSV_CUSTOM_FILE_GROUP - determined using the 'full_entry_path' parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
 // - CSV_CUSTOM_URL_GROUP - determined using the 'entry_url' parameter.
 //
-// These array elements should be set to NULL_CSV_ENTRY. For CSV columns that aren't related to group files, you can override this
-// behavior by explicitly setting their value instead of using NULL_CSV_ENTRY.
+// These array elements should be set to {NULL}. For CSV columns that aren't related to group files, you can override this behavior by
+// explicitly setting their value instead of using NULL.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure 
@@ -707,8 +779,6 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* fu
 
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
-		// Allow each exporter to override how certain values are set.
-		const TCHAR* NULL_VALUE = NULL_CSV_ENTRY.value;
 		TCHAR* value = column_values[i].value;
 
 		switch(exporter->csv_column_types[i])
@@ -735,7 +805,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* fu
 
 			case(CSV_MISSING_FILE):
 			{
-				if(value == NULL_VALUE) column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+				if(value == NULL) column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
 			} break;
 		}
 	}
@@ -775,16 +845,17 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* fu
 	clear_arena(temporary_arena);
 }
 
-// Closes the exporter's current CSV file. This file should be previously created and opened by calling resolve_exporter_output_paths_and_create_csv_file().
+// Terminates a cache exporter by performing the following:
+// - closing the exporter's current CSV file.
 //
-// This function should be called by each exporter after processing its cached files. After being called, all future csv_print_header()
-// and csv_print_row() calls will do nothing.
+// This function should be called by each exporter after processing any cached files, and may be called multiple times by the same
+// exporter. Before starting the export process, the initialize_cache_exporter() function should be called first.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the CSV file's handle.
 // 
 // @Returns: Nothing.
-void close_exporter_csv_file(Exporter* exporter)
+void terminate_cache_exporter(Exporter* exporter)
 {
 	safe_close_handle(&(exporter->csv_file_handle));
 }

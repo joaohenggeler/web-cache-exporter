@@ -1,0 +1,65 @@
+BEGIN_URL_GROUP Addicting Games
+
+	BEGIN_DOMAINS
+		addictinggames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Armor Games
+
+	BEGIN_DOMAINS
+		armorgames.com
+		gamesofgondor.com
+	END
+
+END
+
+BEGIN_URL_GROUP Bonus.com
+
+	BEGIN_DOMAINS
+		bonus.com
+	END
+
+END
+
+BEGIN_URL_GROUP Coolmath Games
+
+	BEGIN_DOMAINS
+		coolmathgames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Jay Is Games
+
+	BEGIN_DOMAINS
+		jayisgames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Miniclip
+
+	BEGIN_DOMAINS
+		miniclip.com
+	END
+
+END
+
+BEGIN_URL_GROUP Newgrounds
+
+	BEGIN_DOMAINS
+		newgrounds.com
+	END
+
+END
+
+BEGIN_URL_GROUP Shockwave.com
+
+	BEGIN_DOMAINS
+		shockwave.com
+		shockrave.com
+	END
+
+END

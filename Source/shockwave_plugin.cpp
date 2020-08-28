@@ -128,15 +128,13 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 		}
 	}
 
-	get_full_path_name(exporter->cache_path);
-	log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", exporter->cache_path);
-
-	resolve_exporter_output_paths_and_create_csv_file(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
-	
-	traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, exporter);
-	traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, exporter);
-	
-	close_exporter_csv_file(exporter);
+	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	{
+		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", exporter->cache_path);
+		traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, exporter);
+		traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, exporter);		
+	}
+	terminate_cache_exporter(exporter);
 	
 	log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");
 }
@@ -178,7 +176,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 		{filename}, {file_extension}, {file_size_string},
 		{last_write_time}, {creation_time}, {last_access_time},
 		{director_file_type},
-		NULL_CSV_ENTRY
+		{NULL}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;

@@ -130,8 +130,9 @@ bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
-
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
+TCHAR* skip_to_end_of_string(TCHAR* str);
+TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -341,19 +342,20 @@ enum Csv_Type
 	CSV_CONTENT_ENCODING = 16,
 
 	CSV_LOCATION_ON_CACHE = 17,
+	CSV_LOCATION_ON_DISK = 18,
 
 	// Automatically set by export_cache_entry():
-	CSV_MISSING_FILE = 18, 
-	CSV_CUSTOM_FILE_GROUP = 19, // Depends on CSV_FILE_EXTENSION and CSV_CONTENT_TYPE.
-	CSV_CUSTOM_URL_GROUP = 20,
+	CSV_MISSING_FILE = 19, 
+	CSV_CUSTOM_FILE_GROUP = 20, // Depends on CSV_FILE_EXTENSION and CSV_CONTENT_TYPE.
+	CSV_CUSTOM_URL_GROUP = 21,
 	
 	// Internet Explorer specific.
-	CSV_HITS = 21,
+	CSV_HITS = 22,
 	
 	// Shockwave Plugin specific.
-	CSV_DIRECTOR_FILE_TYPE = 22,
+	CSV_DIRECTOR_FILE_TYPE = 23,
 
-	NUM_CSV_TYPES = 23
+	NUM_CSV_TYPES = 24
 };
 
 // An array that maps the previous values to UTF-8 strings. Used to write the columns' names directly to the CSV file
@@ -364,7 +366,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
 	"Response", "Server", "Cache-Control", "Pragma", "Content-Type", "Content-Length", "Content-Encoding",
-	"Location On Cache", "Missing File",
+	"Location On Cache", "Location On Disk", "Missing File",
 	"Custom File Group", "Custom URL Group",
 	"Hits",
 	"Director File Type"
@@ -378,11 +380,6 @@ struct Csv_Entry
 	TCHAR* value;
 	wchar_t* utf_16_value;
 };
-
-// A helper constant used to identify uninitialized CSV entries. These are used when the value of some column is automatically
-// set by export_cache_entry() and doesn't need to be handled by each exporter specifically. For example, the custom group
-// columns (see the enumeration above).
-const Csv_Entry NULL_CSV_ENTRY = {NULL, NULL};
 
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
 void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);

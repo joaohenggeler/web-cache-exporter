@@ -569,21 +569,6 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	// Skip the index.dat file itself. We only want the cached files.
 	if(strings_are_equal(filename, TEXT("index.dat"), true)) return;
 
-	TCHAR* file_extension = skip_to_file_extension(filename);
-
-	u64 file_size = combine_high_and_low_u32s_into_u64(find_data->nFileSizeHigh, find_data->nFileSizeLow);
-	TCHAR file_size_string[MAX_INT64_CHARS] = TEXT("");
-	convert_u64_to_string(file_size, file_size_string);
-
-	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	format_filetime_date_time(find_data->ftLastWriteTime, last_write_time);
-
-	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	format_filetime_date_time(find_data->ftCreationTime, creation_time);
-	
-	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	format_filetime_date_time(find_data->ftLastAccessTime, last_access_time);
-
 	// Despite not using the index.dat file, we can find out where we're located on the cache.
 	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
 	TCHAR* directory_name = PathFindFileName(directory_path);
@@ -594,14 +579,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 
 	Csv_Entry csv_row[RAW_CSV_NUM_COLUMNS] =
 	{
-		{filename}, {file_extension}, {file_size_string},
-		{last_write_time}, {creation_time}, {last_access_time},
+		{NULL}, {NULL}, {NULL},
+		{NULL}, {NULL}, {NULL},
 		{short_file_path},
 		{NULL}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename);
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
 }
 
 // Exports Internet Explorer 4 through 9's cache from a given location.
@@ -659,7 +644,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file_size < sizeof(Internet_Explorer_Index_Header))
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is smaller than the file format's header. No files will be exported from this cache.");
-		SAFE_UNMAP_VIEW_OF_FILE(index_file);
+		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -674,7 +659,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		signature_string[NUM_SIGNATURE_CHARS] = '\0';
 
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file starts with an invalid signature: '%hs'. No files will be exported from this cache.", signature_string);
-		SAFE_UNMAP_VIEW_OF_FILE(index_file);
+		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -683,7 +668,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	if(index_file_size != header->file_size)
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is different than the size specified in its header. No files will be exported from this cache.");
-		SAFE_UNMAP_VIEW_OF_FILE(index_file);
+		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -700,7 +685,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	else
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was opened successfully but its version (%hc.%hc) is not supported. No files will be exported from this cache.", major_version, minor_version);
-		SAFE_UNMAP_VIEW_OF_FILE(index_file);
+		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
 		_ASSERT(false);
 		return;
@@ -765,8 +750,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					TCHAR* decorated_filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
 					TCHAR* filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
 					undecorate_path(filename);
-
-					TCHAR* file_extension = skip_to_file_extension(filename);
 
 					u32 entry_offset_to_url;
 					GET_URL_ENTRY_FIELD(entry_offset_to_url, entry_offset_to_url);
@@ -875,7 +858,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 					{
-						{filename}, {url}, {file_extension}, {cached_file_size},
+						{NULL}, {NULL}, {NULL}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
 						{num_hits}, {short_file_path_pointer}, {NULL},
@@ -914,7 +897,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
-	SAFE_UNMAP_VIEW_OF_FILE(index_file);
+	safe_unmap_view_of_file((void**) &index_file);
 	safe_close_handle(&index_handle);
 
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Finished exporting the cache.");
@@ -1461,7 +1444,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	}
 
 	// Helper structure to pass some values to find_internet_explorer_10_to_11_ese_files_callback(). 
-	struct Copy_Ese_File_Params
+	struct Copy_Ese_Files_Params
 	{
 		wchar_t* temporary_directory_path;
 		Arena* arena;
@@ -1475,10 +1458,10 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// @Returns: Nothing.
 	static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_10_to_11_ese_files_callback)
 	{
-		Copy_Ese_File_Params* copy_ese_file_params = (Copy_Ese_File_Params*) user_data;
+		Copy_Ese_Files_Params* params = (Copy_Ese_Files_Params*) user_data;
 		
-		Arena* arena = copy_ese_file_params->arena;
-		wchar_t* temporary_directory_path = copy_ese_file_params->temporary_directory_path;
+		Arena* arena = params->arena;
+		wchar_t* temporary_directory_path = params->temporary_directory_path;
 
 		wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
 		PathCombineW(copy_source_path, directory_path, find_data->cFileName);
@@ -1554,12 +1537,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
 		if(create_temporary_directory(exporter->exporter_temporary_path, temporary_directory_path))
 		{
-			Copy_Ese_File_Params copy_ese_file_params = {};
-			copy_ese_file_params.arena = arena;
-			copy_ese_file_params.temporary_directory_path = temporary_directory_path;
+			Copy_Ese_Files_Params params = {};
+			params.arena = arena;
+			params.temporary_directory_path = temporary_directory_path;
 			
 			traverse_directory_objects(	index_directory_path, L"*", TRAVERSE_FILES, false,
-										find_internet_explorer_10_to_11_ese_files_callback, &copy_ese_file_params);
+										find_internet_explorer_10_to_11_ese_files_callback, &params);
 		}
 		else
 		{
@@ -1912,8 +1895,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									wchar_t* decorated_filename = push_string_to_arena(arena, filename);
 									undecorate_path(filename);
 
-									wchar_t* file_extension = skip_to_file_extension(filename);
-
 									decode_url(url);
 
 									wchar_t cached_file_size[MAX_INT64_CHARS] = L"";
@@ -1987,7 +1968,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 									{
-										{filename}, {url}, {file_extension}, {cached_file_size},
+										{NULL}, {NULL}, {NULL}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
 										{num_hits}, {short_file_path}, {NULL},

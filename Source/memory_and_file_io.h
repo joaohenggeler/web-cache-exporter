@@ -171,7 +171,7 @@ bool decode_url(TCHAR* url);
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 
-TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false);
+TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
 bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_result_path_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
@@ -188,25 +188,7 @@ bool does_file_exist(const TCHAR* file_path);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
 void safe_close_handle(HANDLE* handle);
 void safe_find_close(HANDLE* search_handle);
-// Unmaps a mapped view of a file and sets its value to NULL.
-//
-// @Parameters:
-// 1. base_address - The address of the view to unmap.
-#define SAFE_UNMAP_VIEW_OF_FILE(base_address)\
-do\
-{\
-	if(base_address != NULL)\
-	{\
-		UnmapViewOfFile(base_address);\
-		base_address = NULL;\
-	}\
-	else\
-	{\
-		log_print(LOG_WARNING, "Safe Unmap View Of File: Attempted to unmap an invalid address.");\
-		_ASSERT(false);\
-	}\
-}\
-while(false, false)
+void safe_unmap_view_of_file(void** base_address);
 
 // Defines a combination of options for traverse_directory_objects().
 enum Traversal_Flag

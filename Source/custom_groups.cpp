@@ -103,15 +103,10 @@ static const u32 MAX_FILE_SIGNATURE_BUFFER_SIZE = (u32) kilobytes_to_bytes(1);
 // @Returns: True if this filename is allowed to be loaded. Otherwise, false.
 static bool should_load_group_with_filename(TCHAR** filenames_to_load, size_t num_filenames_to_load, TCHAR* filename)
 {
-	TCHAR previous_char = TEXT('\0');
-	TCHAR* file_extension = skip_to_file_extension(filename, true);
-
 	// Temporarily remove the .group file extension.
-	if(file_extension != NULL)
-	{
-		previous_char = *file_extension;
-		*file_extension = TEXT('\0');
-	}
+	TCHAR* file_extension = skip_to_file_extension(filename, true);
+	TCHAR previous_char = *file_extension;
+	*file_extension = TEXT('\0');
 		
 	bool success = false;
 
@@ -124,11 +119,7 @@ static bool should_load_group_with_filename(TCHAR** filenames_to_load, size_t nu
 		}
 	}
 
-
-	if(file_extension != NULL)
-	{
-		*file_extension = previous_char;
-	}
+	*file_extension = previous_char;
 
 	return success;
 }
@@ -204,7 +195,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 		}
 	}
 
-	SAFE_UNMAP_VIEW_OF_FILE(group_file);
+	safe_unmap_view_of_file((void**) &group_file);
 	safe_close_handle(&group_file_handle);
 }
 
@@ -726,7 +717,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 		log_print(LOG_WARNING, "Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 	}
 
-	SAFE_UNMAP_VIEW_OF_FILE(group_file);
+	safe_unmap_view_of_file((void**) &group_file);
 	safe_close_handle(&group_file_handle);
 }
 

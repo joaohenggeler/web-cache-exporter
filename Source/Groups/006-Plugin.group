@@ -105,11 +105,11 @@ END
 BEGIN_FILE_GROUP Flash
 
 	BEGIN_FILE_SIGNATURES
-		; "FWS" (uncompressed)
+		; "FWS" (uncompressed SWF)
 		46 57 53
-		; "CWS" (ZLIB compressed)
+		; "CWS" (ZLIB compressed SWF)
 		43 57 53
-		; "ZWS" (LZMA compressed)
+		; "ZWS" (LZMA compressed SWF)
 		5A 57 53
 	END
 
@@ -121,6 +121,9 @@ BEGIN_FILE_GROUP Flash
 
 	BEGIN_FILE_EXTENSIONS
 		swf spl
+		fla
+		; Signed Flash Player Library, Flash Player Cache Metadata
+		swz heu
 	END
 
 END
@@ -147,10 +150,10 @@ END
 BEGIN_FILE_GROUP iPIX
 
 	BEGIN_MIME_TYPES
-		application/photobubble
-		application/pbautomation
 		application/x-ipix
 		application/x-ipscript
+		application/photobubble
+		application/pbautomation
 	END
 
 	BEGIN_FILE_EXTENSIONS
@@ -343,7 +346,7 @@ BEGIN_FILE_GROUP VRML
 		model/vrml
 		application/x-vrml
 
-		; For Black Sun / Blaxxun / BS Contact
+		; For the Black Sun / Blaxxun / BS Contact plugin:
 		application/x-bscontact
 		application/x-blaxxuncc3d
 		application/x-cc3d
@@ -352,7 +355,7 @@ BEGIN_FILE_GROUP VRML
 	BEGIN_FILE_EXTENSIONS
 		wrl wrz vrml
 
-		; For the Black Sun / Blaxxun / BS Contact plugin
+		; For the Black Sun / Blaxxun / BS Contact plugin:
 		bswrl bxwrl
 	END
 
@@ -374,7 +377,7 @@ BEGIN_FILE_GROUP X3D
 		x3d x3dv x3db
 		x3dz x3dvz x3dbz
 
-		; For the FreeWRL plugin
+		; For the FreeWRL plugin:
 		x3z
 	END
 

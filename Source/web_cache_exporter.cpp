@@ -48,9 +48,6 @@
 
 	- Add support for the Java Plugin.
 	- Handle export_cache_entry() with missing file_paths and filenames.
-
-	- Correct reserved filenames (AUX, CON, NUL, etc) when copying files.
-	- Fix URL partitioning for cases like "file:///C:\Path\File.ext", where there's an empty authority.
 */
 
 /*
@@ -717,11 +714,10 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	get_full_path_name(exporter->cache_path);
-
 	get_full_path_name(exporter->output_path);
 	
 	PathCombine(exporter->output_copy_path, exporter->output_path, cache_identifier);
-
+	
 	// Don't use PathCombine() since we're just adding a file extension to the previous path.
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
 	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
@@ -760,8 +756,12 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 // parameter shouldn't be NULL.
 // 
 // @Returns: Nothing.
-void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename)
+void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
+						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,
+						WIN32_FIND_DATA* optional_find_data)
 {
+	if(optional_find_data != NULL) entry_filename = optional_find_data->cFileName;
+
 	_ASSERT(full_entry_path != NULL);
 	_ASSERT(entry_filename != NULL);
 
@@ -783,29 +783,113 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[], TCHAR* fu
 
 		switch(exporter->csv_column_types[i])
 		{
+			/*
+				@CustomGroups: Used to fill the custom group columns.
+				
+				@FindData: Uses the values from the 'find_data' parameter if it exists, and if the column value in question
+				is not NULL.
+				
+				@UseParameter: Uses one of the three parameters (full_entry_path, entry_url, entry_filename) if the column
+				value in question is not NULL.
+			*/
+
+			// @CustomGroups
 			case(CSV_CUSTOM_FILE_GROUP):
 			{
 				file_group_index = i;
 			} break;
 
+			// @CustomGroups
 			case(CSV_CUSTOM_URL_GROUP):
 			{
 				url_group_index = i;
 			} break;
 
+			// @CustomGroups
 			case(CSV_CONTENT_TYPE):
 			{
 				entry_to_match.mime_type_to_match = value;
 			} break;
 
+			// @CustomGroups @FindData
 			case(CSV_FILE_EXTENSION):
 			{
-				entry_to_match.file_extension_to_match = value;
+				if(value == NULL) column_values[i].value = skip_to_file_extension(entry_filename);
+				// Note that the value may change here.
+				entry_to_match.file_extension_to_match = column_values[i].value;
 			} break;
 
+			// @FindData @UseParameter
+			case(CSV_FILENAME):
+			{
+				if(value == NULL) column_values[i].value = entry_filename;
+			} break;
+
+			// @UseParameter
+			case(CSV_URL):
+			{
+				if(value == NULL) column_values[i].value = entry_url;
+			} break;
+
+			// @UseParameter
+			case(CSV_LOCATION_ON_DISK):
+			{
+				if(value == NULL) column_values[i].value = full_entry_path;
+			} break;
+
+			// @UseParameter
 			case(CSV_MISSING_FILE):
 			{
 				if(value == NULL) column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+			} break;
+
+			// @FindData
+			case(CSV_FILE_SIZE):
+			{
+				if(value == NULL && optional_find_data != NULL)
+				{
+					u64 file_size = combine_high_and_low_u32s_into_u64(optional_find_data->nFileSizeHigh, optional_find_data->nFileSizeLow);
+					TCHAR file_size_string[MAX_INT64_CHARS] = TEXT("");
+					convert_u64_to_string(file_size, file_size_string);
+
+					column_values[i].value = file_size_string;
+				}	
+			} break;
+
+			// @FindData
+			case(CSV_LAST_WRITE_TIME):
+			{
+				if(value == NULL && optional_find_data != NULL)
+				{
+					TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					format_filetime_date_time(optional_find_data->ftLastWriteTime, last_write_time);
+
+					column_values[i].value = last_write_time;
+				}
+			} break;
+
+			// @FindData
+			case(CSV_CREATION_TIME):
+			{
+				if(value == NULL && optional_find_data != NULL)
+				{
+					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					format_filetime_date_time(optional_find_data->ftCreationTime, creation_time);
+
+					column_values[i].value = creation_time;
+				}
+			} break;
+
+			// @FindData
+			case(CSV_LAST_ACCESS_TIME):
+			{
+				if(value == NULL && optional_find_data != NULL)
+				{
+					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					format_filetime_date_time(optional_find_data->ftLastAccessTime, last_access_time);
+
+					column_values[i].value = last_access_time;
+				}
 			} break;
 		}
 	}

@@ -30,34 +30,19 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
 
-	TCHAR* file_extension = skip_to_file_extension(filename);
-
-	u64 file_size = combine_high_and_low_u32s_into_u64(find_data->nFileSizeHigh, find_data->nFileSizeLow);
-	TCHAR file_size_string[MAX_INT64_CHARS] = TEXT("");
-	convert_u64_to_string(file_size, file_size_string);
-
-	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	format_filetime_date_time(find_data->ftLastWriteTime, last_write_time);
-
-	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	format_filetime_date_time(find_data->ftCreationTime, creation_time);
-	
-	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	format_filetime_date_time(find_data->ftLastAccessTime, last_access_time);
-
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, filename);
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
-		{filename}, {file_extension}, {file_size_string},
-		{last_write_time}, {creation_time}, {last_access_time},
-		{full_file_path},
+		{NULL}, {NULL}, {NULL},
+		{NULL}, {NULL}, {NULL},
+		{NULL},
 		{NULL}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename);
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
 }
 
 // Entry point for the file explorer exporter. This function assumes that the exporter's cache location was passed via the

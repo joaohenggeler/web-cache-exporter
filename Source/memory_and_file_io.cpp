@@ -34,11 +34,11 @@
 	#ifdef BUILD_9X
 		static void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = NULL;
 		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = NULL;
-		static size_t DEBUG_BASE_ADDRESS_INCREMENT = 0;
+		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 0;
 	#else
 		static void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = (void*) 0x10000000;
 		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = (void*) 0x50000000;
-		static size_t DEBUG_BASE_ADDRESS_INCREMENT = 0x01000000;
+		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 0x01000000;
 	#endif
 #endif
 
@@ -251,6 +251,9 @@ bool destroy_arena(Arena* arena)
 
 	void* base_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	bool success = VirtualFree(base_memory, 0, MEM_RELEASE) == TRUE;
+	#ifdef DEBUG
+		DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = retreat_bytes(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
+	#endif
 	
 	if(success)
 	{
@@ -811,50 +814,57 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	// Check if the authority exists.
 	if(*remaining_url == TEXT('/') && *(remaining_url+1) == TEXT('/'))
 	{
-		// @TODO: - No Host: "file:///C:\Users\<Username>\Desktop", where the host is localhost.
-
 		remaining_url += 2;
-		
-		// Check if the path has at least one separator (either a URL path or Windows directory separator).
-		// Otherwise, we wouldn't know where the authority ends and the path begins. Here we already know that
-		// the authority exists, but we need to know where the host/port end and the path begins.
-		bool has_path_separator = (_tcschr(remaining_url, TEXT('/')) != NULL) || (_tcschr(remaining_url, TEXT('\\')) != NULL);
-		TCHAR* authority = _tcstok_s(NULL, TEXT("/\\"), &remaining_url);
 
-		if(has_path_separator && authority != NULL)
+		// If the authority is empty (e.g. "file:///C:\Path\File.ext")
+		if(*remaining_url == TEXT('/'))
 		{
-			TCHAR* remaining_authority = NULL;
-			
-			// Split the userinfo from the rest of the authority (host and port) if it exists.
-			// Otherwise, the userinfo would be set to the remaining authority when it didn't exist.
-			bool has_userinfo = _tcschr(authority, TEXT('@')) != NULL;
-			TCHAR* userinfo = (has_userinfo) ? (_tcstok_s(authority, TEXT("@"), &remaining_authority)) : (NULL);
-
-			// If the userinfo exists, we'll split the remaining authority into the host and port.
-			// E.g. "userinfo@www.example.com:80" -> "www.example.com:80" -> "www.example.com" + "80"
-			// If it doesn't, we'll split starting at the beginning of the authority.
-			// E.g. "www.example.com:80" -> "www.example.com" + "80"
-			TCHAR* string_to_split = (has_userinfo) ? (NULL) : (authority);
-			TCHAR* host = _tcstok_s(string_to_split, TEXT(":"), &remaining_authority);
-			// If the remaining authority now points to the end of the string, then there's no port.
-			// Otherwise, whatever remains of the authority is the port. We can do this because of that
-			// initial split with the path separator.
-			TCHAR* port = (!string_is_empty(remaining_authority)) ? (remaining_authority) : (NULL);
-
-			if(host == NULL) host = TEXT("");
-			url_parts->host = push_string_to_arena(arena, host);
-
-			// Leave the userinfo and port set to NULL or copy their actual value if they exist.
-			if(userinfo != NULL) url_parts->userinfo = push_string_to_arena(arena, userinfo);
-			if(port != NULL) url_parts->port = push_string_to_arena(arena, port);
+			url_parts->host = push_string_to_arena(arena, TEXT(""));
+			remaining_url += 1;
 		}
 		else
 		{
-			// We don't have a path or can't distinguish between the authority and the path.
-			// E.g. "http://www.example.com" or "http://www.example.compath".
-			log_print(LOG_WARNING, "Partition Url: Found authority but missing the path in '%s'.", original_url);
-			_ASSERT(false);
-			return false;
+			// Check if the path has at least one separator (either a URL path or Windows directory separator).
+			// Otherwise, we wouldn't know where the authority ends and the path begins. Here we already know that
+			// the authority exists, but we need to know where the host/port end and the path begins.
+			bool has_path_separator = (_tcschr(remaining_url, TEXT('/')) != NULL) || (_tcschr(remaining_url, TEXT('\\')) != NULL);
+			TCHAR* authority = _tcstok_s(NULL, TEXT("/\\"), &remaining_url);
+
+			if(has_path_separator && authority != NULL)
+			{
+				TCHAR* remaining_authority = NULL;
+				
+				// Split the userinfo from the rest of the authority (host and port) if it exists.
+				// Otherwise, the userinfo would be set to the remaining authority when it didn't exist.
+				bool has_userinfo = _tcschr(authority, TEXT('@')) != NULL;
+				TCHAR* userinfo = (has_userinfo) ? (_tcstok_s(authority, TEXT("@"), &remaining_authority)) : (NULL);
+
+				// If the userinfo exists, we'll split the remaining authority into the host and port.
+				// E.g. "userinfo@www.example.com:80" -> "www.example.com:80" -> "www.example.com" + "80"
+				// If it doesn't, we'll split starting at the beginning of the authority.
+				// E.g. "www.example.com:80" -> "www.example.com" + "80"
+				TCHAR* string_to_split = (has_userinfo) ? (NULL) : (authority);
+				TCHAR* host = _tcstok_s(string_to_split, TEXT(":"), &remaining_authority);
+				// If the remaining authority now points to the end of the string, then there's no port.
+				// Otherwise, whatever remains of the authority is the port. We can do this because of that
+				// initial split with the path separator.
+				TCHAR* port = (!string_is_empty(remaining_authority)) ? (remaining_authority) : (NULL);
+
+				if(host == NULL) host = TEXT("");
+				url_parts->host = push_string_to_arena(arena, host);
+
+				// Leave the userinfo and port set to NULL or copy their actual value if they exist.
+				if(userinfo != NULL) url_parts->userinfo = push_string_to_arena(arena, userinfo);
+				if(port != NULL) url_parts->port = push_string_to_arena(arena, port);
+			}
+			else
+			{
+				// We don't have a path or can't distinguish between the authority and the path.
+				// E.g. "http://www.example.com" or "http://www.example.compath".
+				log_print(LOG_WARNING, "Partition Url: Found authority but missing the path in '%s'.", original_url);
+				_ASSERT(false);
+				return false;
+			}
 		}
 	}
 
@@ -937,112 +947,6 @@ bool decode_url(TCHAR* url)
 	return success;
 }
 
-// Corrects the path extracted from a URL (host and resource path) so it may be used by certain functions from the Win32 API (like
-// CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths. This function should only be used in paths from URLs.
-//
-// This function makes the following changes to the path:
-//
-// 1. Replaces any forward slashes with backslashes.
-// 2. Replaces two consecutive slashes with a single one.
-// 3. Replaces any reserved characters (<, >, :, ", |, ?, *) with underscores.
-// 4. If the path contains a colon followed by a slash in the first segment, it will remove the colon character instead of replacing it
-// with an underscore.
-// 5. If the path ends in a period or space, this character is replaced with an underscore.
-// 
-// For example:
-//
-// 1. "www.example.com/path/file.ext" 		-> "www.example.com\path\file.ext"
-// 2. "www.example.com//path//file.ext" 	-> "www.example.com\path\file.ext"
-// 3. "www.example.com/<path>/file::ext" 	-> "www.example.com\_path_\file__ext"
-// 4. "C:\Path\File.ext" 					-> "C\Path\File.ext".
-// 5. "www.example.com/path/file." 			-> "www.example.com\path\file_"
-//
-// See the "Naming Files, Paths, and Namespaces" in the Win32 API Reference.
-//
-// @Parameters:
-// 1. path - The path to modify.
-//
-// @Returns: Nothing.
-static void correct_url_path_characters(TCHAR* path)
-{
-	if(path == NULL) return;
-
-	bool is_first_path_segment = true;
-	TCHAR* last_char = NULL;
-
-	while(*path != TEXT('\0'))
-	{
-		last_char = path;
-
-		switch(*path)
-		{
-			case(TEXT('/')):
-			{
-				*path = TEXT('\\');
-			} // Intentional fallthrough.
-
-			case(TEXT('\\')):
-			{
-				is_first_path_segment = false;
-
-				// Remove double backslashes, leaving only one of them.
-				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
-				TCHAR* next_char = path + 1;
-				if( *next_char == TEXT('\\') || *next_char == TEXT('/') )
-				{
-					MoveMemory(path, next_char, string_size(next_char));
-					// Make sure to also replace the forward slash in the next character.
-					*path = TEXT('\\');
-				}
-
-			} break;
-
-			case(TEXT(':')):
-			{
-				// Remove the colon from the drive letter in the first segment.
-				// Otherwise, replace it with an underscore like the rest of the reserved characters.
-				//
-				// This is just so the exported directories look nicer. If we didn't do this, we would
-				// add an underscore after the drive letter if the URL had an authority segment:
-				// - With authority: "res://C:\Path\File.ext" -> "C\Path\File.ext"
-				// - Without authority: "ms-itss:C:\Path\File.ext" -> "C_\Path\File.ext"
-				// In the first case, the drive letter colon is interpreted as the separator between the
-				// host and port.
-				TCHAR* next_char = path + 1;
-				if( is_first_path_segment && (*next_char == TEXT('\\') || *next_char == TEXT('/')) )
-				{
-					MoveMemory(path, next_char, string_size(next_char));
-				}
-				else
-				{
-					*path = TEXT('_');
-				}
-			} break;
-
-			case(TEXT('<')):
-			case(TEXT('>')):
-			case(TEXT('\"')):
-			case(TEXT('|')):
-			case(TEXT('?')):
-			case(TEXT('*')):
-			{
-				// Replace reserved characters with underscores.
-				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
-				*path = TEXT('_');
-			} break;
-		}
-
-		++path;
-	}
-
-	// Replace a trailing period or space with an underscore.
-	// Otherwise, we'd run into problems when trying to delete these files/directories.
-	if(last_char != NULL && (*last_char == TEXT('.') || *last_char == TEXT(' ')) )
-	{
-		*last_char = TEXT('_');
-	}
-}
-
 // Converts the host and path in a URL into a Windows directory path.
 // For example: "http://www.example.com:80/path1/path2/file.ext?id=1#top" -> "www.example.com\path1\path2"
 //
@@ -1054,6 +958,8 @@ static void correct_url_path_characters(TCHAR* path)
 // @Returns: True if it succeeds. Otherwise, false.
 static void correct_url_path_characters(TCHAR* path);
 static void truncate_path_components(TCHAR* path);
+static void correct_reserved_path_components(TCHAR* path);
+
 static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 {
 	bool success = true;
@@ -1079,6 +985,7 @@ static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_pa
 		if(last_separator != NULL) *last_separator = TEXT('\0');
 
 		truncate_path_components(result_path);
+		correct_reserved_path_components(result_path);
 	}
 	else
 	{
@@ -1117,7 +1024,7 @@ static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_pa
 //
 // @Returns: The beginning of the file extension in the path. If the path is NULL, this function returns NULL.
 // If the filename doesn't contain a file extension, the end of the string is returned.
-TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period)
+TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period, bool optional_get_first_extension)
 {
 	TCHAR* file_extension = NULL;
 
@@ -1125,9 +1032,10 @@ TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period)
 	{
 		while(*path != TEXT('\0'))
 		{
-			if(*path == TEXT('.') && *(path+1) != TEXT('\0'))
+			if( *path == TEXT('.') && ( optional_include_period || *(path+1) != TEXT('\0') ) )
 			{
 				file_extension = (optional_include_period) ? (path) : (path + 1);
+				if(optional_get_first_extension) break;
 			}
 			else if(*path == TEXT('\\'))
 			{
@@ -1200,6 +1108,125 @@ bool get_special_folder_path(int csidl, TCHAR* result_path)
 	#endif
 }
 
+// Corrects the path extracted from a URL (host and resource path) so it may be used by certain functions from the Win32 API (like
+// CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths. This function should only be used in paths from URLs.
+//
+// This function makes the following changes to the path:
+//
+// 1. Replaces any forward slashes with backslashes.
+// 2. Replaces two consecutive slashes with a single one.
+// 3. Replaces any reserved characters (<, >, :, ", |, ?, *) with underscores.
+// 4. Replaces characters whose integer representations are in the range from 1 through 31 with underscores.
+// 5. If the path ends in a period or space, this character is replaced with an underscore.
+// 6. If the path contains a colon followed by a slash in the first component, it will remove the colon character instead of replacing
+// it with an underscore.
+//
+// For example:
+//
+// 1. "www.example.com/path/file.ext" 		-> "www.example.com\path\file.ext"
+// 2. "www.example.com//path//file.ext" 	-> "www.example.com\path\file.ext"
+// 3. "www.example.com/<path>/file::ext" 	-> "www.example.com\_path_\file__ext"
+// 4. "www.example.com/path/\x20file.ext" 	-> "www.example.com\path\_file.ext"
+// 5. "www.example.com/path/file." 			-> "www.example.com\path\file_"
+// 6. "C:\Path\File.ext" 					-> "C\Path\File.ext".
+//
+// See the "Naming Files, Paths, and Namespaces" in the Win32 API Reference.
+//
+// @Parameters:
+// 1. path - The path to modify.
+//
+// @Returns: Nothing.
+static void correct_url_path_characters(TCHAR* path)
+{
+	if(path == NULL) return;
+
+	bool is_first_path_segment = true;
+	TCHAR* last_char = NULL;
+
+	while(*path != TEXT('\0'))
+	{
+		last_char = path;
+
+		switch(*path)
+		{
+			case(TEXT('/')):
+			{
+				*path = TEXT('\\');
+			} // Intentional fallthrough.
+
+			case(TEXT('\\')):
+			{
+				is_first_path_segment = false;
+
+				// Remove double backslashes, leaving only one of them.
+				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
+				TCHAR* next_char = path + 1;
+				if( *next_char == TEXT('\\') || *next_char == TEXT('/') )
+				{
+					MoveMemory(path, next_char, string_size(next_char));
+					// Make sure to also replace the forward slash in the next character.
+					*path = TEXT('\\');
+				}
+
+			} break;
+
+			case(TEXT(':')):
+			{
+				// Remove the colon from the drive letter in the first segment.
+				// Otherwise, replace it with an underscore like the rest of the reserved characters.
+				//
+				// This is just so the exported directories look nicer. If we didn't do this, we would
+				// add an underscore after the drive letter if the URL had an authority segment:
+				// - With authority: "res://C:\Path\File.ext" -> "C\Path\File.ext"
+				// - Without authority: "ms-itss:C:\Path\File.ext" -> "C_\Path\File.ext"
+				// In the first case, the drive letter colon is interpreted as the separator between the
+				// host and port.
+				TCHAR* next_char = path + 1;
+				if( is_first_path_segment && (*next_char == TEXT('\\') || *next_char == TEXT('/')) )
+				{
+					MoveMemory(path, next_char, string_size(next_char));
+				}
+				else
+				{
+					*path = TEXT('_');
+				}
+
+			} break;
+
+			case(TEXT('<')):
+			case(TEXT('>')):
+			case(TEXT('\"')):
+			case(TEXT('|')):
+			case(TEXT('?')):
+			case(TEXT('*')):
+			{
+				// Replace reserved characters with underscores.
+				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
+				*path = TEXT('_');
+			} break;
+
+			default:
+			{
+				// Replace characters whose integer representations are in the range from 1 through 31 with underscores.
+				if(1 <= *path && *path <= 31)
+				{
+					*path = TEXT('_');
+				}
+
+			} break;
+		}
+
+		++path;
+	}
+
+	// Replace a trailing period or space with an underscore.
+	// Otherwise, we'd run into problems when trying to delete these files/directories.
+	if(last_char != NULL && (*last_char == TEXT('.') || *last_char == TEXT(' ')) )
+	{
+		*last_char = TEXT('_');
+	}
+}
+
 // Truncates each component in a path to the maximum component length supported by the current file system.
 // For example, assuming that this limit is 255 characters:
 // "C:\Path\<255 Characters>ABC\RemainingPath" -> "C:\Path\<255 Characters>\RemainingPath"
@@ -1255,33 +1282,44 @@ static void truncate_path_components(TCHAR* path)
 }
 
 // Called by bsearch() to search the reserved filename array.
-static int compare_reserved_filenames(const void* filename_pointer, const void* reserved_filename_pointer)
+static int compare_reserved_names(const void* name_pointer, const void* reserved_name_pointer)
 {
-	const TCHAR* filename = *((TCHAR**) filename_pointer);
-	const TCHAR* reserved_filename = *((TCHAR**) reserved_filename_pointer);
-	return _tcsncicmp(filename, reserved_filename, string_length(reserved_filename));
+	TCHAR* name = *((TCHAR**) name_pointer);
+	const TCHAR* reserved_name = *((TCHAR**) reserved_name_pointer);
+
+	// Temporarily remove the file extension.
+	TCHAR* file_extension = skip_to_file_extension(name, true, true);
+	TCHAR previous_char = *file_extension;
+	*file_extension = TEXT('\0');
+
+	int result = _tcsicmp(name, reserved_name);
+
+	*file_extension = previous_char;
+
+	return result;
 }
 
-// Checks if a filename begins with a reserved name and corrects so it may be used by certain functions from the Win32 API (like
-// CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths. This correction is done by replacing the first
-// character with an underscore. The comparison between the filename and reserved name is case insensitive.
+// Corrects any component in a path that uses a reserved name (or a reserved name followed immediately  by a file extension) so it may
+// be used by certain functions from the Win32 API (like CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths.
+// This correction is done by replacing the first character with an underscore. The comparison between the component and reserved name
+// is case insensitive.
 //
 // For example, consider the reserved names AUX, NUL, and CON:
 //
-// - "file.ext" -> "file.ext"
-// - "AUX" 		-> "_UX"
-// - "Nul.txt" 	-> "_ul.txt"
-// - "con abc" 	-> "_on abc"
+// - "C:\Path\File.ext" -> "C:\Path\File.ext"
+// - "C:\Path\AUX" -> "C:\Path\_UX"
+// - "C:\NUL\nul.ext" -> "C:\_UL\_ul.ext"
+// - "C:\Path\CONSOLE" -> "C:\Path\CONSOLE"
 //
 // See the "Naming Files, Paths, and Namespaces" in the Win32 API Reference.
 //
 // @Parameters:
-// 1. filename - The filename to modify.
+// 1. path - The path to modify.
 //
 // @Returns: Nothing.
-static void correct_reserved_filename(TCHAR* filename)
+static void correct_reserved_path_components(TCHAR* path)
 {
-	const TCHAR* const SORTED_RESERVED_FILENAMES[] =
+	const TCHAR* const SORTED_RESERVED_NAMES[] =
 	{
 		TEXT("AUX"),
 		TEXT("COM1"), TEXT("COM2"), TEXT("COM3"), TEXT("COM4"), TEXT("COM5"), TEXT("COM6"), TEXT("COM7"), TEXT("COM8"), TEXT("COM9"),
@@ -1290,14 +1328,33 @@ static void correct_reserved_filename(TCHAR* filename)
 		TEXT("NUL"),
 		TEXT("PRN")
 	};
-	size_t NUM_RESERVED_FILENAMES = _countof(SORTED_RESERVED_FILENAMES);
+	const size_t NUM_RESERVED_NAMES = _countof(SORTED_RESERVED_NAMES);
 
-	void* search_result = bsearch(	&filename, SORTED_RESERVED_FILENAMES,
-									NUM_RESERVED_FILENAMES, sizeof(TCHAR*),
-									compare_reserved_filenames);
-	if(search_result != NULL)
+	TCHAR* component_begin = path;
+	WHILE_TRUE()
 	{
-		*filename = TEXT('_');
+		bool is_end_of_string = (*path == TEXT('\0'));
+
+		if((*path == TEXT('\\') || is_end_of_string))
+		{
+			TCHAR previous_char = *path;
+			*path = TEXT('\0');
+
+			void* search_result = bsearch(	&component_begin, SORTED_RESERVED_NAMES,
+											NUM_RESERVED_NAMES, sizeof(TCHAR*),
+											compare_reserved_names);
+			if(search_result != NULL)
+			{
+				log_print(LOG_WARNING, "Correct Reserved Path Components: Found a path component that uses a reserved name: '%s'.", component_begin);
+				*component_begin = TEXT('_');
+			}
+
+			*path = previous_char;
+			component_begin = path + 1;
+		}
+
+		++path;
+		if(is_end_of_string) break;
 	}
 }
 
@@ -1376,6 +1433,29 @@ void safe_find_close(HANDLE* search_handle)
 	{
 		FindClose(*search_handle);
 		*search_handle = INVALID_HANDLE_VALUE;
+	}
+}
+
+// Unmaps a mapped view of a file and sets its value to NULL.
+//
+// @Parameters:
+// 1. base_address - The address of the view to unmap.
+//
+// @Returns: Nothing.
+void safe_unmap_view_of_file(void** base_address)
+{
+	if(*base_address != NULL)
+	{
+		UnmapViewOfFile(*base_address);
+		*base_address = NULL;
+		#ifdef DEBUG
+			DEBUG_MEMORY_MAPPING_BASE_ADDRESS = retreat_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
+		#endif
+	}
+	else
+	{
+		log_print(LOG_WARNING, "Safe Unmap View Of File: Attempted to unmap an invalid address.");
+		_ASSERT(false);
 	}
 }
 
@@ -1723,7 +1803,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
 	correct_url_path_characters(corrected_filename);
 	truncate_path_components(corrected_filename);
-	correct_reserved_filename(corrected_filename);
+	correct_reserved_path_components(corrected_filename);
 
 	// Copy Target = Base Destination Path + Url Converted To Path (if it exists) + Filename
 	bool build_target_success = PathAppend(full_copy_target_path, corrected_filename) == TRUE;
@@ -1817,7 +1897,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 //
 // In the debug builds, this address is picked in relation to a base address (see the debug constants at the top of this file).
 //
-// After being done with the file, this memory is unmapped using SAFE_UNMAP_VIEW_OF_FILE().
+// After being done with the file, this memory is unmapped using safe_unmap_view_of_file().
 void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool optional_read_only)
 {
 	void* mapped_memory = NULL;
@@ -1898,7 +1978,7 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 // 1. file_path - The path to the file to map into memory.
 // 2. result_file_handle - The address of a variable that receives the handle of the memory mapped file.
 // 
-// @Returns: See memory_map_entire_file(2). In addition to using the SAFE_UNMAP_VIEW_OF_FILE() function to unmap this memory,
+// @Returns: See memory_map_entire_file(2). In addition to using the safe_unmap_view_of_file() function to unmap this memory,
 // the resulting file handle should also be closed with safe_close_handle().
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only)
 {

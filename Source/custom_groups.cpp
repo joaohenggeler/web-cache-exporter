@@ -32,7 +32,7 @@
 	"example.com/path/updates", it will only match the last one.
 
 	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
-	starts with a ';' character, then it's considered a comment and is not processed.
+	starts with a ';' character, then it's considered a comment and is not processed. All group files should end in a newline.
 
 	; This is a comment. 
 	BEGIN_FILE_GROUP Flash
@@ -158,6 +158,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 	
 	if(group_file != NULL)
 	{
+		char* end_of_file = (char*) advance_bytes(group_file, (size_t) group_file_size - 1);
+		*end_of_file = '\0';
+
 		char* remaining_lines = NULL;
 		char* line = strtok_s(group_file, LINE_DELIMITERS, &remaining_lines);
 
@@ -362,7 +365,7 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 // enough to load each processed file signature.
 //
 // @Returns: Nothing.
-void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
+void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* secondary_temporary_arena,
 					 const TCHAR* file_path, Group* group_array, u32* num_processed_groups, u32* max_num_file_signature_bytes)
 {
 	TCHAR* group_filename = PathFindFileName(file_path);
@@ -378,6 +381,9 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 		safe_close_handle(&group_file_handle);
 		return;
 	}
+
+	char* end_of_file = (char*) advance_bytes(group_file, (size_t) group_file_size - 1);
+	*end_of_file = '\0';
 
 	char* remaining_lines = NULL;
 	char* line = strtok_s(group_file, LINE_DELIMITERS, &remaining_lines);
@@ -651,7 +657,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 							// We only allow one file signature per line, and the way each token (byte) is delimited is different.
 							++num_file_signatures;
 							if(file_signature_strings == NULL) file_signature_strings = push_arena(temporary_arena, 0, TCHAR);
-							copy_utf_8_string_to_tchar(temporary_arena, temporary_arena, line);
+							copy_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
 						} break;
 
 						// Add each MIME type (multiple per line).
@@ -695,7 +701,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena,
 						{
 							++num_domains;
 							if(domain_strings == NULL) domain_strings = push_arena(temporary_arena, 0, TCHAR);
-							copy_utf_8_string_to_tchar(temporary_arena, temporary_arena, line);
+							copy_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
 						} break;
 					}
 				} break;
@@ -821,14 +827,14 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 		TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
 		PathCombine(group_file_path, group_files_directory_path, group_filenames_array[i]);
 
-		load_group_file(permanent_arena, temporary_arena,
+		load_group_file(permanent_arena, temporary_arena, &(exporter->secondary_temporary_arena),
 						group_file_path, custom_groups->groups,
 						&num_processed_groups, &max_num_file_signature_bytes);
 	}
 
 	if(num_processed_groups != num_groups)
 	{
-		log_print(LOG_WARNING, "Load All Group Files: Loaded %I32u groups when %I32u were expected.", num_processed_groups, num_groups);
+		log_print(LOG_ERROR, "Load All Group Files: Loaded %I32u groups when %I32u were expected.", num_processed_groups, num_groups);
 		_ASSERT(false);
 	}
 

@@ -1,3 +1,47 @@
+BEGIN_FILE_GROUP Certificate
+
+	BEGIN_FILE_EXTENSIONS
+		p8 key
+		p10 csr
+		cer
+		crl
+		p7c
+
+		crt der
+
+		pem
+		p12 pfx
+
+		p7b spc
+		p7r
+	END
+
+	BEGIN_MIME_TYPES
+		application/pkcs
+		application/pkix
+		application/x-x509
+		application/x-pkcs
+		application/x-pem
+
+		; Matches:
+		; application/pkcs8
+		; application/pkcs10
+		; application/pkix-cert
+		; application/pkix-crl
+		; application/pkcs7-mime
+		
+		; application/x-x509-ca-cert
+		; application/x-x509-user-cert
+		; application/x-pkcs7-crl
+
+		; application/x-pem-file
+		; application/x-pkcs12
+		; application/x-pkcs7-certificates
+		; application/x-pkcs7-certreqresp
+	END
+
+END
+
 BEGIN_FILE_GROUP Executable
 
 	BEGIN_MIME_TYPES

@@ -856,12 +856,25 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					GET_URL_ENTRY_FIELD(num_entry_locks, num_entry_locks);
 					convert_u32_to_string(num_entry_locks, num_hits);
 
+					TCHAR* format_version_prefix = TEXT("");
+					if(major_version == '4')
+					{
+						format_version_prefix = TEXT("IE4");
+					}
+					else
+					{
+						format_version_prefix = TEXT("IE5");
+					}
+
+					TCHAR short_file_path_with_prefix[MAX_PATH_CHARS] = TEXT("");
+					PathCombine(short_file_path_with_prefix, format_version_prefix, short_file_path_pointer);
+
 					Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 					{
 						{NULL}, {NULL}, {NULL}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path_pointer}, {NULL},
+						{num_hits}, {short_file_path_with_prefix}, {NULL},
 						{NULL}, {NULL}
 					};
 
@@ -1750,6 +1763,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				// enough information to properly export them.
 				if(retrieval_success)
 				{
+					log_print(LOG_INFO, "Internet Explorer 10 to 11: Found cache location '%s' (%I64d).", directory, container_id);
+
 					// @Assert: The name of a cache directory should have exactly this many characters.
 					_ASSERT( (string_length(secure_directories) % NUM_CACHE_DIRECTORY_NAME_CHARS) == 0 );
 
@@ -1966,12 +1981,15 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 									PathAppendW(full_file_path, short_file_path);
 
+									wchar_t short_file_path_with_prefix[MAX_PATH_CHARS] = L"";
+									StringCchPrintfW(short_file_path_with_prefix, MAX_PATH_CHARS, L"ESE[%I64d]\\%ls", container_id, short_file_path);
+
 									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 									{
 										{NULL}, {NULL}, {NULL}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-										{num_hits}, {short_file_path}, {NULL},
+										{num_hits}, {short_file_path_with_prefix}, {NULL},
 										{NULL}, {NULL}
 									};
 

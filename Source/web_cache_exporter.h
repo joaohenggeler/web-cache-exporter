@@ -139,17 +139,22 @@ enum Cache_Type
 	CACHE_EXPLORE = 2,
 
 	CACHE_INTERNET_EXPLORER = 3,
-	CACHE_SHOCKWAVE_PLUGIN = 4,
-	CACHE_JAVA_PLUGIN = 5,
+
+	CACHE_FLASH_PLUGIN = 4,
+	CACHE_SHOCKWAVE_PLUGIN = 5,
+	CACHE_JAVA_PLUGIN = 6,
 	
-	NUM_CACHE_TYPES = 6
+	NUM_CACHE_TYPES = 7
 };
 
 // An array that maps the previous values to full names.
 const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 {
 	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
-	TEXT("Internet Explorer"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
+	
+	TEXT("Internet Explorer"),
+
+	TEXT("Flash Plugin"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
 };
 
 #include "memory_and_file_io.h"
@@ -188,14 +193,16 @@ struct Exporter
 	Arena permanent_arena;
 	// The temporary memory arena that is used and overwritten when processing each cached file.
 	Arena temporary_arena;
+	// A smaller temporary memory arena used specifically when loading group files in the Windows 98 and ME builds.
+	Arena secondary_temporary_arena;
 
 	// The loaded group file data that is stored in the permanent memory arena.
 	Custom_Groups* custom_groups;
 
 	// The paths to relevant exporter locations.
 	TCHAR executable_path[MAX_PATH_CHARS];
-	bool was_temporary_exporter_directory_created;
 	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
+	bool was_temporary_exporter_directory_created;
 	
 	// The paths to relevant Windows locations. These are sometimes used to find cache directories.
 	TCHAR windows_temporary_path[MAX_PATH_CHARS];

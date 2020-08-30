@@ -1258,7 +1258,7 @@ static void truncate_path_components(TCHAR* path)
 
 			TCHAR previous_char = *component_end;
 			*component_end = TEXT('\0');
-			size_t num_component_chars = _tcslen(component_begin);
+			size_t num_component_chars = string_length(component_begin);
 			*component_end = previous_char;
 
 			component_begin = component_end + 1;
@@ -1395,7 +1395,7 @@ bool get_file_size(HANDLE file_handle, u64* result_file_size)
 	#ifdef BUILD_9X
 		DWORD file_size_high;
 		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
-		bool success = GetLastError() == NO_ERROR;
+		bool success = !( (file_size_low == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR) );
 		if(success) *result_file_size = combine_high_and_low_u32s_into_u64(file_size_high, file_size_low);
 		return success;
 	#else
@@ -1627,7 +1627,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 
 	// Ensure that the path has two null terminators since its required by SHFileOperation().
 	// Remember that MAX_PATH_CHARS already includes the first null terminator.
-	size_t num_path_chars = _tcslen(path_to_delete);
+	size_t num_path_chars = string_length(path_to_delete);
 	path_to_delete[num_path_chars + 1] = TEXT('\0');
 
 	SHFILEOPSTRUCT file_operation = {};
@@ -2800,12 +2800,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 			HANDLE file_handle = (HANDLE) handle_entry.HandleValue;
 			HANDLE duplicated_file_handle = INVALID_HANDLE_VALUE;
 
-			// @TODO: Do we want to use a different desired access? What if it the original handle didn't have
-			// an access right that allows reading from the file? Should we use GENERIC_READ or just FILE_READ_DATA,
-			// and change DUPLICATE_SAME_ACCESS to 0?
+			// Duplicate the file handle and give it generic reading access rights.
 			if(DuplicateHandle(	process_handle, file_handle,
 								current_process_handle, &duplicated_file_handle,
-								0, FALSE, DUPLICATE_SAME_ACCESS))
+								GENERIC_READ, FALSE, 0))
 			{
 				// Check if the handle belongs to a file object and if it refers to the file we're looking for.
 				if(GetFileType(duplicated_file_handle) == FILE_TYPE_DISK

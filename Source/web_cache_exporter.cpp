@@ -1,6 +1,9 @@
 #include "web_cache_exporter.h"
+
 #include "internet_explorer.h"
+#include "flash_plugin.h"
 #include "shockwave_plugin.h"
+
 #include "explore_files.h"
 
 /*
@@ -48,6 +51,9 @@
 
 	- Add support for the Java Plugin.
 	- Handle export_cache_entry() with missing file_paths and filenames.
+
+	- Document and refactor the Build.bat.
+	- Export Flash Player SWZ cache.
 */
 
 /*
@@ -276,6 +282,10 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				exporter->cache_type = CACHE_INTERNET_EXPLORER;
 			}
+			else if(strings_are_equal(cache_type, TEXT("-flash")))
+			{
+				exporter->cache_type = CACHE_FLASH_PLUGIN;
+			}
 			else if(strings_are_equal(cache_type, TEXT("-shockwave")))
 			{
 				exporter->cache_type = CACHE_SHOCKWAVE_PLUGIN;
@@ -425,6 +435,7 @@ static void clean_up(Exporter* exporter)
 		}
 	#endif
 
+	destroy_arena( &(exporter->secondary_temporary_arena) );
 	destroy_arena( &(exporter->temporary_arena) );
 	destroy_arena( &(exporter->permanent_arena) );
 
@@ -506,6 +517,19 @@ int _tmain(int argc, TCHAR* argv[])
 			clean_up(&exporter);
 			return 1;
 		}
+
+		#ifdef BUILD_9X
+			temporary_memory_size /= 10;
+			log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the secondary temporary memory arena.", temporary_memory_size);
+
+			if(!create_arena(&exporter.secondary_temporary_arena, temporary_memory_size))
+			{
+				console_print("Could not allocate enough temporary memory to run the program.");
+				log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
+				clean_up(&exporter);
+				return 1;
+			}
+		#endif
 	}
 
 	if(!parse_exporter_arguments(argc, argv, &exporter))
@@ -586,6 +610,12 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", (exporter.should_overwrite_previous_output) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Filter By Groups: %hs", (exporter.should_filter_by_groups) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Load Specific Groups: %hs", (exporter.should_load_specific_groups_files) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Number Of Groups To Load: %Iu", exporter.num_group_filenames_to_load);
+	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
+	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
 	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
@@ -598,9 +628,6 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
 	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
-	log_print(LOG_NONE, "----------------------------------------");
-	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Output Copy Path: '%s'", exporter.output_copy_path);
 	log_print(LOG_NONE, "- Output CSV Path: '%s'", exporter.output_csv_path);
@@ -623,7 +650,7 @@ int _tmain(int argc, TCHAR* argv[])
 		else
 		{	
 			console_print("Warning: Could not delete the previous output directory '%s'.", directory_name);
-			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s' with the error code %lu.", directory_name, GetLastError());
+			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s'.", directory_name);
 		}
 	}
 
@@ -638,6 +665,11 @@ int _tmain(int argc, TCHAR* argv[])
 		case(CACHE_INTERNET_EXPLORER):
 		{
 			export_specific_or_default_internet_explorer_cache(&exporter);
+		} break;
+
+		case(CACHE_FLASH_PLUGIN):
+		{
+			export_specific_or_default_flash_plugin_cache(&exporter);
 		} break;
 
 		case(CACHE_SHOCKWAVE_PLUGIN):
@@ -656,6 +688,9 @@ int _tmain(int argc, TCHAR* argv[])
 			_ASSERT(string_is_empty(exporter.cache_path));
 
 			export_specific_or_default_internet_explorer_cache(&exporter);
+			log_print_newline();
+
+			export_specific_or_default_flash_plugin_cache(&exporter);
 			log_print_newline();
 
 			export_specific_or_default_shockwave_plugin_cache(&exporter);

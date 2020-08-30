@@ -117,13 +117,16 @@ BEGIN_FILE_GROUP Flash
 		application/x-shockwave-flash
 		application/vnd.adobe.flash-movie
 		application/futuresplash
+
+		application/x-swz
 	END
 
 	BEGIN_FILE_EXTENSIONS
 		swf spl
 		fla
-		; Signed Flash Player Library, Flash Player Cache Metadata
-		swz heu
+		
+		; Signed Flash Player Library
+		swz
 	END
 
 END

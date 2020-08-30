@@ -32,7 +32,7 @@
 	"example.com/path/updates", it will only match the last one.
 
 	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
-	starts with a ';' character, then it's considered a comment and is not processed. All group files should end in a newline.
+	starts with a ';' character, then it's considered a comment and is not processed. All group files must end in a newline.
 
 	; This is a comment. 
 	BEGIN_FILE_GROUP Flash
@@ -158,7 +158,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 	
 	if(group_file != NULL)
 	{
-		char* end_of_file = (char*) advance_bytes(group_file, (size_t) group_file_size - 1);
+		// Replace the last character (which should be a newline according to the group file guidelines) with a null
+		// terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't the most common
+		// way to read a text file line by line, but it works in our case.
+		char* end_of_file = (char*) advance_bytes(group_file, group_file_size - 1);
 		*end_of_file = '\0';
 
 		char* remaining_lines = NULL;
@@ -358,10 +361,12 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 // @Parameters:
 // 1. permanent_arena - The Arena structure that will receive the loaded group data.
 // 2. temporary_arena - The Arena structure where any intermediary strings are stored.
-// 3. file_path - The path of the group file to load.
-// 4. group_array - The preallocated group array. Each group loads its data to a specific index, which is tracked by 'num_processed_groups'.
-// 5. num_processed_groups - The current total number of processed groups.
-// 6. max_num_file_signature_bytes - The current maximum file signature size. This is later used to allocate an array that is just large
+// 3. secondary_temporary_arena - The secondary Arena structure where any intermediary strings are stored. This is only in the Windows 98
+// and ME builds. On the Windows 2000 to 10 builds, this parameter is unused.
+// 4. file_path - The path of the group file to load.
+// 5. group_array - The preallocated group array. Each group loads its data to a specific index, which is tracked by 'num_processed_groups'.
+// 6. num_processed_groups - The current total number of processed groups.
+// 7. max_num_file_signature_bytes - The current maximum file signature size. This is later used to allocate an array that is just large
 // enough to load each processed file signature.
 //
 // @Returns: Nothing.
@@ -382,7 +387,10 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 		return;
 	}
 
-	char* end_of_file = (char*) advance_bytes(group_file, (size_t) group_file_size - 1);
+	// Replace the last character (which should be a newline according to the group file guidelines) with a null
+	// terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't the most common
+	// way to read a text file line by line, but it works in our case.
+	char* end_of_file = (char*) advance_bytes(group_file, group_file_size - 1);
 	*end_of_file = '\0';
 
 	char* remaining_lines = NULL;
@@ -505,7 +513,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 				{
 					// Create a MIME type array.
 					group->file_info.mime_types = build_array_from_contiguous_strings(permanent_arena, mime_type_strings, num_mime_types);
-					group->file_info.num_mime_types = num_mime_types;
+					group->file_info.num_mime_types += num_mime_types;
 
 					num_mime_types = 0;
 					mime_type_strings = NULL;
@@ -516,7 +524,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 				{
 					// Create a file extension array.
 					group->file_info.file_extensions = build_array_from_contiguous_strings(permanent_arena, file_extension_strings, num_file_extensions);
-					group->file_info.num_file_extensions = num_file_extensions;
+					group->file_info.num_file_extensions += num_file_extensions;
 
 					num_file_extensions = 0;
 					file_extension_strings = NULL;

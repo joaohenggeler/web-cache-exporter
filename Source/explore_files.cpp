@@ -58,6 +58,7 @@ void export_explored_files(Exporter* exporter)
 	{
 		log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);
 		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, explore_files_callback, exporter);
+		log_print(LOG_INFO, "Explore Files: Finished exporting the files.");
 	}
 	terminate_cache_exporter(exporter);
 }

@@ -2,7 +2,17 @@
 #include "memory_and_file_io.h"
 
 /*
-	This file 
+	This file defines functions for memory management, file I/O (including creating and writing to the log and CSV files), date time
+	formatting, string, path, and URL manipulation, and basic numeric operations.
+
+	@Resources: Geoff Chappell's software analysis website was used to check the minimum supported Windows version for some functions:
+
+	- KERNEL32: https://www.geoffchappell.com/studies/windows/win32/kernel32/api/index.htm
+	- ADVAPI32: https://www.geoffchappell.com/studies/windows/win32/advapi32/api/index.htm
+	- SHELL32: https://www.geoffchappell.com/studies/windows/shell/shell32/api/index.htm
+	- SHLWAPI: https://www.geoffchappell.com/studies/windows/shell/shlwapi/api/index.htm
+
+	---------------------------------------------------------------------------
 
 	TABLE OF CONTENTS:
 
@@ -306,7 +316,12 @@ void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low)
 // 2. num_bytes - The number of bytes to move.
 //
 // @Returns: The moved pointer value.
-void* advance_bytes(void* pointer, size_t num_bytes)
+void* advance_bytes(void* pointer, u32 num_bytes)
+{
+	return ((char*) pointer) + num_bytes;
+}
+
+void* advance_bytes(void* pointer, u64 num_bytes)
 {
 	return ((char*) pointer) + num_bytes;
 }
@@ -318,7 +333,12 @@ void* advance_bytes(void* pointer, size_t num_bytes)
 // 2. num_bytes - The number of bytes to move.
 //
 // @Returns: The moved pointer value.
-void* retreat_bytes(void* pointer, size_t num_bytes)
+void* retreat_bytes(void* pointer, u32 num_bytes)
+{
+	return ((char*) pointer) - num_bytes;
+}
+
+void* retreat_bytes(void* pointer, u64 num_bytes)
 {
 	return ((char*) pointer) - num_bytes;
 }

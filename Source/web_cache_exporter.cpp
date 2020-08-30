@@ -50,10 +50,7 @@
 	@TODO:
 
 	- Add support for the Java Plugin.
-	- Handle export_cache_entry() with missing file_paths and filenames.
-
-	- Document and refactor the Build.bat.
-	- Export Flash Player SWZ cache.
+	- Handle export_cache_entry() with missing filenames (for the Java Plugin cache).
 */
 
 /*
@@ -71,6 +68,8 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"########## [1] AVAILABLE EXPORT ARGUMENTS: <Export Option> [Optional Cache Path] [Optional Output Path]\n"
 												"\n"
 												"-export-ie    to export the WinINet cache, including Internet Explorer 4 to 11 and Microsoft Edge.\n"
+												"\n"
+												"-export-flash    to export the Flash Player cache.\n"
 												"\n"
 												"-export-shockwave    to export the Shockwave Player cache.\n"
 												"\n"
@@ -110,9 +109,9 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"########## [2] EXAMPLES:\n"
 												"\n"
-												"WCE.exe -no-copy-files -export-shockwave\n"
+												"WCE.exe -no-copy-files -export-flash\n"
 												"WCE.exe -overwrite -export-shockwave\n"
-												"WCE.exe -filter-by-groups -find-and-export-all\n"
+												"WCE.exe -filter-by-groups -explore-files \"C:\\PathToExplore\"\n"
 												"WCE.exe -load-group-files \"FileA FileB\" -find-and-export-all\n"
 												"WCE.exe -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -export-ie \"C:\\PathToTheCache\"\n"
 												"\n"
@@ -603,6 +602,31 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
 	}
 
+	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
+	{
+		log_print(LOG_INFO, "Startup: No cache path specified. Exporting the cache from any existing default directories.");
+	}
+
+	if(exporter.should_overwrite_previous_output)
+	{
+		TCHAR* directory_name = PathFindFileName(exporter.output_path);
+		if(delete_directory_and_contents(exporter.output_path))
+		{
+			console_print("Deleted the previous output directory '%s' before starting.", directory_name);
+			log_print(LOG_INFO, "Startup: Deleted the previous output directory successfully.");
+		}
+		else
+		{	
+			console_print("Warning: Could not delete the previous output directory '%s'.", directory_name);
+			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s'.", directory_name);
+		}
+	}
+
+	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around
+	// should be stored in the permanent arena.
+	log_print(LOG_INFO, "Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(&exporter.temporary_arena));
+	clear_arena(&(exporter.temporary_arena));
+
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_INFO, "Exporter Options:");
 	log_print(LOG_NONE, "----------------------------------------");
@@ -628,35 +652,6 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
 	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
-	log_print(LOG_NONE, "----------------------------------------");
-	log_print(LOG_NONE, "- Output Copy Path: '%s'", exporter.output_copy_path);
-	log_print(LOG_NONE, "- Output CSV Path: '%s'", exporter.output_csv_path);
-	log_print(LOG_NONE, "- Index Path: '%s'", exporter.index_path);
-	log_print(LOG_NONE, "----------------------------------------");
-
-	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
-	{
-		log_print(LOG_INFO, "Startup: No cache path specified. Exporting the cache from any existing default directories.");
-	}
-
-	if(exporter.should_overwrite_previous_output)
-	{
-		TCHAR* directory_name = PathFindFileName(exporter.output_path);
-		if(delete_directory_and_contents(exporter.output_path))
-		{
-			console_print("Deleted the previous output directory '%s' before starting.", directory_name);
-			log_print(LOG_INFO, "Startup: Deleted the previous output directory successfully.");
-		}
-		else
-		{	
-			console_print("Warning: Could not delete the previous output directory '%s'.", directory_name);
-			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s'.", directory_name);
-		}
-	}
-
-	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around
-	// should be stored in the permanent arena.
-	clear_arena(&(exporter.temporary_arena));
 
 	log_print_newline();
 	
@@ -737,14 +732,14 @@ int _tmain(int argc, TCHAR* argv[])
 // exporter. After finishing exporting, the terminate_cache_exporter() function should be called.
 //
 // @Parameters:
-// 1. exporter - The Exporter structure where the resolved output paths and CSV file's handle will be stored.
+// 1. exporter - The Exporter structure where the resolved paths and CSV file's handle will be stored.
 // 2. cache_identifier - The name of the output directory (for copying files) and the CSV file.
 // 3. column_types - The array of column types used to determine the column names for the CSV file.
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-														const Csv_Type column_types[], size_t num_columns)
+								const Csv_Type column_types[], size_t num_columns)
 {
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
@@ -772,15 +767,28 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 // new row to the CSV file. This function will also match the cache entry to any loaded group files.
 //
 // The following CSV columns are automatically handled by this function, and don't need to be set explicitly:
-// - CSV_MISSING_FILE - determined using the 'full_entry_path' parameter.
+//
 // - CSV_CUSTOM_FILE_GROUP - determined using the 'full_entry_path' parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
 // - CSV_CUSTOM_URL_GROUP - determined using the 'entry_url' parameter.
 //
-// These array elements should be set to {NULL}. For CSV columns that aren't related to group files, you can override this behavior by
-// explicitly setting their value instead of using NULL.
+// The following values and columns are also changed if the optional parameter 'optional_find_data' is used:
+// - CSV_FILE_SIZE - determined using the 'nFileSizeHigh' and 'nFileSizeLow' members.
+// - CSV_LAST_WRITE_TIME - determined using the 'ftLastWriteTime' member.
+// - CSV_CREATION_TIME - determined using the 'ftCreationTime' member.
+// - CSV_LAST_ACCESS_TIME - determined using the 'ftLastAccessTime' member.
+//
+// - CSV_FILENAME - determined using the 'entry_filename' parameter, or the 'cFileName' member if 'optional_find_data' is set.
+// - CSV_FILE_EXTENSION - determined using the value above.
+// - CSV_URL - determined using the 'entry_url' parameter.
+// - CSV_LOCATION_ON_DISK - determined using the 'full_entry_path' parameter.
+// - CSV_MISSING_FILE - determined using the 'full_entry_path' parameter.
+//
+// If these columns should be automatically handled, their corresponding array element must be set to {NULL}. For CSV columns that
+// aren't related to group files, you can override this behavior by explicitly setting their value instead of using NULL.
 //
 // @Parameters:
-// 1. exporter - The Exporter structure 
+// 1. exporter - The Exporter structure that contains the current cache exporter's parameters and the values of command line options
+// that will influence how the entry is exported.
 // 2. column_values - The array of values to write. Some values don't need to set explicitly if their respective column type is handled
 // automatically.
 // 3. full_entry_path - The absolute path to the cached file to copy. This file may or may not exist on disk. This parameter shouldn't
@@ -789,6 +797,8 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 // be NULL.
 // 5. entry_filename - The cached file's original filename. This value is used to determine the copy destination's filename. This
 // parameter shouldn't be NULL.
+// 6. optional_find_data - An optional parameter that specifies a WIN32_FIND_DATA structure to use to fill some columns. This value
+// defaults to NULL.
 // 
 // @Returns: Nothing.
 void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
@@ -824,8 +834,8 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 				@FindData: Uses the values from the 'find_data' parameter if it exists, and if the column value in question
 				is not NULL.
 				
-				@UseParameter: Uses one of the three parameters (full_entry_path, entry_url, entry_filename) if the column
-				value in question is not NULL.
+				@UseFunctionParameter: Uses one of the three parameters (full_entry_path, entry_url, entry_filename) if the
+				column value in question is not NULL.
 			*/
 
 			// @CustomGroups
@@ -854,25 +864,25 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 				entry_to_match.file_extension_to_match = column_values[i].value;
 			} break;
 
-			// @FindData @UseParameter
+			// @FindData @UseFunctionParameter
 			case(CSV_FILENAME):
 			{
 				if(value == NULL) column_values[i].value = entry_filename;
 			} break;
 
-			// @UseParameter
+			// @UseFunctionParameter
 			case(CSV_URL):
 			{
 				if(value == NULL) column_values[i].value = entry_url;
 			} break;
 
-			// @UseParameter
+			// @UseFunctionParameter
 			case(CSV_LOCATION_ON_DISK):
 			{
 				if(value == NULL) column_values[i].value = full_entry_path;
 			} break;
 
-			// @UseParameter
+			// @UseFunctionParameter
 			case(CSV_MISSING_FILE):
 			{
 				if(value == NULL) column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));

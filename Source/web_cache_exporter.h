@@ -232,7 +232,7 @@ struct Exporter
 };
 
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-														const Csv_Type column_types[], size_t num_columns);
+								const Csv_Type column_types[], size_t num_columns);
 
 void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,

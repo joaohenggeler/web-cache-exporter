@@ -1,0 +1,117 @@
+Groups files are text files that define zero or more groups, each one
+specifying a list of attributes to match to files found on a web browser
+or plugin's cache. There are two types of groups:
+
+- File groups, which act on a file's properties (file signature, MIME
+type, and file extension). These are used to label files according to
+their file format. For example, files that are used by the Flash Player.
+
+- URL groups, which act on a cached file's URL. These are used to label
+files according to their original location on the internet. For example,
+files that were hosted on a web portal like Newgrounds.com.
+
+Groups files must always end in a .group extension. The Web Cache Exporter
+only loads groups from files with this extension located in this directory.
+This about file, for example, isn't loaded. Group files are loaded in
+alphabetical order. In each file, groups are loaded from top to bottom.
+
+The following section will show you how to define each type of group. Lines
+that start with a semicolon ";" are treated as comments and are not processed.
+Groups files must always end in a newline. You can only use spaces and tabs
+as whitespace.
+
+; This defines the beginning of a file group with the name "HTML".
+; Each group or list of attributes ends when you reach the "END" characters. 
+BEGIN_FILE_GROUP HTML
+
+	; This defines a list of file signatures. These are composed of one
+	or more bytes represented in hexadecimal. Each value ranges from 00
+	to FF. Only one file signature is allowed per line.
+
+	; You can also use '__' as wildcards that match any byte.
+
+	BEGIN_FILE_SIGNATURES
+		; This represents the following characters: "<html".
+		3C 68 74 6D 6C
+
+		; This represents the following characters: "<HTML".
+		3C 48 54 4D 4C
+
+		; This represents "<HT" followed by any other two bytes.
+		3C 48 54 __ __
+	END
+
+	; This defines a list of MIME types. You can add multiple values in
+	each line.
+
+	BEGIN_MIME_TYPES
+		text/html
+		application/xhtml
+	END
+
+	; This defines a list of file extensions. You can add multiple values
+	in each line.
+
+	BEGIN_FILE_EXTENSIONS
+		htm html
+		xhtml
+	END
+
+END
+
+Although these three types of lists may appear in any order and more than
+once, you should specify each type once and in this order: file signatures
+before MIME types before file extensions. This order matches the precedence
+that the Web Cache Exporter uses, making the group files easier to read.
+For example, if a cached file matches a file signature in a group, it
+won't bother checking the remaining MIME types and file extensions.
+
+Matching Rules:
+
+0. All comparisons are case insensitive.
+
+1. File signatures are matched exactly, taking into account any wildcard
+bytes. If the file's size is smaller than the file signature, it will never
+match it.
+
+2. MIME types match the beginning of the text. For example, a group that specifies
+"text/java" will match "text/javascript" and "text/javascript; charset=UTF-8".
+
+3. File extensions are matched exactly. For example, a group that specifies
+"htm" will match .htm files, but not .html.
+
+URL groups are very similar:
+
+; This defines the beginning of a URL group with the name "Cartoon Network".
+BEGIN_URL_GROUP Cartoon Network
+
+	; This defines a list of domains. You can use the forward slash "/"
+	character to separate the host segment from the path. Only one domain
+	is allowed per line.
+
+	BEGIN_DOMAINS
+		; This defines the host "cartoonnetwork.com" and no path.
+		cartoonnetwork.com
+
+		; This defines the host "turner.com" and the path "toon".
+		turner.com/toon
+	END
+
+END
+
+Matching Rules:
+
+0. All comparisons are case insensitive.
+
+1. The host segments match the ending a URL's host. For example, a group
+that specifies "example.com" will match the following:
+- "http://www.example.com/index.html"
+- "mms://cdn.example.com:80/path/video.mp4",
+- "https://download.example.com/path/updates/file.php?version=123&platform=ABC#top"
+
+This check allows you to match multiple subdomains.
+
+2. If the path exists, it must also match the beginning of a URL's path.
+Using the same example, a group that specifies "example.com/path" will
+match the last two URLs. If it instead specifies "example.com/path/updates",
+it will only match the last one.

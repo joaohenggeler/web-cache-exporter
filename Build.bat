@@ -17,7 +17,7 @@ REM This is useful to test the program without having to waiting for Windows to 
 SETLOCAL
 PUSHD "%~dp0"
 	
-	REM ---------------------------------------------------------------------------	
+	REM ---------------------------------------------------------------------------
 	REM Basic build parameters.
 
 	REM The build mode.
@@ -25,7 +25,7 @@ PUSHD "%~dp0"
 	REM certain macros (like DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
-	SET "BUILD_MODE=debug"
+	SET "BUILD_MODE=release"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"

@@ -3,7 +3,7 @@
 
 /*
 	@TODO: This file is still under construction. Right now it doesn't read any useful data from the HEU Flash Player Cache Metadata
-	files (though there doesn't seem to be too much useful stuff to show anyways).
+	files (though there doesn't seem to be too much useful stuff to show anyways, so we might never read anything from it).
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
@@ -41,11 +41,10 @@ void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Flash Plugin: Exporting the cache from '%s'.", exporter->cache_path);
-		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_flash_files_callback, exporter);	
+		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_flash_files_callback, exporter);
+		log_print(LOG_INFO, "Flash Plugin: Finished exporting the cache.");
 	}
 	terminate_cache_exporter(exporter);
-	
-	log_print(LOG_INFO, "Flash Plugin: Finished exporting the cache.");
 }
 
 // Called every time a file is found in the Flash Player's cache. Used to export every cache entry.

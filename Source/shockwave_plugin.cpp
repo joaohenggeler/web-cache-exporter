@@ -144,11 +144,11 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 		traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, &params);
 		
 		params.is_xtra = true;
-		traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);		
+		traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);
+
+		log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");	
 	}
 	terminate_cache_exporter(exporter);
-	
-	log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");
 }
 
 // Called every time a file is found in the Shockwave Player's cache. Used to export every cache entry.

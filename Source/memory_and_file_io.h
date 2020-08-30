@@ -54,8 +54,10 @@ bool destroy_arena(Arena* arena);
 
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
-void* advance_bytes(void* pointer, size_t num_bytes);
-void* retreat_bytes(void* pointer, size_t num_bytes);
+void* advance_bytes(void* pointer, u32 num_bytes);
+void* advance_bytes(void* pointer, u64 num_bytes);
+void* retreat_bytes(void* pointer, u32 num_bytes);
+void* retreat_bytes(void* pointer, u64 num_bytes);
 ptrdiff_t pointer_difference(void* a, void* b);
 size_t kilobytes_to_bytes(size_t kilobytes);
 size_t megabytes_to_bytes(size_t megabytes);
@@ -325,10 +327,9 @@ enum Csv_Type
 
 	CSV_LOCATION_ON_CACHE = 17,
 	CSV_LOCATION_ON_DISK = 18,
-
-	// Automatically set by export_cache_entry():
 	CSV_MISSING_FILE = 19, 
-	CSV_CUSTOM_FILE_GROUP = 20, // Depends on CSV_FILE_EXTENSION and CSV_CONTENT_TYPE.
+
+	CSV_CUSTOM_FILE_GROUP = 20,
 	CSV_CUSTOM_URL_GROUP = 21,
 	
 	// Internet Explorer specific.

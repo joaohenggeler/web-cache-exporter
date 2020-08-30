@@ -202,37 +202,31 @@ struct Internet_Explorer_4_Index_Url_Entry
 	FILETIME expiry_time; // @Used.
 
 	u32 cached_file_size; // @Used.
-	struct
-	{
-		u32 _field_1;
-		u32 _field_2;
-		u32 _field_3;
-	} _reserved_1;
+	u32 _reserved_1; // @TODO: High part of a 64-bit file size?
 	u32 _reserved_2;
-	
 	u32 _reserved_3;
+
+	u32 _reserved_4;
+	u32 _reserved_5;
 	u32 entry_offset_to_url; // @Used.
 
 	u8 cache_directory_index; // @Used.
-	struct
-	{
-		u8 _field_1;
-		u8 _field_2;
-		u8 _field_3;
-	} _reserved_4;
+	u8 _reserved_6;
+	u8 _reserved_7;
+	u8 _reserved_8;
 
 	u32 entry_offset_to_filename; // @Used.
 	u32 cache_flags;
 	u32 entry_offset_to_headers; // @Used.
 	u32 headers_size; // @Used.
-	u32 _reserved_5;
+	u32 _reserved_9;
 
 	Dos_Date_Time last_sync_time;
 	u32 num_entry_locks; // @Used. Represents the number of hits (in practice at least).
-	u32 _reserved_6;
+	u32 _reserved_10;
 	Dos_Date_Time creation_time; // @Used.
 
-	u32 _reserved_7;
+	u32 _reserved_11;
 };
 
 // @Format: The body of a URL entry in the index.dat file (IE 5 to 9, format version 5.2).
@@ -243,8 +237,8 @@ struct Internet_Explorer_5_To_9_Index_Url_Entry
 	Dos_Date_Time expiry_time; // @Used.
 	u32 _reserved_1;
 
-	u32 cached_file_size; // @Used.
-	u32 _reserved_2; // @TODO: use as high part of cached_file_size?
+	u32 low_cached_file_size; // @Used.
+	u32 high_cached_file_size; // @Used
 
 	u32 file_offset_to_group_or_group_list;
 	
@@ -480,31 +474,40 @@ static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporte
 
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
-	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, exporter->cache_path))
+	TCHAR wininet_cache_path[MAX_PATH_CHARS] = TEXT("");
+	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, wininet_cache_path))
 	{
 		log_print(LOG_ERROR, "Internet Explorer: Failed to get the current Temporary Internet Files cache directory path. No files will be exported.");
 		return;
 	}
 
-	get_full_path_name(exporter->cache_path);
+	StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, wininet_cache_path);
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 
 	bool ie_4_to_9_cache_exists = false;
 
 	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
+		TCHAR* index_file_path = NULL;
+
+		index_file_path = TEXT("index.dat");
 		log_print_newline();
-		PathCombine(exporter->index_path, exporter->cache_path, TEXT("index.dat"));
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking for the index.dat file in '.\\%s'.", index_file_path);
+		PathCombine(exporter->index_path, exporter->cache_path, index_file_path);
 		export_internet_explorer_4_to_9_cache(exporter);
 		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
 
+		index_file_path = TEXT("Content.IE5\\index.dat");
 		log_print_newline();
-		PathCombine(exporter->index_path, exporter->cache_path, TEXT("Content.IE5\\index.dat"));
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking for the index.dat file in '.\\%s'.", index_file_path);
+		PathCombine(exporter->index_path, exporter->cache_path, index_file_path);
 		export_internet_explorer_4_to_9_cache(exporter);
 		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
 
+		index_file_path = TEXT("Low\\Content.IE5\\index.dat");
 		log_print_newline();
-		PathCombine(exporter->index_path, exporter->cache_path, TEXT("Low\\Content.IE5\\index.dat"));
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking for the index.dat file in '.\\%s'.", index_file_path);
+		PathCombine(exporter->index_path, exporter->cache_path, index_file_path);
 		export_internet_explorer_4_to_9_cache(exporter);
 		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
 
@@ -515,6 +518,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 				PathCombineW(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
 			}
 
+			log_print_newline();
 			log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
 
 			log_print_newline();
@@ -532,14 +536,17 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 
 	if(ie_4_to_9_cache_exists)
 	{
+		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, wininet_cache_path);
 		initialize_cache_exporter(exporter, RAW_OUTPUT_DIRECTORY_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
 		{
 			log_print_newline();
+			log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
 			export_raw_internet_explorer_4_to_9_cache(exporter);		
 		}
 		terminate_cache_exporter(exporter);		
 	}
 
+	log_print_newline();
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
 }
 
@@ -553,7 +560,6 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback);
 static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter)
 {
-	log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
 	traverse_directory_objects(	exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true,
 								find_internet_explorer_4_to_9_cache_files_callback, exporter);
 }
@@ -724,9 +730,9 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					Internet_Explorer_4_Index_Url_Entry* url_entry_4 			= (Internet_Explorer_4_Index_Url_Entry*) 		url_entry;
 					Internet_Explorer_5_To_9_Index_Url_Entry* url_entry_5_to_9 	= (Internet_Explorer_5_To_9_Index_Url_Entry*) 	url_entry;
 
-					// Helper macro function used to access a given field in the two types of URL entries (versions 4 and 5).
+					// Helper macro function used to access a given member in the two types of URL entries (versions 4 and 5).
 					// These two structs are very similar but still differ in how they're laid out.
-					#define GET_URL_ENTRY_FIELD(variable_name, field_name)\
+					#define GET_URL_ENTRY_MEMBER(variable_name, field_name)\
 					do\
 					{\
 						if(major_version == '4')\
@@ -741,31 +747,37 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					while(false, false)
 
 					u32 entry_offset_to_filename;
-					GET_URL_ENTRY_FIELD(entry_offset_to_filename, entry_offset_to_filename);
-					_ASSERT(entry_offset_to_filename > 0);
+					GET_URL_ENTRY_MEMBER(entry_offset_to_filename, entry_offset_to_filename);
 					// We'll keep two versions of the filename: the original decorated name (e.g. image[1].gif)
 					// which is the name of the actual cached file on disk, and the undecorated name (e.g. image.gif)
 					// which is what we'll show in the CSV.
-					const char* filename_in_mmf = (char*) advance_bytes(entry, entry_offset_to_filename);
-					TCHAR* decorated_filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
-					TCHAR* filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
-					undecorate_path(filename);
+					TCHAR* decorated_filename = TEXT("");
+					TCHAR* filename = TEXT("");
+					if(entry_offset_to_filename > 0)
+					{
+						const char* filename_in_mmf = (char*) advance_bytes(entry, entry_offset_to_filename);
+						decorated_filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
+						filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
+						undecorate_path(filename);
+					}
 
 					u32 entry_offset_to_url;
-					GET_URL_ENTRY_FIELD(entry_offset_to_url, entry_offset_to_url);
-					_ASSERT(entry_offset_to_url > 0);
+					GET_URL_ENTRY_MEMBER(entry_offset_to_url, entry_offset_to_url);
 					// @Format: The stored URL is encoded. We'll decode it for the CSV and to correctly create
 					// the website's original directory structure when we copy the cached file.
-					const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
-					TCHAR* url = copy_ansi_string_to_tchar(arena, url_in_mmf);
-					decode_url(url);
+					TCHAR* url = TEXT("");
+					if(entry_offset_to_url > 0)
+					{
+						const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
+						url = copy_ansi_string_to_tchar(arena, url_in_mmf);
+						decode_url(url);
+					}
 
 					u32 entry_offset_to_headers;
-					GET_URL_ENTRY_FIELD(entry_offset_to_headers, entry_offset_to_headers);
+					GET_URL_ENTRY_MEMBER(entry_offset_to_headers, entry_offset_to_headers);
 					u32 headers_size;
-					GET_URL_ENTRY_FIELD(headers_size, headers_size);
-					const char* headers_in_mmf = (char*) advance_bytes(entry, entry_offset_to_headers);
-
+					GET_URL_ENTRY_MEMBER(headers_size, headers_size);
+			
 					TCHAR* response = NULL;
 					TCHAR* server = NULL;
 					TCHAR* cache_control = NULL;
@@ -776,6 +788,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					if( (entry_offset_to_headers > 0) && (headers_size > 0) )
 					{
+						const char* headers_in_mmf = (char*) advance_bytes(entry, entry_offset_to_headers);
 						parse_cache_headers(arena, headers_in_mmf, headers_size,
 											&response, &server,
 											&cache_control, &pragma,
@@ -784,17 +797,17 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
 					FILETIME last_modified_time_value;
-					GET_URL_ENTRY_FIELD(last_modified_time_value, last_modified_time);
+					GET_URL_ENTRY_MEMBER(last_modified_time_value, last_modified_time);
 					format_filetime_date_time(last_modified_time_value, last_modified_time);
 					
 					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
 					FILETIME last_access_time_value;
-					GET_URL_ENTRY_FIELD(last_access_time_value, last_access_time);
+					GET_URL_ENTRY_MEMBER(last_access_time_value, last_access_time);
 					format_filetime_date_time(last_access_time_value, last_access_time);
 
 					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
 					Dos_Date_Time creation_time_value;
-					GET_URL_ENTRY_FIELD(creation_time_value, creation_time);
+					GET_URL_ENTRY_MEMBER(creation_time_value, creation_time);
 					format_dos_date_time(creation_time_value, creation_time);
 
 					// @Format: The file's expiry time is stored as two different types depending on the index file's version.
@@ -815,7 +828,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
 					// Channel Definition Format (CDF): https://en.wikipedia.org/wiki/Channel_Definition_Format
 					u8 cache_directory_index;
-					GET_URL_ENTRY_FIELD(cache_directory_index, cache_directory_index);
+					GET_URL_ENTRY_MEMBER(cache_directory_index, cache_directory_index);
 
 					if(cache_directory_index < MAX_NUM_CACHE_DIRECTORIES)
 					{
@@ -846,14 +859,21 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						_ASSERT(false);
 					}
 			
-					TCHAR cached_file_size[MAX_INT32_CHARS];
-					u32 cached_file_size_value;
-					GET_URL_ENTRY_FIELD(cached_file_size_value, cached_file_size);
-					convert_u32_to_string(cached_file_size_value, cached_file_size);
-					
+					TCHAR cached_file_size[MAX_INT64_CHARS];
+					if(major_version == '4')
+					{
+						convert_u32_to_string(url_entry_4->cached_file_size, cached_file_size);
+					}
+					else
+					{
+						u64 cached_file_size_value = combine_high_and_low_u32s_into_u64(url_entry_5_to_9->high_cached_file_size,
+																						url_entry_5_to_9->low_cached_file_size);
+						convert_u64_to_string(cached_file_size_value, cached_file_size);
+					}
+
 					TCHAR num_hits[MAX_INT32_CHARS];
 					u32 num_entry_locks;
-					GET_URL_ENTRY_FIELD(num_entry_locks, num_entry_locks);
+					GET_URL_ENTRY_MEMBER(num_entry_locks, num_entry_locks);
 					convert_u32_to_string(num_entry_locks, num_hits);
 
 					TCHAR* format_version_prefix = TEXT("");

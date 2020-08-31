@@ -46,6 +46,7 @@ struct File_Signature
 // A structure that represents a domain. We only compare the host and path components of two URLs.
 struct Domain
 {
+	bool any_top_level_domain;
 	TCHAR* host;
 	TCHAR* path;
 };

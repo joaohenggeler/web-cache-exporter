@@ -602,6 +602,11 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
 	}
 
+	if(!get_special_folder_path(CSIDL_INTERNET_CACHE, exporter.wininet_cache_path))
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the Temporary Internet Files cache directory path with the error code %lu.", GetLastError());
+	}
+
 	if(exporter.is_exporting_from_default_locations && (exporter.cache_type != CACHE_ALL))
 	{
 		log_print(LOG_INFO, "Startup: No cache path specified. Exporting the cache from any existing default directories.");
@@ -652,6 +657,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
 	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
+	log_print(LOG_NONE, "- WinINet Cache Path: '%s'", exporter.wininet_cache_path);
 
 	log_print_newline();
 	

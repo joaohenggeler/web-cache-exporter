@@ -28,7 +28,7 @@ BEGIN_FILE_GROUP HTML
 	or more bytes represented in hexadecimal. Each value ranges from 00
 	to FF. Only one file signature is allowed per line.
 
-	; You can also use '__' as wildcards that match any byte.
+	; You can also use "__" as wildcards that match any byte.
 
 	BEGIN_FILE_SIGNATURES
 		; This represents the following characters: "<html".
@@ -89,12 +89,19 @@ BEGIN_URL_GROUP Cartoon Network
 	character to separate the host segment from the path. Only one domain
 	is allowed per line.
 
+	; You can also add ".<TLD>" to the end of a host to match any top level
+	; domain.
+
 	BEGIN_DOMAINS
 		; This defines the host "cartoonnetwork.com" and no path.
 		cartoonnetwork.com
 
 		; This defines the host "turner.com" and the path "toon".
 		turner.com/toon
+
+		; This defines the host "cartoonnetworkhq" with any top level
+		; domain and no path.
+		cartoonnetworkhq.<TLD>
 	END
 
 END
@@ -103,7 +110,7 @@ Matching Rules:
 
 0. All comparisons are case insensitive.
 
-1. The host segments match the ending a URL's host. For example, a group
+1. The host segments match the ending of a URL's host. For example, a group
 that specifies "example.com" will match the following:
 - "http://www.example.com/index.html"
 - "mms://cdn.example.com:80/path/video.mp4",
@@ -115,3 +122,10 @@ This check allows you to match multiple subdomains.
 Using the same example, a group that specifies "example.com/path" will
 match the last two URLs. If it instead specifies "example.com/path/updates",
 it will only match the last one.
+
+3. If the host segment ends with ".<TLD>", it will match the ending of a URL's
+host that contains any top level domain. For example, a group that specifies
+"example.<TLD>" will match the following:
+- "http://www.example.com/index.html"
+- "http://cdn.example.net/index.html"
+- "http://download.example.org/index.html"

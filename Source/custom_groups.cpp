@@ -548,6 +548,17 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						TCHAR* path = NULL;
 						TCHAR* host = _tcstok_s(domain_strings, URL_PATH_DELIMITERS, &path);
 
+						if(string_ends_with(host, TEXT(".<TLD>")))
+						{
+							domain->any_top_level_domain = true;
+							TCHAR* last_period = _tcsrchr(host, TEXT('.'));
+							if(last_period != NULL) *last_period = TEXT('\0');
+						}
+						else
+						{
+							domain->any_top_level_domain = false;
+						}
+
 						domain->host = push_string_to_arena(permanent_arena, host);
 						if(path != NULL && !string_is_empty(path))
 						{
@@ -973,10 +984,30 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			{
 				for(u32 j = 0; j < group.url_info.num_domains; ++j)
 				{
-					Domain* domain = group.url_info.domains[j];
 					// The URL we partioned always has a 'path', but the 'host' might be NULL.
 					// The opposite is true for a URL group: the 'path' might be NULL, but the host always exists.
-					bool urls_match = (url_parts_to_match.host != NULL) && string_ends_with(url_parts_to_match.host, domain->host, true);
+					Domain* domain = group.url_info.domains[j];
+
+					// Match any top level domain if it was requested in the URL group.
+					// We'll do this by removing the current host's top level domain before comparing strings.
+					TCHAR* host_to_match = url_parts_to_match.host;
+					TCHAR* last_period = NULL;
+					if(domain->any_top_level_domain && host_to_match != NULL)
+					{
+						last_period = _tcsrchr(host_to_match, TEXT('.'));
+						if(last_period != NULL)
+						{
+							*last_period = TEXT('\0');
+						}
+					}
+
+					bool urls_match = (host_to_match != NULL) && string_ends_with(host_to_match, domain->host, true);
+
+					// Put any removed top level domains back.
+					if(domain->any_top_level_domain && last_period != NULL)
+					{
+						*last_period = TEXT('.');
+					}
 
 					if(domain->path != NULL)
 					{

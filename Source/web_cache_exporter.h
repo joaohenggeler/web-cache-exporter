@@ -209,6 +209,7 @@ struct Exporter
 	TCHAR roaming_appdata_path[MAX_PATH_CHARS];
 	TCHAR local_appdata_path[MAX_PATH_CHARS];
 	TCHAR local_low_appdata_path[MAX_PATH_CHARS];
+	TCHAR wininet_cache_path[MAX_PATH_CHARS];
 
 	// General purpose variables that are freely changed by each cache exporter:
 	// - The currently open CSV file.

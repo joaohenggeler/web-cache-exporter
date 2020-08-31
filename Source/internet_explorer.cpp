@@ -474,16 +474,11 @@ static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporte
 
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
-	TCHAR wininet_cache_path[MAX_PATH_CHARS] = TEXT("");
-	if(exporter->is_exporting_from_default_locations && !get_special_folder_path(CSIDL_INTERNET_CACHE, wininet_cache_path))
+	if(exporter->is_exporting_from_default_locations)
 	{
-		log_print(LOG_ERROR, "Internet Explorer: Failed to get the current Temporary Internet Files cache directory path. No files will be exported.");
-		return;
+		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
 	}
-
-	StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, wininet_cache_path);
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
-
 	bool ie_4_to_9_cache_exists = false;
 
 	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
@@ -517,7 +512,6 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 			{
 				PathCombineW(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
 			}
-
 			log_print_newline();
 			log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
 
@@ -536,11 +530,15 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 
 	if(ie_4_to_9_cache_exists)
 	{
-		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, wininet_cache_path);
+		if(exporter->is_exporting_from_default_locations)
+		{
+			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
+		}
+		log_print_newline();
+		log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
+
 		initialize_cache_exporter(exporter, RAW_OUTPUT_DIRECTORY_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
 		{
-			log_print_newline();
-			log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
 			export_raw_internet_explorer_4_to_9_cache(exporter);		
 		}
 		terminate_cache_exporter(exporter);		

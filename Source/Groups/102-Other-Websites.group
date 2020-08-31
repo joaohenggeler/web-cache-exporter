@@ -5,3 +5,11 @@ BEGIN_URL_GROUP Internet Archive
 	END
 
 END
+
+BEGIN_URL_GROUP Google
+
+	BEGIN_DOMAINS
+		google.<TLD>
+	END
+
+END

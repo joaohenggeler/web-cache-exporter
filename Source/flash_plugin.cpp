@@ -33,7 +33,7 @@ void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 	{
 		if(!PathCombine(exporter->cache_path, exporter->roaming_appdata_path, TEXT("Adobe\\Flash Player")))
 		{
-			log_print(LOG_ERROR, "Flash Plugin: Failed to get the cache directory path.");
+			log_print(LOG_ERROR, "Flash Plugin: Failed to determine the cache directory path.");
 			return;
 		}
 	}

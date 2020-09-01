@@ -61,6 +61,14 @@ void* retreat_bytes(void* pointer, u64 num_bytes);
 ptrdiff_t pointer_difference(void* a, void* b);
 size_t kilobytes_to_bytes(size_t kilobytes);
 size_t megabytes_to_bytes(size_t megabytes);
+u8 swap_byte_order(u8 value);
+s8 swap_byte_order(s8 value);
+u16 swap_byte_order(u16 value);
+s16 swap_byte_order(s16 value);
+u32 swap_byte_order(u32 value);
+s32 swap_byte_order(s32 value);
+u64 swap_byte_order(u64 value);
+s64 swap_byte_order(s64 value);
 
 /*
 _byteswap_ushort
@@ -128,11 +136,14 @@ wchar_t* skip_leading_whitespace(wchar_t* str);
 const size_t MAX_INT32_CHARS = 11 + 1;
 const size_t MAX_INT64_CHARS = 20 + 1; 
 bool convert_u32_to_string(u32 value, TCHAR* result_string);
+bool convert_s32_to_string(s32 value, TCHAR* result_string);
 bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
 TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
+TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string);
+TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
 TCHAR* skip_to_end_of_string(TCHAR* str);
 TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings);
 
@@ -306,39 +317,39 @@ enum Csv_Type
 {
 	CSV_NONE = 0,
 
-	CSV_FILENAME = 1,
-	CSV_URL = 2,
-	CSV_FILE_EXTENSION = 3,
-	CSV_FILE_SIZE = 4,
+	CSV_FILENAME,
+	CSV_URL,
+	CSV_FILE_EXTENSION,
+	CSV_FILE_SIZE,
 
-	CSV_LAST_WRITE_TIME = 5,
-	CSV_LAST_MODIFIED_TIME = 6,
-	CSV_CREATION_TIME = 7,
-	CSV_LAST_ACCESS_TIME = 8,
-	CSV_EXPIRY_TIME = 9,
+	CSV_LAST_WRITE_TIME,
+	CSV_LAST_MODIFIED_TIME,
+	CSV_CREATION_TIME,
+	CSV_LAST_ACCESS_TIME,
+	CSV_EXPIRY_TIME,
 
-	CSV_RESPONSE = 10,
-	CSV_SERVER = 11,
-	CSV_CACHE_CONTROL = 12,
-	CSV_PRAGMA = 13,
-	CSV_CONTENT_TYPE = 14,
-	CSV_CONTENT_LENGTH = 15,
-	CSV_CONTENT_ENCODING = 16,
+	CSV_RESPONSE,
+	CSV_SERVER,
+	CSV_CACHE_CONTROL,
+	CSV_PRAGMA,
+	CSV_CONTENT_TYPE,
+	CSV_CONTENT_LENGTH,
+	CSV_CONTENT_ENCODING,
 
-	CSV_LOCATION_ON_CACHE = 17,
-	CSV_LOCATION_ON_DISK = 18,
-	CSV_MISSING_FILE = 19, 
+	CSV_LOCATION_ON_CACHE,
+	CSV_LOCATION_ON_DISK,
+	CSV_MISSING_FILE,
 
-	CSV_CUSTOM_FILE_GROUP = 20,
-	CSV_CUSTOM_URL_GROUP = 21,
+	CSV_CUSTOM_FILE_GROUP,
+	CSV_CUSTOM_URL_GROUP,
 	
 	// Internet Explorer specific.
-	CSV_HITS = 22,
+	CSV_HITS,
 	
 	// Shockwave Plugin specific.
-	CSV_DIRECTOR_FILE_TYPE = 23,
+	CSV_DIRECTOR_FILE_TYPE,
 
-	NUM_CSV_TYPES = 24
+	NUM_CSV_TYPES
 };
 
 // An array that maps the previous values to UTF-8 strings. Used to write the columns' names directly to the CSV file
@@ -348,7 +359,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
-	"Response", "Server", "Cache-Control", "Pragma", "Content-Type", "Content-Length", "Content-Encoding",
+	"Response", "Server", "Cache-Control", "Pragma", "Content Type", "Content Length", "Content Encoding",
 	"Location On Cache", "Location On Disk", "Missing File",
 	"Custom File Group", "Custom URL Group",
 	"Hits",
@@ -387,8 +398,7 @@ do\
 	{\
 		log_print(LOG_ERROR, "Get Function Address: Failed to retrieve the function address for '%hs' with the error code %lu.", function_name, GetLastError());\
 	}\
-}\
-while(false, false)
+} while(false, false)
 
 // These functions are only meant to be used in the Windows 2000 through 10 builds. In the Windows 98 and ME builds, attempting
 // to call these functions will result in a compile time error.

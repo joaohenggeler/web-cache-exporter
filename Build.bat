@@ -36,7 +36,7 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
 	REM In our case, we use 7-Zip Extra 9.20.
-	SET "PACKAGE_BUILD=Yes"
+	SET "PACKAGE_BUILD=No"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.
@@ -348,8 +348,15 @@ PUSHD "%~dp0"
 		EXIT /B 1
 	)
 
-	SET "EXE_ARCHIVE_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-%BUILD_MODE%-%BUILD_VERSION%.zip"
-	SET "SOURCE_ARCHIVE_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-source-%BUILD_VERSION%.zip"
+	REM Add an identifier to the archive names if we passed any extra command line options to the compiler.
+	REM This will prevent sending someone a debug build that had the EXPORT_EMPTY_FILES macro defined.
+	SET "EXTRA_ARGS_ID="
+	IF "%~1" NEQ "" (
+		SET "EXTRA_ARGS_ID=-extra-args"
+	)
+
+	SET "EXE_ARCHIVE_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-%BUILD_MODE%%EXTRA_ARGS_ID%-%BUILD_VERSION%.zip"
+	SET "SOURCE_ARCHIVE_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-source%EXTRA_ARGS_ID%-%BUILD_VERSION%.zip"
 
 	IF EXIST "%EXE_ARCHIVE_PATH%" (
 		DEL /Q "%EXE_ARCHIVE_PATH%"

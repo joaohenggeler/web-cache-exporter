@@ -3,6 +3,7 @@
 #include "internet_explorer.h"
 #include "flash_plugin.h"
 #include "shockwave_plugin.h"
+#include "java_plugin.h"
 
 #include "explore_files.h"
 
@@ -680,7 +681,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 		case(CACHE_JAVA_PLUGIN):
 		{
-			_ASSERT(false);
+			export_specific_or_default_java_plugin_cache(&exporter);
 		} break;
 
 		case(CACHE_ALL):

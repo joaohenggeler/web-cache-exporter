@@ -741,8 +741,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{\
 							variable_name = url_entry_5_to_9->field_name;\
 						}\
-					}\
-					while(false, false)
+					} while(false, false)
 
 					u32 entry_offset_to_filename;
 					GET_URL_ENTRY_MEMBER(entry_offset_to_filename, entry_offset_to_filename);

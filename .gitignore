@@ -4,6 +4,10 @@ Builds
 *.log
 # The default exporter output directory.
 ExportedCache
+# Java Plugin index files for testing.
+Source/Testing/JavaPlugin/*
+!Source/Testing/JavaPlugin/*.bat
+!Source/Testing/JavaPlugin/*.java
 # Used by the Build.bat to package the releases.
 _7z920_extra
 _7za920

@@ -377,6 +377,46 @@ size_t megabytes_to_bytes(size_t megabytes)
 	return megabytes * 1024 * 1024;
 }
 
+u8 swap_byte_order(u8 value)
+{
+	return value;
+}
+
+s8 swap_byte_order(s8 value)
+{
+	return value;
+}
+
+u16 swap_byte_order(u16 value)
+{
+	return _byteswap_ushort(value);
+}
+
+s16 swap_byte_order(s16 value)
+{
+	return (s16) _byteswap_ushort((u16) value);
+}
+
+u32 swap_byte_order(u32 value)
+{
+	return _byteswap_ulong(value);
+}
+
+s32 swap_byte_order(s32 value)
+{
+	return (s32) _byteswap_ulong((u32) value);
+}
+
+u64 swap_byte_order(u64 value)
+{
+	return _byteswap_uint64(value);
+}
+
+s64 swap_byte_order(s64 value)
+{
+	return (s64) _byteswap_uint64((s64) value);
+}
+
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
@@ -624,6 +664,12 @@ bool convert_u32_to_string(u32 value, TCHAR* result_string)
 	if(!success) *result_string = TEXT('\0');
 	return success;
 }
+bool convert_s32_to_string(s32 value, TCHAR* result_string)
+{
+	bool success = _ltot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
+	if(!success) *result_string = TEXT('\0');
+	return success;
+}
 bool convert_u64_to_string(u64 value, TCHAR* result_string)
 {
 	bool success = _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
@@ -743,6 +789,72 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		return wide_string;
 	#endif
+}
+
+// Converts an UTF-8 string to a TCHAR one and copies the final result to a memory arena. On the Windows 98 and ME builds, the
+// intermediary UTF-16 string is stored in a intermediary arena.
+//
+// On the Windows 98 and ME builds, this function converts the ANSI string to UTF-16, and then to UTF-8.
+// On the Windows 2000 through 10 builds, this function converts the UTF-16 string to a UTF-8 one.
+//
+// @Parameters:
+// 1. final_arena - The Arena structure that will receive the final converted TCHAR string.
+// 2. intermediary_arena - The Arena structure that will receive the intermediary converted UTF-16 string. This only applies to Windows 98
+// and ME. On the Windows 2000 to 10 builds, this parameter is unused.
+// 3. utf_8_string - The UTF-8 string to convert and copy to the arena.
+//
+// @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
+TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string)
+{
+	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
+	if(num_chars_required_wide == 0)
+	{
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a wide string with the error code %lu.", GetLastError());
+		_ASSERT(false);
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		Arena* wide_string_arena = intermediary_arena;
+	#else
+		Arena* wide_string_arena = final_arena;
+	#endif
+
+	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
+	wchar_t* wide_string = push_arena(wide_string_arena, size_required_wide, wchar_t);
+	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
+	{
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a wide string with the error code %lu.", GetLastError());
+		_ASSERT(false);
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
+		if(size_required_ansi == 0)
+		{
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		char* ansi_string = push_arena(final_arena, size_required_ansi, char);
+		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
+		{
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
+			_ASSERT(false);
+			return NULL;
+		}
+
+		return ansi_string;
+	#else
+		return wide_string;
+	#endif
+}
+
+TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
+{
+	return copy_utf_8_string_to_tchar(arena, arena, utf_8_string);
 }
 
 // Skips to the null terminator character in a string.

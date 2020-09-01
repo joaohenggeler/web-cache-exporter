@@ -229,67 +229,6 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 			+ MAX_FILE_SIGNATURE_BUFFER_SIZE;
 }
 
-// Converts an UTF-8 string to a TCHAR one and copies the final result to the permanent arena. On the Windows 98 and ME builds, the
-// intermediary UTF-16 string is stored in the temporary arena.
-//
-// On the Windows 98 and ME builds, this function converts the ANSI string to UTF-16, and then to UTF-8.
-// On the Windows 2000 through 10 builds, this function converts the UTF-16 string to a UTF-8 one.
-//
-// @Parameters:
-// 1. permanent_arena - The Arena structure that will receive the final converted TCHAR string.
-// 2. temporary_arena - The Arena structure that will receive the intermediary converted UTF-16 string. This only applies to Windows 98
-// and ME. On the Windows 2000 to 10 builds, this parameter is unused.
-// 3. utf_8_string - The UTF-8 string to convert and copy to the arena.
-//
-// @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
-static TCHAR* copy_utf_8_string_to_tchar(Arena* permanent_arena, Arena* temporary_arena, const char* utf_8_string)
-{
-	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
-	if(num_chars_required_wide == 0)
-	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a wide string with the error code %lu.", GetLastError());
-		_ASSERT(false);
-		return NULL;
-	}
-
-	#ifdef BUILD_9X
-		Arena* wide_string_arena = temporary_arena;
-	#else
-		Arena* wide_string_arena = permanent_arena;
-	#endif
-
-	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
-	wchar_t* wide_string = push_arena(wide_string_arena, size_required_wide, wchar_t);
-	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
-	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a wide string with the error code %lu.", GetLastError());
-		_ASSERT(false);
-		return NULL;
-	}
-
-	#ifdef BUILD_9X
-		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
-		if(size_required_ansi == 0)
-		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
-			_ASSERT(false);
-			return NULL;
-		}
-
-		char* ansi_string = push_arena(permanent_arena, size_required_ansi, char);
-		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
-		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
-			_ASSERT(false);
-			return NULL;
-		}
-
-		return ansi_string;
-	#else
-		return wide_string;
-	#endif
-}
-
 // Counts the number of tokens in a string that are delimited by spaces. This is used to find out how many tokens will be created
 // after iterating over this string with strtok_s(). Note that multiple spaces in a row are skipped (e.g. "aa bb     c" counts three
 // tokens). 

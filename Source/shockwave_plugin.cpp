@@ -129,7 +129,7 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 	{
 		if(FAILED(StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path)))
 		{
-			log_print(LOG_ERROR, "Shockwave Plugin: Failed to get the Temporary Files directory path.");
+			log_print(LOG_ERROR, "Shockwave Plugin: Failed to determine the Temporary Files directory path.");
 			return;
 		}
 	}

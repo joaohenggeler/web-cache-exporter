@@ -2,7 +2,7 @@ BEGIN_FILE_GROUP Server-Side Script
 
 	BEGIN_FILE_EXTENSIONS
 		; Active Server Pages (ASP) and ASP.NET
-		asp aspx cshtml vbhtml
+		asp aspx cshtml vbhtml ashx asmx
 		
 		; ColdFusion Markup Language (CFML)
 		cfm cfc
@@ -11,7 +11,8 @@ BEGIN_FILE_GROUP Server-Side Script
 		cgi
 		
 		; JavaServer Pages (JSP)
-		jsp jspx jspf
+		jsp jspx jspf do
+		jhtml
 		
 		; PHP
 		php phtml php3 php4 php5 php7 phps php-s pht phar
@@ -115,11 +116,22 @@ BEGIN_FILE_GROUP JSON
 
 END
 
-; Channel Definition Format
-BEGIN_FILE_GROUP CDF
+BEGIN_FILE_GROUP Channel Definition Format
 
 	BEGIN_FILE_EXTENSIONS
 		cdf
+	END
+
+END
+
+BEGIN_FILE_GROUP HTML Component
+
+	BEGIN_MIME_TYPES
+		text/x-component
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		htc
 	END
 
 END
@@ -139,6 +151,14 @@ BEGIN_FILE_GROUP XML
 
 	BEGIN_FILE_EXTENSIONS
 		xml
+	END
+
+END
+
+BEGIN_FILE_GROUP Configuration
+
+	BEGIN_FILE_EXTENSIONS
+		ini
 	END
 
 END

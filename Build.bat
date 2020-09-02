@@ -25,7 +25,7 @@ PUSHD "%~dp0"
 	REM certain macros (like DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
-	SET "BUILD_MODE=debug"
+	SET "BUILD_MODE=release"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
@@ -36,7 +36,7 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
 	REM In our case, we use 7-Zip Extra 9.20.
-	SET "PACKAGE_BUILD=No"
+	SET "PACKAGE_BUILD=Yes"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.
@@ -57,7 +57,7 @@ PUSHD "%~dp0"
 
 	REM Common compiler options and any other ones that only apply to a specific build target or mode.
 	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
-	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT"
+	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT /GL"
 	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D DEBUG /D NDEBUG /D _DEBUG"
 	SET "COMPILER_OPTIONS_WIN_NT_ONLY="
 	SET "COMPILER_OPTIONS_WIN_9X_ONLY=/D BUILD_9X"
@@ -273,45 +273,47 @@ PUSHD "%~dp0"
 	REM ------------------------- Windows 9x 32-bit Build -------------------------
 	REM ---------------------------------------------------------------------------
 
-	IF "%WIN9X_BUILD%"=="Yes" (
-
-		ECHO [%~nx0] Windows 9x 32-bit %BUILD_MODE% build (v%BUILD_VERSION%)
-		ECHO.
-
-		IF NOT EXIST "%BUILD_PATH_9X_32%" (
-			MKDIR "%BUILD_PATH_9X_32%"
-		)
-
-		SETLOCAL
-			PUSHD "%BUILD_PATH_9X_32%"
-
-				ECHO [%~nx0] Copying the source .group files...
-				XCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%\" /S /I /C /Y
-				ECHO.
-
-				SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_9X_ONLY%"
-				SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_32_ONLY%"
-				SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% /Fe"%EXE_FILENAME_9X_32%""
-				SET "LIBRARIES=%LIBRARIES% %LIBRARIES_32_ONLY%"
-				SET "LIBRARIES=%LIBRARIES% %LIBRARIES_WIN_9X_ONLY%"
-				SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_WIN_9X_ONLY%"
-				SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_32_ONLY%"
-				
-				CALL "%VCVARSALL_PATH%" x86
-				@ECHO ON
-				cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" %LIBRARIES% %LINKER_OPTIONS%
-				@ECHO OFF
-
-			POPD
-		ENDLOCAL
-
-		IF ERRORLEVEL 1 (
-			ECHO.
-			ECHO [%~nx0] Error while building "%EXE_FILENAME_9X_32%"
-			EXIT /B 1
-		)
-
+	IF "%WIN9X_BUILD%" NEQ "Yes" (
+		GOTO SKIP_BUILD_9X
 	)
+
+	ECHO [%~nx0] Windows 9x 32-bit %BUILD_MODE% build (v%BUILD_VERSION%)
+	ECHO.
+
+	IF NOT EXIST "%BUILD_PATH_9X_32%" (
+		MKDIR "%BUILD_PATH_9X_32%"
+	)
+
+	SETLOCAL
+		PUSHD "%BUILD_PATH_9X_32%"
+
+			ECHO [%~nx0] Copying the source .group files...
+			XCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%\" /S /I /C /Y
+			ECHO.
+
+			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_9X_ONLY%"
+			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_32_ONLY%"
+			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% /Fe"%EXE_FILENAME_9X_32%""
+			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_32_ONLY%"
+			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_WIN_9X_ONLY%"
+			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_WIN_9X_ONLY%"
+			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_32_ONLY%"
+			
+			CALL "%VCVARSALL_PATH%" x86
+			@ECHO ON
+			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" %LIBRARIES% %LINKER_OPTIONS%
+			@ECHO OFF
+
+		POPD
+	ENDLOCAL
+
+	IF ERRORLEVEL 1 (
+		ECHO.
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_9X_32%"
+		EXIT /B 1
+	)
+
+	:SKIP_BUILD_9X
 
 	REM Delete the .obj files for the release builds.
 	IF "%BUILD_MODE%"=="release" (
@@ -330,7 +332,7 @@ PUSHD "%~dp0"
 
 	REM Compress the built executables and source code and create two archives.
 	IF "%PACKAGE_BUILD%" NEQ "Yes" (
-		EXIT /B 1
+		GOTO SKIP_PACKAGE_BUILD
 	)
 
 	SET "BUILD_PATH_TO_ZIP="
@@ -373,6 +375,12 @@ PUSHD "%~dp0"
 
 	ECHO [%~nx0] Packaging the source files...
 	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\*" >NUL
+
+	ECHO.
+
+	:SKIP_PACKAGE_BUILD
+
+	ECHO [%~nx0] Finished running.
 
 POPD
 ENDLOCAL

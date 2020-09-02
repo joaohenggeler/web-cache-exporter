@@ -138,7 +138,7 @@ static const size_t ALLOCATION_BITMAP_SIZE = 0x3DB0;
 
 // @Format: The signature that identifies each entry in index.dat.
 // We must be aware of all of them to properly traverse the allocated blocks.
-enum Internet_Explorer_Index_Entry_Signature
+enum Ie_Index_Entry_Signature
 {
 	ENTRY_URL = 0x204C5255, // "URL "
 	ENTRY_REDIRECT = 0x52444552, // "REDR"
@@ -158,7 +158,7 @@ enum Internet_Explorer_Index_Entry_Signature
 #pragma pack(push, 1)
 
 // @Format: The header for the index.dat file.
-struct Internet_Explorer_Index_Header
+struct Ie_Index_Header
 {
 	s8 signature[NUM_SIGNATURE_CHARS]; // @Used. Includes the null terminator.
 	u32 file_size; // @Used.
@@ -188,18 +188,18 @@ struct Internet_Explorer_Index_Header
 };
 
 // @Format: The beginning of each entry in the index.dat file.
-struct Internet_Explorer_Index_File_Map_Entry
+struct Ie_Index_File_Map_Entry
 {
 	u32 signature; // @Used.
 	u32 num_allocated_blocks; // @Used.
 };
 
 // @Format: The body of a URL entry in the index.dat file (IE 4, format version 4.7).
-struct Internet_Explorer_4_Index_Url_Entry
+struct Ie_4_Index_Url_Entry
 {
-	FILETIME last_modified_time; // @Used.
-	FILETIME last_access_time; // @Used.
-	FILETIME expiry_time; // @Used.
+	u64 last_modified_time; // @Used.
+	u64 last_access_time; // @Used.
+	u64 expiry_time; // @Used.
 
 	u32 cached_file_size; // @Used.
 	u32 _reserved_1; // @TODO: High part of a 64-bit file size?
@@ -221,20 +221,20 @@ struct Internet_Explorer_4_Index_Url_Entry
 	u32 headers_size; // @Used.
 	u32 _reserved_9;
 
-	Dos_Date_Time last_sync_time;
+	u32 last_sync_time;
 	u32 num_entry_locks; // @Used. Represents the number of hits (in practice at least).
 	u32 _reserved_10;
-	Dos_Date_Time creation_time; // @Used.
+	u32 creation_time; // @Used.
 
 	u32 _reserved_11;
 };
 
 // @Format: The body of a URL entry in the index.dat file (IE 5 to 9, format version 5.2).
-struct Internet_Explorer_5_To_9_Index_Url_Entry
+struct Ie_5_To_9_Index_Url_Entry
 {
-	FILETIME last_modified_time; // @Used.
-	FILETIME last_access_time; // @Used.
-	Dos_Date_Time expiry_time; // @Used.
+	u64 last_modified_time; // @Used.
+	u64 last_access_time; // @Used.
+	u32 expiry_time; // @Used.
 	u32 _reserved_1;
 
 	u32 low_cached_file_size; // @Used.
@@ -262,10 +262,10 @@ struct Internet_Explorer_5_To_9_Index_Url_Entry
 	u32 headers_size; // @Used.
 	u32 entry_offset_to_file_extension;
 
-	Dos_Date_Time last_sync_time;
+	u32 last_sync_time;
 	u32 num_entry_locks; // @Used. Represents the number of hits (in practice at least).
 	u32 level_of_entry_lock_nesting;
-	Dos_Date_Time creation_time; // @Used.
+	u32 creation_time; // @Used.
 
 	u32 _reserved_4;
 	u32 _reserved_5;
@@ -273,10 +273,10 @@ struct Internet_Explorer_5_To_9_Index_Url_Entry
 
 #pragma pack(pop)
 
-_STATIC_ASSERT(sizeof(Internet_Explorer_Index_Header) == 0x0250);
-_STATIC_ASSERT(sizeof(Internet_Explorer_Index_File_Map_Entry) == 0x08);
-_STATIC_ASSERT(sizeof(Internet_Explorer_4_Index_Url_Entry) == 0x60);
-_STATIC_ASSERT(sizeof(Internet_Explorer_5_To_9_Index_Url_Entry) == 0x60);
+_STATIC_ASSERT(sizeof(Ie_Index_Header) == 0x0250);
+_STATIC_ASSERT(sizeof(Ie_Index_File_Map_Entry) == 0x08);
+_STATIC_ASSERT(sizeof(Ie_4_Index_Url_Entry) == 0x60);
+_STATIC_ASSERT(sizeof(Ie_5_To_9_Index_Url_Entry) == 0x60);
 
 // ----------------------------------------------------------------------------------------------------
 
@@ -395,7 +395,8 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 								TCHAR** cache_control, TCHAR** pragma,
 								TCHAR** content_type, TCHAR** content_length, TCHAR** content_encoding)
 {
-	_ASSERT(headers_size > 0);
+	if(headers_size == 0) return;
+
 	// The headers aren't necessarily null terminated.
 	char* headers = push_and_copy_to_arena(arena, headers_size, char, headers_to_copy, headers_size);
 
@@ -411,7 +412,7 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 		if(is_first_line)
 		{
 			is_first_line = false;
-			if(response != NULL) *response = copy_ansi_string_to_tchar(arena, line);
+			if(response != NULL) *response = convert_ansi_string_to_tchar(arena, line);
 		}
 		// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
 		// where "Content-Type" is the key, and "text/html" the value).
@@ -425,38 +426,66 @@ static void parse_cache_headers(Arena* arena, const char* headers_to_copy, size_
 			{
 				if(server != NULL && strings_are_equal(key, "server", true))
 				{
-					*server = copy_ansi_string_to_tchar(arena, value);
+					*server = convert_ansi_string_to_tchar(arena, value);
 				}
 				else if(cache_control != NULL && strings_are_equal(key, "cache-control", true))
 				{
-					*cache_control = copy_ansi_string_to_tchar(arena, value);
+					*cache_control = convert_ansi_string_to_tchar(arena, value);
 				}
 				else if(pragma != NULL && strings_are_equal(key, "pragma", true))
 				{
-					*pragma = copy_ansi_string_to_tchar(arena, value);
+					*pragma = convert_ansi_string_to_tchar(arena, value);
 				}
 				else if(content_type != NULL && strings_are_equal(key, "content-type", true))
 				{
-					*content_type = copy_ansi_string_to_tchar(arena, value);
+					*content_type = convert_ansi_string_to_tchar(arena, value);
 				}
 				else if(content_length != NULL && strings_are_equal(key, "content-length", true))
 				{
-					*content_length = copy_ansi_string_to_tchar(arena, value);
+					*content_length = convert_ansi_string_to_tchar(arena, value);
 				}
 				else if(content_encoding != NULL && strings_are_equal(key, "content-encoding", true))
 				{
-					*content_encoding = copy_ansi_string_to_tchar(arena, value);
+					*content_encoding = convert_ansi_string_to_tchar(arena, value);
 				}
 			}
 			else
 			{
-				_ASSERT(false);
+				log_print(LOG_WARNING, "Parse Cache Headers: The following header line could not be separated into a key and value pair: '%hs'.", line);
 			}
 
 		}
 
 		line = strtok_s(NULL, line_delimiters, &next_headers_token);
 	}
+}
+
+// Converts an unsigned 64-bit integer to a FILETIME structure.
+//
+// @Parameters:
+// 1. value - The 64-bit value to convert.
+// 2. filetime - The resulting FILETIME structure.
+//
+// @Returns: Nothing.
+static void convert_u64_to_filetime(u64 value, FILETIME* filetime)
+{
+	u32 high_date_time = 0;
+	u32 low_date_time = 0;
+	separate_u64_into_high_and_low_u32s(value, &high_date_time, &low_date_time);
+	filetime->dwHighDateTime = high_date_time;
+	filetime->dwLowDateTime = low_date_time;
+}
+
+// Converts an unsigned 32-bit integer to an MS-DOS date and time structure.
+//
+// @Parameters:
+// 1. value - The 32-bit value to convert.
+// 2. dos_date_time - The resulting MS-DOS date and time structure.
+//
+// @Returns: Nothing.
+static void convert_u32_to_dos_date_time(u32 value, Dos_Date_Time* dos_date_time)
+{
+	separate_u32_into_high_and_low_u16s(value, &(dos_date_time->time), &(dos_date_time->date));
 }
 
 // Entry point for Internet Explorer's cache exporter. This function will determine where to look for the cache before
@@ -645,16 +674,15 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// 3. The file size we read doesn't match the file size stored in the header.
 	// 4. The file format's version is not currently supported.
 
-	if(index_file_size < sizeof(Internet_Explorer_Index_Header))
+	if(index_file_size < sizeof(Ie_Index_Header))
 	{
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is smaller than the file format's header. No files will be exported from this cache.");
 		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
-		_ASSERT(false);
 		return;
 	}
 
-	Internet_Explorer_Index_Header* header = (Internet_Explorer_Index_Header*) index_file;
+	Ie_Index_Header* header = (Ie_Index_Header*) index_file;
 
 	if(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) != 0)
 	{
@@ -665,7 +693,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file starts with an invalid signature: '%hs'. No files will be exported from this cache.", signature_string);
 		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
-		_ASSERT(false);
 		return;
 	}
 
@@ -674,7 +701,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The size of the opened index file is different than the size specified in its header. No files will be exported from this cache.");
 		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
-		_ASSERT(false);
 		return;
 	}
 
@@ -691,13 +717,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was opened successfully but its version (%hc.%hc) is not supported. No files will be exported from this cache.", major_version, minor_version);
 		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
-		_ASSERT(false);
 		return;
 	}
 	
 	// Go through each bit to check if a particular block was allocated. If so, we'll skip to that block and handle
 	// that specific entry type. If not, we'll ignore it and move to the next one.
-	unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Internet_Explorer_Index_Header));
+	unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Ie_Index_Header));
 	void* blocks = advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
 
 	for(u32 i = 0; i < header->num_blocks; ++i)
@@ -710,7 +735,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(is_block_allocated)
 		{
 			void* current_block = advance_bytes(blocks, i * BLOCK_SIZE);
-			Internet_Explorer_Index_File_Map_Entry* entry = (Internet_Explorer_Index_File_Map_Entry*) current_block;
+			Ie_Index_File_Map_Entry* entry = (Ie_Index_File_Map_Entry*) current_block;
 
 			switch(entry->signature)
 			{
@@ -722,25 +747,49 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				case(ENTRY_URL):
 				case(ENTRY_LEAK):
 				{
-					void* url_entry = advance_bytes(entry, sizeof(Internet_Explorer_Index_File_Map_Entry));
+					void* url_entry = advance_bytes(entry, sizeof(Ie_Index_File_Map_Entry));
 					
 					// @Aliasing: These two variables point to the same memory but they're never deferenced at the same time.
-					Internet_Explorer_4_Index_Url_Entry* url_entry_4 			= (Internet_Explorer_4_Index_Url_Entry*) 		url_entry;
-					Internet_Explorer_5_To_9_Index_Url_Entry* url_entry_5_to_9 	= (Internet_Explorer_5_To_9_Index_Url_Entry*) 	url_entry;
+					Ie_4_Index_Url_Entry* url_entry_4 			= (Ie_4_Index_Url_Entry*) 		url_entry;
+					Ie_5_To_9_Index_Url_Entry* url_entry_5_to_9 	= (Ie_5_To_9_Index_Url_Entry*) 	url_entry;
+
+					// Some entries may contain garbage values whose value is 0x0BADF00D (which is used to mark deallocated
+					// blocks). We'll use this macro to check if the low 32 bits of each member match this value. If so,
+					// we'll clear them to zero. Empty strings or NULL values will show up as missing values in the CSV files.
+					// This won't work for the few u8 members, though we only use 'cache_directory_index' whose value is always
+					// strictly checked to see if it's within the correct bounds. Note that the low part of the cached file
+					// size may still exist even if the high part is garbage. For example:
+					// - low_cached_file_size = 1234
+					// - high_cached_file_size = 0x0BADF00D
+					// Since these values are checked individually, we'll still keep the useful value and set the high part
+					// to zero.
+					bool was_deallocated = false;
+					#define CLEAR_DEALLOCATED_VALUE(variable_name)\
+					do\
+					{\
+						if( ((u32) (variable_name & 0xFFFFFFFF)) == ENTRY_DEALLOCATED )\
+						{\
+							variable_name = 0;\
+							was_deallocated = true;\
+						}\
+					} while(false, false)
 
 					// Helper macro function used to access a given member in the two types of URL entries (versions 4 and 5).
-					// These two structs are very similar but still differ in how they're laid out.
-					#define GET_URL_ENTRY_MEMBER(variable_name, field_name)\
+					// These two structs are very similar but still differ in how they're laid out. We'll use the previous
+					// macro to discard any garbage 0x0BADF00D values.
+					#define GET_URL_ENTRY_MEMBER(variable_name, member_name)\
 					do\
 					{\
 						if(major_version == '4')\
 						{\
-							variable_name = url_entry_4->field_name;\
+							variable_name = url_entry_4->member_name;\
 						}\
 						else\
 						{\
-							variable_name = url_entry_5_to_9->field_name;\
+							variable_name = url_entry_5_to_9->member_name;\
 						}\
+					\
+						CLEAR_DEALLOCATED_VALUE(variable_name);\
 					} while(false, false)
 
 					u32 entry_offset_to_filename;
@@ -753,8 +802,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					if(entry_offset_to_filename > 0)
 					{
 						const char* filename_in_mmf = (char*) advance_bytes(entry, entry_offset_to_filename);
-						decorated_filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
-						filename = copy_ansi_string_to_tchar(arena, filename_in_mmf);
+						decorated_filename = convert_ansi_string_to_tchar(arena, filename_in_mmf);
+						filename = convert_ansi_string_to_tchar(arena, filename_in_mmf);
 						undecorate_path(filename);
 					}
 
@@ -766,7 +815,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					if(entry_offset_to_url > 0)
 					{
 						const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
-						url = copy_ansi_string_to_tchar(arena, url_in_mmf);
+						url = convert_ansi_string_to_tchar(arena, url_in_mmf);
 						decode_url(url);
 					}
 
@@ -792,34 +841,60 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 											&content_type, &content_length, &content_encoding);
 					}
 
+					// Like the GET_URL_ENTRY_MEMBER macro, but converts the u64 member to a FILETIME and
+					// this structure to a string.
+					#define GET_URL_ENTRY_FILETIME_MEMBER(variable_name, member_name)\
+					do\
+					{\
+						u64 u64_value;\
+						GET_URL_ENTRY_MEMBER(u64_value, member_name);\
+						FILETIME filetime_value = {};\
+						convert_u64_to_filetime(u64_value, &filetime_value);\
+						format_filetime_date_time(filetime_value, variable_name);\
+					} while(false, false)
+
+					// Like the GET_URL_ENTRY_MEMBER macro, but converts the u32 member to a Dos_Date_Time and
+					// this structure to a string.
+					#define GET_URL_ENTRY_DOS_DATE_TIME_MEMBER(variable_name, member_name)\
+					do\
+					{\
+						u32 u32_value;\
+						GET_URL_ENTRY_MEMBER(u32_value, member_name);\
+						Dos_Date_Time dos_date_time_value = {};\
+						convert_u32_to_dos_date_time(u32_value, &dos_date_time_value);\
+						format_dos_date_time(dos_date_time_value, variable_name);\
+					} while(false, false)
+
 					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
-					FILETIME last_modified_time_value;
-					GET_URL_ENTRY_MEMBER(last_modified_time_value, last_modified_time);
-					format_filetime_date_time(last_modified_time_value, last_modified_time);
+					GET_URL_ENTRY_FILETIME_MEMBER(last_modified_time, last_modified_time);
 					
 					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
-					FILETIME last_access_time_value;
-					GET_URL_ENTRY_MEMBER(last_access_time_value, last_access_time);
-					format_filetime_date_time(last_access_time_value, last_access_time);
+					GET_URL_ENTRY_FILETIME_MEMBER(last_access_time, last_access_time);
 
 					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
-					Dos_Date_Time creation_time_value;
-					GET_URL_ENTRY_MEMBER(creation_time_value, creation_time);
-					format_dos_date_time(creation_time_value, creation_time);
+					GET_URL_ENTRY_DOS_DATE_TIME_MEMBER(creation_time, creation_time);
 
 					// @Format: The file's expiry time is stored as two different types depending on the index file's version.
 					TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS];
 					if(major_version == '4')
 					{
-						format_filetime_date_time(url_entry_4->expiry_time, expiry_time);
+						u64 u64_expiry_time = url_entry_4->expiry_time;
+						CLEAR_DEALLOCATED_VALUE(u64_expiry_time);
+						FILETIME filetime_expiry_time = {};
+						convert_u64_to_filetime(u64_expiry_time, &filetime_expiry_time);
+						format_filetime_date_time(filetime_expiry_time, expiry_time);
 					}
 					else
 					{
-						format_dos_date_time(url_entry_5_to_9->expiry_time, expiry_time);
+						u32 u32_expiry_time = url_entry_5_to_9->expiry_time;
+						CLEAR_DEALLOCATED_VALUE(u32_expiry_time);
+						Dos_Date_Time dos_date_time_expiry_time = {};
+						convert_u32_to_dos_date_time(u32_expiry_time, &dos_date_time_expiry_time);
+						format_dos_date_time(dos_date_time_expiry_time, expiry_time);
 					}
 					
 					TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-					TCHAR* short_file_path_pointer = short_file_path;
+					TCHAR* short_file_path_pointer = NULL;
 					TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
@@ -829,6 +904,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					if(cache_directory_index < MAX_NUM_CACHE_DIRECTORIES)
 					{
+						short_file_path_pointer = short_file_path;
+
 						// Build the short file path by using the cached file's directory and its (decorated) filename.
 						// E.g. "ABCDEFGH\image[1].gif".
 						// @Format: The cache directory's name doesn't include the null terminator.
@@ -837,7 +914,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						CopyMemory(cache_directory_ansi_name, cache_directory_name_in_mmf, NUM_CACHE_DIRECTORY_NAME_CHARS * sizeof(char));
 						cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
 
-						TCHAR* cache_directory_name = copy_ansi_string_to_tchar(arena, cache_directory_ansi_name);
+						TCHAR* cache_directory_name = convert_ansi_string_to_tchar(arena, cache_directory_ansi_name);
 						PathCombine(short_file_path, cache_directory_name, decorated_filename);
 
 						// Build the absolute file path to the cache file. The cache directories are next to the index file
@@ -853,18 +930,21 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					else
 					{
 						log_print(LOG_WARNING, "Internet Explorer 4 to 9: Unknown cache directory index 0x%02X for file '%s' with the following URL: '%s'.", cache_directory_index, filename, url);
-						_ASSERT(false);
 					}
 			
 					TCHAR cached_file_size[MAX_INT64_CHARS];
 					if(major_version == '4')
 					{
-						convert_u32_to_string(url_entry_4->cached_file_size, cached_file_size);
+						u32 u32_cached_file_size = url_entry_4->cached_file_size;
+						convert_u32_to_string(u32_cached_file_size, cached_file_size);
 					}
 					else
 					{
-						u64 cached_file_size_value = combine_high_and_low_u32s_into_u64(url_entry_5_to_9->high_cached_file_size,
-																						url_entry_5_to_9->low_cached_file_size);
+						u32 high_cached_file_size = url_entry_5_to_9->high_cached_file_size;
+						u32 low_cached_file_size = url_entry_5_to_9->low_cached_file_size;
+						CLEAR_DEALLOCATED_VALUE(high_cached_file_size);
+						CLEAR_DEALLOCATED_VALUE(low_cached_file_size);
+						u64 cached_file_size_value = combine_high_and_low_u32s_into_u64(high_cached_file_size, low_cached_file_size);
 						convert_u64_to_string(cached_file_size_value, cached_file_size);
 					}
 
@@ -895,6 +975,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{NULL}, {NULL}
 					};
 
+					if(was_deallocated)
+					{
+						log_print(LOG_WARNING, "Internet Explorer 4 to 9: The entry at (%Iu, %Iu) with %I32u block(s) allocated and the signature 0x%08X contained one or more garbage values (0x%08X). These will be cleared to zero. The filename is '%s' and the URL is '%s'.", block_index_in_byte, byte_index, entry->num_allocated_blocks, entry->signature, ENTRY_DEALLOCATED, filename, url);
+					}
+
 					export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 
 				} // Intentional fallthrough.
@@ -910,6 +995,13 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					i += entry->num_allocated_blocks - 1;
 				} break;
 
+				// The ENTRY_DEALLOCATED type shouldn't be handled above since its 'num_allocated_blocks' member will
+				// contain a garbage value.
+				case(ENTRY_DEALLOCATED):
+				{
+					// Do nothing and move to the next block on the next iteration.
+				} break;
+
 				// Check if we found an unhandled entry type. We'll want to know if these exist because otherwise
 				// we could start treating their allocated blocks as the beginning of other entry types.
 				default:
@@ -918,8 +1010,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					char signature_string[NUM_ENTRY_SIGNATURE_CHARS + 1];
 					CopyMemory(signature_string, &(entry->signature), NUM_ENTRY_SIGNATURE_CHARS);
 					signature_string[NUM_ENTRY_SIGNATURE_CHARS] = '\0';
-					log_print(LOG_WARNING, "Internet Explorer 4 to 9: Found unknown entry signature at (%Iu, %Iu): 0x%08X ('%hs') with %I32u blocks allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
-					_ASSERT(false);
+					log_print(LOG_WARNING, "Internet Explorer 4 to 9: Found unknown entry signature at (%Iu, %Iu): 0x%08X ('%hs') with %I32u block(s) allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
 				} break;
 
 			}
@@ -954,7 +1045,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_GET_DATABASE_FILE_INFO_W(stub_jet_get_database_file_info_w)
 	{
 		log_print(LOG_WARNING, "JetGetDatabaseFileInfoW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -972,7 +1062,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_GET_SYSTEM_PARAMETER_W(stub_jet_get_system_parameter_w)
 	{
 		log_print(LOG_WARNING, "JetGetSystemParameterW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -990,7 +1079,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_SET_SYSTEM_PARAMETER_W(stub_jet_set_system_parameter_w)
 	{
 		log_print(LOG_WARNING, "JetSetSystemParameterW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1008,7 +1096,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_CREATE_INSTANCE_W(stub_jet_create_instance_w)
 	{
 		log_print(LOG_WARNING, "JetCreateInstanceW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1026,7 +1113,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_INIT(stub_jet_init)
 	{
 		log_print(LOG_WARNING, "JetInit: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1044,7 +1130,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_TERM(stub_jet_term)
 	{
 		log_print(LOG_WARNING, "JetTerm: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1062,7 +1147,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_BEGIN_SESSION_W(stub_jet_begin_session_w)
 	{
 		log_print(LOG_WARNING, "JetBeginSessionW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1080,7 +1164,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_END_SESSION(stub_jet_end_session)
 	{
 		log_print(LOG_WARNING, "JetEndSession: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1098,7 +1181,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_ATTACH_DATABASE_2_W(stub_jet_attach_database_2_w)
 	{
 		log_print(LOG_WARNING, "JetAttachDatabase2W: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1116,7 +1198,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_DETACH_DATABASE_W(stub_jet_detach_database_w)
 	{
 		log_print(LOG_WARNING, "JetDetachDatabaseW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1134,7 +1215,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_OPEN_DATABASE_W(stub_jet_open_database_w)
 	{
 		log_print(LOG_WARNING, "JetOpenDatabaseW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1152,7 +1232,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_CLOSE_DATABASE(stub_jet_close_database)
 	{
 		log_print(LOG_WARNING, "JetCloseDatabase: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1170,7 +1249,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_OPEN_TABLE_W(stub_jet_open_table_w)
 	{
 		log_print(LOG_WARNING, "JetOpenTableW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1188,7 +1266,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_CLOSE_TABLE(stub_jet_close_table)
 	{
 		log_print(LOG_WARNING, "JetCloseTable: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1206,7 +1283,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_GET_TABLE_COLUMN_INFO_W(stub_jet_get_table_column_info_w)
 	{
 		log_print(LOG_WARNING, "JetGetTableColumnInfoW: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1224,7 +1300,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_RETRIEVE_COLUMN(stub_jet_retrieve_column)
 	{
 		log_print(LOG_WARNING, "JetRetrieveColumn: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1242,7 +1317,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_RETRIEVE_COLUMNS(stub_jet_retrieve_columns)
 	{
 		log_print(LOG_WARNING, "JetRetrieveColumns: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1260,7 +1334,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_GET_RECORD_POSITION(stub_jet_get_record_position)
 	{
 		log_print(LOG_WARNING, "JetGetRecordPosition: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1278,7 +1351,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	static JET_MOVE(stub_jet_move)
 	{
 		log_print(LOG_WARNING, "JetMove: Calling the stub version of this function.");
-		_ASSERT(false);
 		return JET_wrnNyi;
 	}
 	#pragma warning(pop)
@@ -1322,7 +1394,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(esent_library != NULL)
 		{
 			log_print(LOG_WARNING, "Load ESENT Functions: The library was already loaded.");
-			_ASSERT(false);
 			return;
 		}
 
@@ -1352,7 +1423,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		else
 		{
 			log_print(LOG_ERROR, "Load ESENT Functions: Failed to load the library with error code %lu.", GetLastError());
-			_ASSERT(false);
 		}
 	}
 
@@ -1396,7 +1466,6 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		else
 		{
 			log_print(LOG_ERROR, "Free ESENT: Failed to free the library with the error code %lu.", GetLastError());
-			_ASSERT(false);
 		}
 	}
 
@@ -1447,10 +1516,9 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			*instance = JET_instanceNil;
 		}
 
-		if(!string_is_empty(temporary_directory_path) && !delete_directory_and_contents(temporary_directory_path))
+		if(!delete_directory_and_contents(temporary_directory_path))
 		{
-			log_print(LOG_WARNING, "Failed to delete the temporary recovery directory and its contents with the error code %lu.", GetLastError());
-			_ASSERT(false);
+			log_print(LOG_ERROR, "Failed to delete the temporary recovery directory and its contents with the error code %lu.", GetLastError());
 		}
 	}
 
@@ -1509,7 +1577,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			{
 				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", find_data->cFileName);
 
-				if(!windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
+				if(windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
+				{
+					log_print(LOG_INFO, "Internet Explorer 10 to 11: Forcibly copied the database file '%ls' successfully to '%ls'.", find_data->cFileName, copy_destination_path);
+				}
+				else
 				{
 					log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to forcibly copy the database file '%ls' to the temporary recovery directory.", find_data->cFileName);
 				}

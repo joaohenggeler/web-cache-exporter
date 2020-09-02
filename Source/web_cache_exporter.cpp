@@ -74,7 +74,7 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"-export-shockwave    to export the Shockwave Player cache.\n"
 												"\n"
-												"-find-and-export-all    to export all of the above at once. This option does not have an optional cache path argument.\n"
+												"-find-and-export-all    to export all of the above at once, in the following order: IE > Flash > Shockwave. This option does not have an optional cache path argument.\n"
 												"\n"
 												"-explore-files    to export the files in a directory and its subdirectories. This option must have the cache path argument.\n"
 												"\n"
@@ -273,8 +273,8 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 			if(cache_type == NULL)
 			{
-				log_print(LOG_ERROR, "Missing web cache type in command line option '%s'", option);
-				console_print("Missing web cache type in command line option '%s'\n", option);
+				console_print("Missing web cache type in command line option '%s'.", option);
+				log_print(LOG_ERROR, "Argument Parsing: Missing web cache type in command line option '%s'", option);
 				exporter->cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
@@ -296,8 +296,8 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Unknown web cache type '%s' in command line option '%s'", cache_type, option);
-				console_print("Unknown web cache type '%s' in command line option '%s'\n", cache_type, option);
+				console_print("Unknown web cache type '%s' in command line option '%s'.", cache_type, option);
+				log_print(LOG_ERROR, "Argument Parsing: Unknown web cache type '%s' in command line option '%s'", cache_type, option);
 				exporter->cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
@@ -322,11 +322,20 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			seen_export_option = true;
 			break;
 		}
+		#ifdef DEBUG
+			else if(strings_are_equal(option, TEXT("-debug-assert")))
+			{
+				debug_log_print("Argument Parsing: Forcing failed assertion.");
+				_ASSERT(false);
+				success = false;
+				seen_export_option = true;
+				break;
+			}
+		#endif
 		else
 		{
-			log_print(LOG_ERROR, "Unknown command line option '%s'", option);
-			console_print("Unknown command line option '%s'\n", option);
-
+			console_print("Unknown command line option '%s'.", option);
+			log_print(LOG_ERROR, "Argument Parsing: Unknown command line option '%s'", option);
 			success = false;
 			break;
 		}
@@ -334,14 +343,14 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 	if(!seen_export_option)
 	{
-		console_print("Missing the -export option.");
+		console_print("Missing the an export option.");
 		log_print(LOG_ERROR, "Argument Parsing: The main -export option was not found.");
 		success = false;
 	}
 
 	if(!exporter->should_copy_files && !exporter->should_create_csv)
 	{
-		console_print("The options '-no-copy-files' and '-no-create-csv' can't be used at the same time.");
+		console_print("The options -no-copy-files and no-create-csv can't be used at the same time.");
 		log_print(LOG_ERROR, "Argument Parsing: The options '-no-copy-files' and '-no-create-csv' were used at the same time.");
 		success = false;
 	}
@@ -349,14 +358,14 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	if(exporter->should_load_specific_groups_files && exporter->num_group_filenames_to_load == 0)
 	{
 		console_print("The -load-group-files option requires one or more group filenames as its argument.");
-		log_print(LOG_ERROR, "Argument Parsing: The -load-group-files option was used without passing its value.");
+		log_print(LOG_ERROR, "Argument Parsing: The -load-group-files option was used but the supplied value does not contain filenames.");
 		success = false;
 	}
 
 	if(exporter->should_use_ie_hint && string_is_empty(exporter->ie_hint_path))
 	{
-		console_print("The -hint-ie option requires a path as its argument.");
-		log_print(LOG_ERROR, "Argument Parsing: The -hint-ie option was used without passing its value.");
+		console_print("The -hint-ie option requires a non-empty path as its argument.");
+		log_print(LOG_ERROR, "Argument Parsing: The -hint-ie option was used but the supplied path was empty.");
 		success = false;
 	}
 
@@ -402,7 +411,6 @@ static size_t get_temporary_memory_size_for_os_version(Exporter* exporter)
 		size_for_os_version = megabytes_to_bytes(3); // x1 or x2 for TCHAR
 		log_print(LOG_WARNING, "Get Startup Memory Size: Using %Iu bytes for the unhandled Windows version %lu.%lu.",
 								size_for_os_version, os_version.dwMajorVersion, os_version.dwMinorVersion);
-		_ASSERT(false);
 	}
 
 	return size_for_os_version * sizeof(TCHAR);
@@ -456,9 +464,10 @@ static void clean_up(Exporter* exporter)
 	>>>> 8. Create the permanent memory arena based on the number of group files. On error, terminate.
 	>>>> 9. Dynamically load any necessary functions.
 	>>>> 10. Find the location of the Temporary Files and Application Data directories.
-	>>>> 11. Delete the previous output directory if requested in the command line options.
-	>>>> 12. Start exporting the cache based on the command line options.
-	>>>> 13. Perform any clean up operations after finishing exporting. These are also done when any of the
+	>>>> 11. Delete any previous temporary exporter directories in this last location.
+	>>>> 12. Delete the previous output directory if requested in the command line options.
+	>>>> 13. Start exporting the cache based on the command line options.
+	>>>> 14. Perform any clean up operations after finishing exporting. These are also done when any of the
 	previous errors occur.
 */
 int _tmain(int argc, TCHAR* argv[])
@@ -491,8 +500,15 @@ int _tmain(int argc, TCHAR* argv[])
 	{
 		const size_t NUM_IE_VERSION_CHARS = 32;
 		TCHAR ie_version[NUM_IE_VERSION_CHARS] = TEXT("");
-		find_internet_explorer_version(ie_version, sizeof(ie_version));
-		log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);
+		if(find_internet_explorer_version(ie_version, sizeof(ie_version)))
+		{
+			log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Startup: Failed to get Internet Explorer's version with the error code %lu.", GetLastError());
+		}
+		
 		log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
 	}
 
@@ -519,6 +535,7 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 
 		#ifdef BUILD_9X
+			// Create a smaller, secondary memory arena for Windows 98 and ME. This will be used when loading group files.
 			temporary_memory_size /= 10;
 			log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the secondary temporary memory arena.", temporary_memory_size);
 
@@ -577,17 +594,26 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 	#endif
 
-	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0
-		&& create_temporary_directory(exporter.windows_temporary_path, exporter.exporter_temporary_path))
+	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0)
 	{
-		exporter.was_temporary_exporter_directory_created = true;
-		log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.exporter_temporary_path);
+		log_print(LOG_INFO, "Startup: Deleting any previous temporary exporter directories with the prefix '%s'.", TEMPORARY_NAME_PREFIX);
+		delete_all_temporary_directories(exporter.windows_temporary_path);
+
+		if(create_temporary_directory(exporter.windows_temporary_path, exporter.exporter_temporary_path))
+		{
+			exporter.was_temporary_exporter_directory_created = true;
+			log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.exporter_temporary_path);
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Startup: Failed to create the temporary exporter directory with error code %lu.", GetLastError());
+		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Startup: Failed to create the temporary exporter directory with error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Startup: Failed to get the Temporary Files directory path with error code %lu.", GetLastError());
 	}
-	
+
 	if(!get_special_folder_path(CSIDL_APPDATA, exporter.roaming_appdata_path))
 	{
 		log_print(LOG_ERROR, "Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
@@ -661,7 +687,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- WinINet Cache Path: '%s'", exporter.wininet_cache_path);
 
 	log_print_newline();
-	
+
 	switch(exporter.cache_type)
 	{
 		case(CACHE_INTERNET_EXPLORER):
@@ -689,12 +715,15 @@ int _tmain(int argc, TCHAR* argv[])
 			_ASSERT(exporter.is_exporting_from_default_locations);
 			_ASSERT(string_is_empty(exporter.cache_path));
 
+			console_print("Exporting Internet Explorer's cache...");
 			export_specific_or_default_internet_explorer_cache(&exporter);
 			log_print_newline();
 
+			console_print("Exporting the Flash Plugin's cache...");
 			export_specific_or_default_flash_plugin_cache(&exporter);
 			log_print_newline();
 
+			console_print("Exporting the Shockwave Plugin's cache...");
 			export_specific_or_default_shockwave_plugin_cache(&exporter);
 		} break;
 
@@ -709,7 +738,6 @@ int _tmain(int argc, TCHAR* argv[])
 		default:
 		{
 			log_print(LOG_ERROR, "Startup: Attempted to export the cache from '%s' using the unhandled cache type %d.", exporter.cache_path, exporter.cache_type);
-			_ASSERT(false);
 		} break;
 	}
 

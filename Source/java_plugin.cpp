@@ -444,7 +444,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index)
 					}
 					utf_8_str[actual_length] = '\0';
 
-					index->version = copy_utf_8_string_to_tchar(arena, utf_8_str);
+					index->version = convert_utf_8_string_to_tchar(arena, utf_8_str);
 				}
 			}
 

@@ -30,6 +30,8 @@
 	and "https://download.example.com/path/updates/file.php?version=123&platform=ABC#top". This check allows you to match subdomains.
 	1b. Using the same example, if a group specifies "example.com/path", it will match the last two URLs. If a group instead specifies
 	"example.com/path/updates", it will only match the last one.
+	1c. If a group specifies "example.<TLD>", it will match any top level domain, like "example.com", "example.net", "example.org", etc.
+
 
 	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
 	starts with a ';' character, then it's considered a comment and is not processed. All group files must end in a newline.
@@ -63,6 +65,7 @@
 		BEGIN_DOMAINS
 			cartoonnetwork.com
 			turner.com/toon
+			cartoonnetworkhq.<TLD>
 		END
 
 	END
@@ -86,6 +89,7 @@ static const TCHAR* BYTE_DELIMITERS = TEXT(" ");
 static const char* BEGIN_MIME_TYPES = "BEGIN_MIME_TYPES";
 static const char* BEGIN_FILE_EXTENSIONS = "BEGIN_FILE_EXTENSIONS";
 static const char* BEGIN_DOMAINS = "BEGIN_DOMAINS";
+static const TCHAR* ANY_TOP_LEVEL_DOMAIN = TEXT(".<TLD>");
 static const TCHAR* URL_PATH_DELIMITERS = TEXT("/");
 
 // The maximum size of the file signature buffer in bytes.
@@ -270,7 +274,7 @@ static u32 count_tokens_delimited_by_spaces(TCHAR* str)
 // @Parameters:
 // 1. permanent_arena - The Arena structure that will receive the final converted TCHAR string.
 // 2. temporary_arena - The Arena structure that will be used to store an intermediary UTF-16 string on Windows 98 and ME.
-// See: copy_utf_8_string_to_tchar().
+// See: convert_utf_8_string_to_tchar().
 // 3. list_line - The current line of delimited values.
 // 4. token_delimiters - The character delimiters.
 // 5. token_strings - The currently processed strings tokens stored contiguously in memory. You must pass NULL when calling this
@@ -289,7 +293,7 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 	while(token != NULL)
 	{
 		++(*token_counter);
-		copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, token);
+		convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, token);
 		token = strtok_s(NULL, token_delimiters, &remaining_tokens);
 	}
 }
@@ -406,11 +410,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						u32 byte_idx = 0;
 						while(byte_string != NULL)
 						{
-							if(byte_idx >= num_bytes)
-							{
-								_ASSERT(false);
-								break;
-							}
+							_ASSERT(byte_idx < num_bytes);
 
 							if(strings_are_equal(byte_string, TEXT("__")))
 							{
@@ -487,7 +487,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						TCHAR* path = NULL;
 						TCHAR* host = _tcstok_s(domain_strings, URL_PATH_DELIMITERS, &path);
 
-						if(string_ends_with(host, TEXT(".<TLD>")))
+						if(string_ends_with(host, ANY_TOP_LEVEL_DOMAIN))
 						{
 							domain->any_top_level_domain = true;
 							TCHAR* last_period = _tcsrchr(host, TEXT('.'));
@@ -563,7 +563,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							group = &group_array[group_idx];
 
 							group->type = current_group_type;
-							group->name = copy_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
+							group->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
 
 							// Clear the data for each group type.
 							if(current_group_type == GROUP_FILE)
@@ -576,6 +576,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							}
 							else
 							{
+								// @Assert: Make sure we handle each group type.
 								_ASSERT(false);
 							}
 						}
@@ -615,7 +616,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							// We only allow one file signature per line, and the way each token (byte) is delimited is different.
 							++num_file_signatures;
 							if(file_signature_strings == NULL) file_signature_strings = push_arena(temporary_arena, 0, TCHAR);
-							copy_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
+							convert_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
 						} break;
 
 						// Add each MIME type (multiple per line).
@@ -659,7 +660,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						{
 							++num_domains;
 							if(domain_strings == NULL) domain_strings = push_arena(temporary_arena, 0, TCHAR);
-							copy_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
+							convert_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
 						} break;
 					}
 				} break;
@@ -759,7 +760,6 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	if(num_group_files == 0)
 	{
 		log_print(LOG_ERROR, "Load All Group Files: Expected to load %I32u groups from at least one file on disk, but no files were found. No groups will be loaded.", num_groups);
-		_ASSERT(false);
 		return;
 	}
 
@@ -774,7 +774,6 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	// The number of groups is always greater than zero here.
 	size_t custom_groups_size = sizeof(Custom_Groups) + sizeof(Group) * (num_groups - 1);
 	Custom_Groups* custom_groups = push_arena(permanent_arena, custom_groups_size, Custom_Groups);
-	custom_groups->num_groups = num_groups;
 
 	// The global group counter that is used to keep track of each group's place in the array.
 	u32 num_processed_groups = 0;
@@ -790,10 +789,10 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 						&num_processed_groups, &max_num_file_signature_bytes);
 	}
 
+	custom_groups->num_groups = num_processed_groups;
 	if(num_processed_groups != num_groups)
 	{
 		log_print(LOG_ERROR, "Load All Group Files: Loaded %I32u groups when %I32u were expected.", num_processed_groups, num_groups);
-		_ASSERT(false);
 	}
 
 	log_print(LOG_INFO, "Load All Group Files: Allocating %I32u bytes for the file signature buffer.", max_num_file_signature_bytes);

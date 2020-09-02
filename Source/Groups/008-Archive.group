@@ -1,21 +1,32 @@
-BEGIN_FILE_GROUP ZIP
+BEGIN_FILE_GROUP 7-Zip
 
 	BEGIN_FILE_SIGNATURES
-		; "PK.."
-		50 4B 03 04
-		; Empty archive
-		50 4B 05 06
-		; Split or spanned archive
-		50 4B 07 08
+		; "7z¼¯'."
+		37 7A BC AF 27 1C
 	END
 
 	BEGIN_MIME_TYPES
-		application/zip
-		application/x-zip-compressed
+		application/x-7z-compressed
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		zip
+		7z
+	END
+
+END
+
+BEGIN_FILE_GROUP GZIP
+
+	BEGIN_FILE_SIGNATURES
+		1F 8B
+	END
+
+	BEGIN_MIME_TYPES
+		application/gzip
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		gz
 	END
 
 END
@@ -40,19 +51,24 @@ BEGIN_FILE_GROUP RAR
 
 END
 
-BEGIN_FILE_GROUP 7-Zip
+BEGIN_FILE_GROUP ZIP
 
 	BEGIN_FILE_SIGNATURES
-		; "7z¼¯'."
-		37 7A BC AF 27 1C
+		; "PK.."
+		50 4B 03 04
+		; Empty archive
+		50 4B 05 06
+		; Split or spanned archive
+		50 4B 07 08
 	END
 
 	BEGIN_MIME_TYPES
-		application/x-7z-compressed
+		application/zip
+		application/x-zip-compressed
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		7z
+		zip
 	END
 
 END

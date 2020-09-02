@@ -55,6 +55,26 @@ BEGIN_FILE_GROUP Executable
 
 END
 
+BEGIN_FILE_GROUP PDF
+
+	BEGIN_FILE_SIGNATURES
+		; "%PDF"
+		25 50 44 46
+	END
+
+	BEGIN_MIME_TYPES
+		application/pdf
+		application/x-pdf
+		application/x-bzpdf
+		application/x-gzpdf
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		pdf
+	END
+
+END
+
 ; Note that screensavers and Silverlight applications share the .scr file extension. We'll always label these files as screensavers.
 BEGIN_FILE_GROUP Screensaver
 

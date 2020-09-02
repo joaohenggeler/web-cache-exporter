@@ -84,7 +84,6 @@ bool create_arena(Arena* arena, size_t total_size)
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Create Arena: Failed to allocate %Iu bytes with the error code %lu.", total_size, GetLastError());
-		_ASSERT(false);
 	}
 
 	return success;
@@ -109,7 +108,6 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 	if(arena->available_memory == NULL)
 	{
 		log_print(LOG_ERROR, "Aligned Push Arena: Failed to push %Iu bytes since no memory was previously allocated.", push_size);
-		_ASSERT(false);
 		return NULL;
 	}
 
@@ -232,7 +230,6 @@ void clear_arena(Arena* arena)
 	if(arena->available_memory == NULL)
 	{
 		log_print(LOG_ERROR, "Clear Arena: Failed to clear the arena since no memory was previously allocated.");
-		_ASSERT(false);
 		return;
 	}
 
@@ -309,6 +306,20 @@ void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low)
 	*high = (u32) (value >> 32);
 }
 
+// Separates an unsigned 32-bit integer into its high and low 16-bit parts.
+//
+// @Parameters:
+// 1. value - The 32-bit value to separate into two 16-bit integers.
+// 2. high - The resulting high 16 bits of the 32-bit value.
+// 3. low - The resulting low 16 bits of the 32-bit value.
+//
+// @Returns: Nothing.
+void separate_u32_into_high_and_low_u16s(u32 value, u16* high, u16* low)
+{
+	*low = (u16) (value & 0xFFFF);
+	*high = (u16) (value >> 16);
+}
+
 // Advances a pointer by a given number of bytes.
 //
 // @Parameters:
@@ -377,11 +388,20 @@ size_t megabytes_to_bytes(size_t megabytes)
 	return megabytes * 1024 * 1024;
 }
 
+// Swaps the byte order of an integer. Supported types: u8, s8, u16, s16, u32, s32, u64, s64.
+//
+// @Parameters:
+// 1. value - The integer.
+//
+// @Returns: The integer with reversed byte order.
+
+// For function overloading convenience only.
 u8 swap_byte_order(u8 value)
 {
 	return value;
 }
 
+// For function overloading convenience only.
 s8 swap_byte_order(s8 value)
 {
 	return value;
@@ -760,7 +780,7 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 // 2. ansi_string - The ANSI string to convert and copy to the arena.
 //
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
-TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
+TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 {
 	#ifdef BUILD_9X
 		// In Windows 98 and ME, the resulting TCHAR string is also an ANSI string.
@@ -772,8 +792,7 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		if(num_chars_required == 0)
 		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a Wide string with the error code %lu.", ansi_string, GetLastError());
-			_ASSERT(false);
+			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a wide string with the error code %lu.", ansi_string, GetLastError());
 			return NULL;
 		}
 
@@ -782,8 +801,7 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, wide_string, num_chars_required) == 0)
 		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a Wide string with the error code %lu.", ansi_string, GetLastError());
-			_ASSERT(false);
+			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a wide string with the error code %lu.", ansi_string, GetLastError());
 			return NULL;
 		}
 
@@ -804,13 +822,12 @@ TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 // 3. utf_8_string - The UTF-8 string to convert and copy to the arena.
 //
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
-TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string)
+TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string)
 {
 	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
 	if(num_chars_required_wide == 0)
 	{
 		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a wide string with the error code %lu.", GetLastError());
-		_ASSERT(false);
 		return NULL;
 	}
 
@@ -825,7 +842,6 @@ TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena,
 	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
 	{
 		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a wide string with the error code %lu.", GetLastError());
-		_ASSERT(false);
 		return NULL;
 	}
 
@@ -834,7 +850,6 @@ TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena,
 		if(size_required_ansi == 0)
 		{
 			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
-			_ASSERT(false);
 			return NULL;
 		}
 
@@ -842,7 +857,6 @@ TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena,
 		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
 		{
 			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
-			_ASSERT(false);
 			return NULL;
 		}
 
@@ -852,9 +866,9 @@ TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena,
 	#endif
 }
 
-TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
+TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
 {
-	return copy_utf_8_string_to_tchar(arena, arena, utf_8_string);
+	return convert_utf_8_string_to_tchar(arena, arena, utf_8_string);
 }
 
 // Skips to the null terminator character in a string.
@@ -909,10 +923,8 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 //
 // This syntax follows RFC 3986, although this function will accept empty path and host components in order to accommodate
 // certain URL structures that may show up in cache databases. For example:
-// - No path: "http://www.example.com/", where the server would serve, for example, "http://www.example.com/index.html".
+// - No path: "http://www.example.com" or http://www.example.com/", where the server would serve "http://www.example.com/index.html".
 // - No Host: "file:///C:\Users\<Username>\Desktop", where the host is localhost.
-// Note that even an empty path requires a separator after the authority. For example, "http://www.example.com/" is valid
-// but "http://www.example.com" isn't.
 //
 // In these cases, the resulting component would be an empty string, and not a NULL pointer. This means that, on success,
 // the host (if the authority exists) and path members in the Url_Parts structure will always be strings (empty or otherwise).
@@ -923,21 +935,23 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 // 3. url_parts - The Url_Parts structure that receives the pointers to the various URL components that were copied to the
 // memory arena. All these pointers are initially set to NULL.
 //
-// @Returns: True if the function succeeds. Otherwise, false.
+// @Returns: True if the function succeeds. Otherwise, false. This function fails in the following situations:
+// 1. The supplied URL is NULL or empty.
+// 2. The supplied URL doesn't have a scheme.
+// 3. The supplied URL has an authority identifier but nothing after it (e.g. "http://").
 bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts)
 {
 	ZeroMemory(url_parts, sizeof(Url_Parts));
 
-	if(original_url == NULL) return false;
+	if(original_url == NULL || string_is_empty(original_url)) return false;
 
 	TCHAR* url = push_string_to_arena(arena, original_url);
 	TCHAR* remaining_url = NULL;
 	TCHAR* scheme = _tcstok_s(url, TEXT(":"), &remaining_url);
 
-	if(scheme == NULL || string_is_empty(scheme))
+	if(scheme == NULL || string_is_empty(scheme) || string_is_empty(remaining_url))
 	{
 		log_print(LOG_WARNING, "Partition Url: Missing the scheme in '%s'.", original_url);
-		_ASSERT(false);
 		return false;
 	}
 
@@ -956,13 +970,11 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 		}
 		else
 		{
-			// Check if the path has at least one separator (either a URL path or Windows directory separator).
-			// Otherwise, we wouldn't know where the authority ends and the path begins. Here we already know that
-			// the authority exists, but we need to know where the host/port end and the path begins.
-			bool has_path_separator = (_tcschr(remaining_url, TEXT('/')) != NULL) || (_tcschr(remaining_url, TEXT('\\')) != NULL);
+			// Split the authority from the path. If there's no forward slash or backslash separator (either
+			// a URL path or Windows directory separator), the remaining URL is the host.
+			// For example, "http://www.example.com" results in the host "www.example.com" and an empty path.
 			TCHAR* authority = _tcstok_s(NULL, TEXT("/\\"), &remaining_url);
-
-			if(has_path_separator && authority != NULL)
+			if(authority != NULL)
 			{
 				TCHAR* remaining_authority = NULL;
 				
@@ -988,13 +1000,13 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 				// Leave the userinfo and port set to NULL or copy their actual value if they exist.
 				if(userinfo != NULL) url_parts->userinfo = push_string_to_arena(arena, userinfo);
 				if(port != NULL) url_parts->port = push_string_to_arena(arena, port);
+
+				_ASSERT(url_parts->host != NULL);
 			}
 			else
 			{
-				// We don't have a path or can't distinguish between the authority and the path.
-				// E.g. "http://www.example.com" or "http://www.example.compath".
-				log_print(LOG_WARNING, "Partition Url: Found authority but missing the path in '%s'.", original_url);
-				_ASSERT(false);
+				// For cases like "scheme://". Note that "scheme:///" is allowed, and results in an empty host and path.
+				log_print(LOG_WARNING, "Partition Url: Found authority identifier but missing the value itself in '%s'.", original_url);
 				return false;
 			}
 		}
@@ -1004,14 +1016,16 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	// end of the string (if there's no query).
 	TCHAR* query_in_path = _tcschr(remaining_url, TEXT('?'));
 	TCHAR* fragment_in_path = _tcschr(remaining_url, TEXT('#'));
+	// If there's a fragment but no query symbol, or if both exist and the fragment appears before the query.
+	// For example, "http://www.example.com/path#top" or "http://www.example.com/path#top?".
 	bool does_fragment_appear_before_query = (fragment_in_path != NULL && query_in_path == NULL)
 							|| (fragment_in_path != NULL && query_in_path != NULL && fragment_in_path < query_in_path);
 
 	TCHAR* path = _tcstok_s(NULL, TEXT("?#"), &remaining_url);
-	// We'll allow empty paths (even though they're required by the RFC) because the cache's index/database
-	// file might store some of them like this. E.g. the resource "http://www.example.com/index.html" might
-	// have its URL stored as "http://www.example.com/" since the server would know to serve the index.html
-	// file for that request.
+	// We'll allow empty paths because the cache's index/database file might store some of them like this.
+	// E.g. the resource "http://www.example.com/index.html" might have its URL stored as "http://www.example.com/"
+	// since the server would know to serve the index.html file for that request. URLs with no slash after the
+	// host (e.g. "http://www.example.com") are treated the same way (see the authority above).
 	if(path == NULL) path = TEXT("");
 	url_parts->path = push_string_to_arena(arena, path);
 
@@ -1021,6 +1035,8 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	// Leave the query and fragment set to NULL or copy their actual value if they exist.
 	if(query != NULL) url_parts->query = push_string_to_arena(arena, query);
 	if(fragment != NULL) url_parts->fragment = push_string_to_arena(arena, fragment);
+
+	_ASSERT(url_parts->path != NULL);
 
 	return true;
 }
@@ -1073,7 +1089,6 @@ bool decode_url(TCHAR* url)
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
-		_ASSERT(false);
 	}
 
 	return success;
@@ -1099,8 +1114,6 @@ static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_pa
 	Url_Parts url_parts = {};
 	if(partition_url(arena, url, &url_parts))
 	{
-		_ASSERT(url_parts.path != NULL);
-
 		result_path[0] = TEXT('\0');
 
 		if(url_parts.host != NULL)
@@ -1377,7 +1390,6 @@ static void truncate_path_components(TCHAR* path)
 	{
 		maximum_component_length = 255;
 		log_print(LOG_WARNING, "Truncate Path Segments: Failed to get the maximum component length with the error code %lu. This value will default to %lu.", GetLastError(), maximum_component_length);
-		_ASSERT(false);
 	}
 
 	WHILE_TRUE()
@@ -1587,7 +1599,6 @@ void safe_unmap_view_of_file(void** base_address)
 	else
 	{
 		log_print(LOG_WARNING, "Safe Unmap View Of File: Attempted to unmap an invalid address.");
-		_ASSERT(false);
 	}
 }
 
@@ -1675,7 +1686,6 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 				{
 					TCHAR subdirectory_path[MAX_PATH_CHARS] = TEXT("");
 					PathCombine(subdirectory_path, path, filename);
-					_ASSERT(!string_is_empty(subdirectory_path));
 
 					traverse_directory_objects(	subdirectory_path, search_query,
 												traversal_flags, should_traverse_subdirectories,
@@ -1710,7 +1720,6 @@ void create_directories(const TCHAR* path_to_create)
 	if(!get_full_path_name(path_to_create, path, MAX_CREATE_DIRECTORY_PATH_CHARS))
 	{
 		log_print(LOG_ERROR, "Create Directory: Failed to create the directory in '%s' because its fully qualified path could not be determined with the error code %lu.", path_to_create, GetLastError());
-		_ASSERT(false);
 		return;
 	}
 
@@ -1744,7 +1753,6 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	if(string_is_empty(directory_path))
 	{
 		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory since its path was empty.");
-		_ASSERT(false);
 		return false;
 	}
 
@@ -1752,8 +1760,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	TCHAR path_to_delete[MAX_PATH_CHARS + 1] = TEXT("");
 	if(!get_full_path_name(directory_path, path_to_delete))
 	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' since its fully qualified path couldn't be determined.", directory_path);
-		_ASSERT(false);
+		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' since its fully qualified path could not be determined with the error code %lu.", directory_path, GetLastError());
 		return false;
 	}
 
@@ -1794,7 +1801,7 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	u32 unique_id = GetTickCount();
 	do
 	{
-		create_success = GetTempFileName(base_temporary_path, TEXT("WCE"), unique_id, result_directory_path) != 0
+		create_success = GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, unique_id, result_directory_path) != 0
 						&& CreateDirectory(result_directory_path, NULL) == TRUE;
 		++unique_id;
 	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
@@ -1802,6 +1809,30 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	return create_success;
 }
 
+// Called every time a directory is found in a base temporary location. Used by delete_all_temporary_directories() to delete
+// every temporary exporter directory.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: Nothing.
+static TRAVERSE_DIRECTORY_CALLBACK(find_temporary_directories_callback)
+{
+	TCHAR full_directory_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(full_directory_path, directory_path, find_data->cFileName);
+	delete_directory_and_contents(full_directory_path);
+}
+
+// Deletes every directory in a given location whose name starts with the exporter's identifier.
+//
+// @Parameters:
+// 1. base_temporary_path - The base path where the directories will be searched and deleted from.
+// 
+// @Returns: Nothing.
+void delete_all_temporary_directories(const TCHAR* base_temporary_path)
+{
+	traverse_directory_objects(	base_temporary_path, TEMPORARY_NAME_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false,
+								find_temporary_directories_callback, NULL);
+}
 
 // Copies a file to a temporary location with a unique name, and returns the destination path and file handle.
 // The file is deleted when this handle is closed. This ensures that, even if the program crashes, Windows closes the handle
@@ -1824,7 +1855,7 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 	bool copy_success = false;
 	bool get_handle_success = false;
 
-	copy_success = GetTempFileName(base_temporary_path, TEXT("WCE"), 0, result_file_destination_path) != 0
+	copy_success = GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, 0, result_file_destination_path) != 0
 					&& CopyFile(file_source_path, result_file_destination_path, FALSE) == TRUE;
 
 	if(copy_success)
@@ -1975,7 +2006,6 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 		if(num_naming_collisions == 0)
 		{
 			log_print(LOG_ERROR, "Copy File Using Url Structure: Wrapped around the number of naming collisions for the file '%s'. This file will not be copied.", filename);
-			_ASSERT(false);
 			break;
 		}
 
@@ -1993,7 +2023,6 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 		if(!naming_success)
 		{
 			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to resolve the naming collision %I32u for the file '%s'. This file will not be copied.", num_naming_collisions, filename);
-			_ASSERT(false);
 			break;
 		}
 		
@@ -2261,7 +2290,6 @@ bool create_log_file(const TCHAR* log_file_path)
 	if(GLOBAL_LOG_FILE_HANDLE != INVALID_HANDLE_VALUE)
 	{
 		log_print(LOG_ERROR, "Create Log File: Attempted to create a second log file in '%s' when the current one is still open.", log_file_path);
-		_ASSERT(false);
 		return false;
 	}
 
@@ -2520,7 +2548,6 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type colum
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
 		log_print(LOG_ERROR, "Csv Print Header: Attempted to add the header to a CSV file that wasn't been opened yet.");
-		_ASSERT(false);
 		return;
 	}
 
@@ -2572,7 +2599,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
 		log_print(LOG_ERROR, "Csv Print Row: Attempted to add the header to a CSV file that wasn't been opened yet.");
-		_ASSERT(false);
 		return;
 	}
 
@@ -2689,7 +2715,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 	static NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
 	{
 		log_print(LOG_WARNING, "NtQuerySystemInformation: Calling the stub version of this function.");
-		_ASSERT(false);
 		return STATUS_NOT_IMPLEMENTED;
 	}
 	#pragma warning(pop)
@@ -2710,7 +2735,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 		if(ntdll_library != NULL)
 		{
 			log_print(LOG_WARNING, "Load Ntdll Functions: The library was already loaded.");
-			_ASSERT(false);
 			return;
 		}
 
@@ -2722,7 +2746,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 		else
 		{
 			log_print(LOG_ERROR, "Load Ntdll Functions: Failed to load the library with error code %lu.", GetLastError());
-			_ASSERT(false);
 		}
 	}
 
@@ -2748,7 +2771,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 		else
 		{
 			log_print(LOG_ERROR, "Free Ntdll: Failed to free the library with the error code %lu.", GetLastError());
-			_ASSERT(false);
 		}
 	}
 
@@ -2781,7 +2803,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 		if(kernel32_library != NULL)
 		{
 			log_print(LOG_WARNING, "Load Kernel32 Functions: The library was already loaded.");
-			_ASSERT(false);
 			return;
 		}
 
@@ -2793,7 +2814,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 		else
 		{
 			log_print(LOG_ERROR, "Load Kernel32 Functions: Failed to load the library with error code %lu.", GetLastError());
-			_ASSERT(false);
 		}
 	}
 
@@ -2819,7 +2839,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 		else
 		{
 			log_print(LOG_ERROR, "Free Kernel32: Failed to free the library with the error code %lu.", GetLastError());
-			_ASSERT(false);
 		}
 	}
 
@@ -2965,6 +2984,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 	// You should use the CopyFile() function from the Windows API first, and only use this one if CopyFile() fails with the error
 	// code ERROR_SHARING_VIOLATION.
 	//
+	// Note that this function will clear the supplied memory arena before returning.
+	//
 	// @Parameters:
 	// 1. arena - The Arena structure where the file buffer and any intermediary information about the currently opened handles
 	// is stored.
@@ -3026,6 +3047,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 				OVERLAPPED overlapped = {};
 				
 				bool reached_end_of_file = false;
+				const u32 NUM_READ_RETRY_LIMIT = 10;
 				u32 num_read_retry_attempts = 0;
 
 				do
@@ -3059,8 +3081,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 								}
 								else
 								{
-									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far.", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written);
-									_ASSERT(false);
+									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation.", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written);
+									++num_read_retry_attempts;
+									continue;
 								}
 							}
 						}
@@ -3071,8 +3094,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 						}
 						else
 						{
-							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far.", copy_source_path, read_error_code, total_bytes_read, total_bytes_written);
-							_ASSERT(false);
+							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation.", copy_source_path, read_error_code, total_bytes_read, total_bytes_written);
+							++num_read_retry_attempts;
+							continue;
 						}
 					}
 
@@ -3098,13 +3122,20 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 						_ASSERT(num_bytes_read == 0);
 					}
 
-				} while(!reached_end_of_file);
+				} while(!reached_end_of_file && num_read_retry_attempts <= NUM_READ_RETRY_LIMIT);
 
 				clear_arena(arena);
 
 				if(num_read_retry_attempts > 0)
 				{
-					log_print(LOG_INFO, "Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
+					if(reached_end_of_file)
+					{
+						log_print(LOG_INFO, "Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
+					}
+					else
+					{
+						log_print(LOG_ERROR, "Force Copy Open File: Failed to reach the end of file after retrying the read operations %I32u times. Read %I64u and wrote %I64u bytes in total.", num_read_retry_attempts, total_bytes_read, total_bytes_written);
+					}
 				}
 
 				// This isn't a great way to verify if we copied everything successfully but it works for now...

@@ -54,6 +54,7 @@ bool destroy_arena(Arena* arena);
 
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
+void separate_u32_into_high_and_low_u16s(u32 value, u16* high, u16* low);
 void* advance_bytes(void* pointer, u32 num_bytes);
 void* advance_bytes(void* pointer, u64 num_bytes);
 void* retreat_bytes(void* pointer, u32 num_bytes);
@@ -71,12 +72,6 @@ u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
 
 /*
-_byteswap_ushort
-_byteswap_ulong
-_byteswap_uint64
-*/
-
-/*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>> DATE AND TIME FORMATTING
@@ -86,16 +81,11 @@ _byteswap_uint64
 
 // A structure that represents an MS-DOS date and time values.
 // See: format_dos_date_time().
-// Tightly packed because it will be used when defining other packed structures that represent different file formats.
-#pragma pack(push, 1)
 struct Dos_Date_Time
 {
 	u16 date;
 	u16 time;
 };
-#pragma pack(pop)
-_STATIC_ASSERT(sizeof(Dos_Date_Time) == sizeof(u32));
-_STATIC_ASSERT(sizeof(FILETIME) == sizeof(u64));
 
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
@@ -141,9 +131,9 @@ bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
-TCHAR* copy_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
-TCHAR* copy_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string);
-TCHAR* copy_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
+TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
+TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string);
+TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
 TCHAR* skip_to_end_of_string(TCHAR* str);
 TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings);
 
@@ -218,7 +208,13 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 
 void create_directories(const TCHAR* path_to_create);
 bool delete_directory_and_contents(const TCHAR* directory_path);
+
+#define _TEMPORARY_NAME_PREFIX TEXT("WCE")
+#define _TEMPORARY_NAME_SEARCH_QUERY _TEMPORARY_NAME_PREFIX TEXT("*")
+const TCHAR* const TEMPORARY_NAME_PREFIX = _TEMPORARY_NAME_PREFIX;
+const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
+void delete_all_temporary_directories(const TCHAR* base_temporary_path);
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
 bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_file_path, 
 												const TCHAR* full_base_directory_path, const TCHAR* url, const TCHAR* filename);

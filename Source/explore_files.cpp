@@ -35,10 +35,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
-		{NULL}, {NULL}, {NULL},
-		{NULL}, {NULL}, {NULL},
-		{NULL},
-		{NULL}
+		{/* Filename */}, {/* File Extension */}, {/* File Size */},
+		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
+		{/* Location On Disk */},
+		{/* Custom File Group */}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;

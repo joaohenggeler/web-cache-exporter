@@ -93,6 +93,16 @@ public class GenerateIndexFiles {
 				stream.write(padding);
 		    }
 
+		    // "abc__123__íñ__xx__Ĉ߷__Ⅷꦅ__ガ䷀"
+		    String str = "abc__123__\u00ED\u00F1__\u0108\u07F7__\u2167\uA985__\u30AC\u4DC0";
+		    // 1 byte = \u0001 to \u007f
+		    // 2 bytes = \u0080 to \u07FF
+		    // 3 bytes = \u0800 to \uFFFF
+		    stream.writeUTF(str);
+		    stream.writeUTF(str);
+		    stream.writeUTF(str);
+		    stream.writeUTF(str);
+
 			stream.close();
 
 		} catch(IOException e) {

@@ -840,10 +840,18 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,
 						WIN32_FIND_DATA* optional_find_data)
 {
-	if(optional_find_data != NULL) entry_filename = optional_find_data->cFileName;
-
 	_ASSERT(full_entry_path != NULL);
-	_ASSERT(entry_filename != NULL);
+
+	if(optional_find_data != NULL) entry_filename = optional_find_data->cFileName;
+	
+	TCHAR unique_filename[MAX_PATH_CHARS] = TEXT("");
+	if(entry_filename == NULL)
+	{
+		++(exporter->num_nameless_files);
+		StringCchPrintf(unique_filename, MAX_PATH_CHARS, TEXT("WCE-%Iu"), exporter->num_nameless_files);
+		entry_filename = unique_filename;
+
+	}
 
 	Arena* temporary_arena = &(exporter->temporary_arena);
 

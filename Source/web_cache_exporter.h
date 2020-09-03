@@ -85,7 +85,9 @@
 	#include <shlwapi.h>
 #pragma warning(pop)
 
-#include <crtdbg.h> // For _ASSERT() and _STATIC_ASSERT()
+#include <time.h> // For _gmtime64_s() and _tcsftime().
+
+#include <crtdbg.h> // For _ASSERT() and _STATIC_ASSERT().
 
 // Information about the current build that is passed by the Build.bat batch file.
 #ifdef BUILD_VERSION
@@ -230,6 +232,7 @@ struct Exporter
 	size_t num_csv_files_created;
 	size_t num_processed_files;
 	size_t num_copied_files;
+	size_t num_nameless_files;
 };
 
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,

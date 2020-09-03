@@ -55,6 +55,7 @@ bool destroy_arena(Arena* arena);
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
 void separate_u32_into_high_and_low_u16s(u32 value, u16* high, u16* low);
+void* advance_bytes(void* pointer, u16 num_bytes);
 void* advance_bytes(void* pointer, u32 num_bytes);
 void* advance_bytes(void* pointer, u64 num_bytes);
 void* retreat_bytes(void* pointer, u32 num_bytes);
@@ -90,6 +91,7 @@ struct Dos_Date_Time
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
+bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -256,7 +258,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 // Writes a formatted TCHAR string to the standard output stream. This string will be followed by two newline characters.
 //
 // @Parameters:
-// 1. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide Unicode strings, and %s for TCHAR
+// 1. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
 // strings (ANSI or Wide depending on the build target).
 // 2. ... - Zero or more arguments to be inserted in the format string.
 #define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n\n"), __VA_ARGS__)
@@ -345,6 +347,10 @@ enum Csv_Type
 	// Shockwave Plugin specific.
 	CSV_DIRECTOR_FILE_TYPE,
 
+	// Java Plugin specific.
+	CSV_CODEBASE_IP,
+	CSV_VERSION,
+
 	NUM_CSV_TYPES
 };
 
@@ -359,7 +365,9 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Location On Cache", "Location On Disk", "Missing File",
 	"Custom File Group", "Custom URL Group",
 	"Hits",
-	"Director File Type"
+	"Director File Type",
+	"Codebase IP",
+	"Version"
 };
 
 // A helper structure used to write values to the CSV file. The 'value' member is the ANSI or Wide string to write, and

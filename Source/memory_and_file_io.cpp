@@ -327,6 +327,11 @@ void separate_u32_into_high_and_low_u16s(u32 value, u16* high, u16* low)
 // 2. num_bytes - The number of bytes to move.
 //
 // @Returns: The moved pointer value.
+void* advance_bytes(void* pointer, u16 num_bytes)
+{
+	return ((char*) pointer) + num_bytes;
+}
+
 void* advance_bytes(void* pointer, u32 num_bytes)
 {
 	return ((char*) pointer) + num_bytes;
@@ -447,15 +452,15 @@ s64 swap_byte_order(s64 value)
 	@NextSection
 */
 
-// Converts a datetime value to a string with the format "YYYY-MM-DD hh:mm:ss".
-// Supported datetime structures: FILETIME and Dos_Date_Time.
+// Converts a date time value to a string with the format "YYYY-MM-DD hh:mm:ss".
+// Supported date time types and structures: FILETIME, Dos_Date_Time, __time64_t.
 //
 // @Parameters:
-// 1. date_time - The datetime value to format. If this value is zero, the resulting string will be empty.
+// 1. date_time - The date time value to format. If this value is zero, the resulting string will be empty.
 // 2. formatted_string - The resulting formatted string. This string must be able to hold MAX_FORMATTED_DATE_TIME_CHARS
 // characters.
 //
-// @Returns: True if the datetime value was formatted correctly. Otherwise, it returns false and the resulting
+// @Returns: True if the date time value was formatted correctly. Otherwise, it returns false and the resulting
 // formatted string will be empty.
 
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
@@ -468,11 +473,11 @@ bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
 
 	SYSTEMTIME dt = {};
 	bool success = FileTimeToSystemTime(&date_time, &dt) != 0;
-	success = success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%4hu-%02hu-%02hu %02hu:%02hu:%02hu"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+	success = success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%hu-%02hu-%02hu %02hu:%02hu:%02hu"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Format Filetime DateTime: Failed to format the FILETIME datetime (high = %lu, low = %lu) with the error code.", date_time.dwHighDateTime, date_time.dwLowDateTime, GetLastError());
+		log_print(LOG_ERROR, "Format Filetime Date Time: Failed to format the FILETIME date time (high = %lu, low = %lu) with the error code %lu..", date_time.dwHighDateTime, date_time.dwLowDateTime, GetLastError());
 		*formatted_string = TEXT('\0');
 	}
 
@@ -493,7 +498,28 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Format Dos DateTime: Failed to format the DOS datetime (date = %I32u, time = %I32u) with the error code.", date_time.date, date_time.time, GetLastError());
+		log_print(LOG_ERROR, "Format Dos Date Time: Failed to format the DOS date time (date = %I32u, time = %I32u) with the error code %lu..", date_time.date, date_time.time, GetLastError());
+		*formatted_string = TEXT('\0');
+	}
+
+	return success;
+}
+
+bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string)
+{
+	if(date_time == 0)
+	{
+		*formatted_string = TEXT('\0');
+		return true;
+	}
+
+	struct tm time = {};
+	bool success = (_gmtime64_s(&time, &date_time) == 0)
+				&& (_tcsftime(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%Y-%m-%d %H:%M:%S"), &time) > 0);
+
+	if(!success)
+	{
+		log_print(LOG_ERROR, "Format Time64_t: Failed to format the time64_t date time (time = %I64u) with the error code %d.", date_time, errno);
 		*formatted_string = TEXT('\0');
 	}
 
@@ -792,7 +818,7 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		if(num_chars_required == 0)
 		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a wide string with the error code %lu.", ansi_string, GetLastError());
+			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
 			return NULL;
 		}
 
@@ -801,7 +827,7 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, wide_string, num_chars_required) == 0)
 		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a wide string with the error code %lu.", ansi_string, GetLastError());
+			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
 			return NULL;
 		}
 
@@ -827,7 +853,7 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_are
 	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
 	if(num_chars_required_wide == 0)
 	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a wide string with the error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a UTF-16 string with the error code %lu.", GetLastError());
 		return NULL;
 	}
 
@@ -841,7 +867,7 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_are
 	wchar_t* wide_string = push_arena(wide_string_arena, size_required_wide, wchar_t);
 	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
 	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a wide string with the error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a UTF-16 string with the error code %lu.", GetLastError());
 		return NULL;
 	}
 
@@ -849,14 +875,14 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_are
 		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
 		if(size_required_ansi == 0)
 		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of bytes necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
 			return NULL;
 		}
 
 		char* ansi_string = push_arena(final_arena, size_required_ansi, char);
 		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
 		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate Wide string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
+			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate UTF-16 string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
 			return NULL;
 		}
 
@@ -2338,7 +2364,7 @@ void close_log_file(void)
 // - LOG_ERROR
 // For LOG_DEBUG, use debug_log_print() instead. LOG_NONE is usually used when calling log_print_newline(), though it may be used
 // directly with log_print() in certain cases.
-// 2. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide Unicode strings, and %s for TCHAR
+// 2. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
 // strings (ANSI or Wide depending on the build target).
 // 3. ... - Zero or more arguments to be inserted in the format string.
 //
@@ -2393,11 +2419,11 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 //
 // For example:
 // abc1234 doesn't need to be escaped.
-// abc"12,34 is escaped as "abc""12,34" and requires 13 or 26 bytes to store it as an ANSI or Wide string, respectively.
+// abc"12,34 is escaped as "abc""12,34" and requires 13 or 26 bytes to store it as an ANSI or UTF-16 string, respectively.
 //
 // The worst case scenario is a string composed solely of quotes. For example: "" would need to be escaped as """""" (add a second
 // quote for each character and surround the whole string with two quotes). In this case, we have 6 characters and 1 null terminator,
-// meaning we'd need 7 or 14 bytes to store it as an ANSI or Wide string, respectively.
+// meaning we'd need 7 or 14 bytes to store it as an ANSI or UTF-16 string, respectively.
 //
 // @Parameters:
 // 1. str - The string to check.

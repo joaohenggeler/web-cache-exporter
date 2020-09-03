@@ -169,10 +169,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
-		{NULL}, {NULL}, {NULL},
-		{NULL}, {NULL}, {NULL},
+		{/* Filename */}, {/* File Extension */}, {/* File Size */},
+		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
 		{director_file_type},
-		{NULL}
+		{/* Custom File Group */}
 	};
 
 	Exporter* exporter = params->exporter;

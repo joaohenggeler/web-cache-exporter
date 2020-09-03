@@ -612,10 +612,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 
 	Csv_Entry csv_row[RAW_CSV_NUM_COLUMNS] =
 	{
-		{NULL}, {NULL}, {NULL},
-		{NULL}, {NULL}, {NULL},
+		{/* Filename */}, {/* File Extension */}, {/* File Size */},
+		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
 		{short_file_path},
-		{NULL}
+		{/* Custom File Group */}
 	};
 
 	Exporter* exporter = (Exporter*) user_data;
@@ -968,11 +968,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 					{
-						{NULL}, {NULL}, {NULL}, {cached_file_size},
+						{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path_with_prefix}, {NULL},
-						{NULL}, {NULL}
+						{num_hits}, {short_file_path_with_prefix}, {/* Missing File */},
+						{/* Custom File Group */}, {/* Custom URL Group */}
 					};
 
 					if(was_deallocated)
@@ -2075,11 +2075,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 									{
-										{NULL}, {NULL}, {NULL}, {cached_file_size},
+										{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-										{num_hits}, {short_file_path_with_prefix}, {NULL},
-										{NULL}, {NULL}
+										{num_hits}, {short_file_path_with_prefix}, {/* Missing File */},
+										{/* Custom File Group*/}, {/* Custom URL Group */}
 									};
 
 									export_cache_entry(exporter, csv_row, full_file_path, url, filename);

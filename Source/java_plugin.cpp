@@ -2,6 +2,14 @@
 #include "java_plugin.h"
 
 /*
+
+
+
+
+	@Decompiled: "sun.plugin.cachescheme.PluginCacheTable" from "jre\lib\jaws.jar" in JDK 1.3.1 update 28
+
+	public static String cacheHome = userHome + File.separator + "java_plugin_AppletStore" + File.separator + System.getProperty("javaplugin.version");
+
 	@Format: IDX files.
 
 	@ByteOrder: Big Endian
@@ -50,7 +58,7 @@
 
 		readSection1Remaining(stream); // @Struct: Next 95 bytes.
 		{
-			byte isShortcutImage = stream1.readBytes(); // @Struct: s8
+			byte isShortcutImage = stream1.readByte(); // @Struct: s8
 			int contentLength = stream1.readInt(); // @Struct: s32
 			long lastModified = stream1.readLong(); // @Struct: s64
 			long expirationDate = stream1.readLong(); // @Struct: s64
@@ -132,7 +140,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION,
 	CSV_LAST_MODIFIED_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING,
-	// CSV_CODEBASE_IP, CSV_VERSION, CACHE_SIZE?, INVALID_CACHE_ENTRY?
+	CSV_CODEBASE_IP, CSV_VERSION,
 	CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP
 };
@@ -188,11 +196,10 @@ struct Index
 	s8 incomplete;
 	s32 cache_version;
 
-	// @TODO: union based on the cache_version?
 	s8 is_shortcut_image;
 	s32 content_length;
-	s64 last_modified_time;
-	s64 expiry_time;
+	s64 last_modified_time; // In milliseconds.
+	s64 expiry_time; // In milliseconds.
 
 	s64 _reserved_1;
 	s8 _reserved_2;
@@ -219,11 +226,17 @@ struct Index
 	s32 reduced_manifest_2_length;
 	s8 is_proxied_host;
 
-	u16 version_utf_length;
 	TCHAR* version;
 	TCHAR* url;
 	TCHAR* namespace_id;
 	TCHAR* codebase_ip;
+
+	TCHAR* response;
+	TCHAR* server;
+	TCHAR* cache_control;
+	TCHAR* pragma;
+	TCHAR* content_type;
+	TCHAR* content_encoding;
 };
 
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index);
@@ -235,10 +248,19 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	TCHAR* index_filename = find_data->cFileName;
 	Index index = {};
 	{
-		TCHAR index_path[MAX_PATH_CHARS] = TEXT("");
-		PathCombine(index_path, directory_path, index_filename);
-		read_index_file(arena, index_path, &index);
+		PathCombine(exporter->index_path, directory_path, index_filename);
+		read_index_file(arena, exporter->index_path, &index);
 	}
+
+	TCHAR* url = index.url;
+	TCHAR* filename = PathFindFileName(url);
+
+	// Note that the time information is stored in milliseconds while time_t is measured in seconds.
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	format_time64_t_date_time(index.last_modified_time / 1000, last_modified_time);
+
+	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	format_time64_t_date_time(index.expiry_time / 1000, expiry_time);
 
 	TCHAR content_length[MAX_INT32_CHARS] = TEXT("");
 	{
@@ -260,22 +282,118 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
-		{TEXT("TODO")}, {NULL}, {NULL},
-		{NULL}, {NULL},
-		{NULL}, {NULL}, {NULL}, {NULL}, {NULL}, {content_length}, {NULL},
-		// CSV_CODEBASE_IP, CSV_VERSION, CACHE_SIZE?, INVALID_CACHE_ENTRY?
-		{short_file_path}, {NULL},
-		{NULL}, {NULL}
+		{/* Filename */}, {/* URL */}, {/* File Extension */},
+		{last_modified_time}, {expiry_time},
+		{index.response}, {index.server}, {index.cache_control}, {index.pragma}, {index.content_type}, {content_length}, {index.content_encoding},
+		{index.codebase_ip}, {index.version},
+		{short_file_path}, {/* Missing File */},
+		{/* Custom File Group */}, {/* Custom URL Group */}
 	};
 	
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, cached_filename/*, find_data*/);
+	export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 }
 
-/*void copy_and_advance_bytes(void* destination, void** source, size_t num_bytes)
+static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* modified_utf_8_string, u16 utf_length)
 {
-	CopyMemory(destination, *source, num_bytes);
-	*source = advance_bytes(*source, num_bytes);
-}*/
+	if(utf_length == 0) return NULL;
+
+	wchar_t* utf_16_string = push_arena(arena, (utf_length + 1) * sizeof(wchar_t), wchar_t);
+	u16 utf_16_index = 0;
+	
+	for(u16 i = 0; i < utf_length; ++i)
+	{
+		char a = modified_utf_8_string[i];
+		// Matches the pattern 0xxx.xxxx, where the mask is 1000.0000 (0x80)
+		// and the pattern is 0000.0000 (0x00).
+		if((a & 0x80) == 0x00)
+		{
+			utf_16_string[utf_16_index] = a;
+		}
+		// Matches the pattern 110x.xxxx, where the mask is 1110.0000 (0xE0)
+		// and the pattern is 1100.0000 (0xC0).
+		else if((a & 0xE0) == 0xC0)
+		{
+			if(i+1 < utf_length)
+			{
+				char b = modified_utf_8_string[i+1];
+				// Matches the pattern 10xx.xxxx, where the mask is 1100.0000 (0xC0)
+				// and the pattern is 1000.0000 (0x80). 
+				if((b & 0xC0) == 0x80)
+				{
+					utf_16_string[utf_16_index] = ((a & 0x1F) << 6) | (b & 0x3F);
+					i += 1;
+				}
+				else
+				{
+					log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second byte (0x%08X) does not match the pattern.", modified_utf_8_string, b);
+					return NULL;
+				}
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second byte in the group.", modified_utf_8_string);
+				return NULL;
+			}
+		}
+		// Matches the pattern 1110.xxxx, where the mask is 1111.0000 (0xF0)
+		// and the pattern is 1110.0000 (0xE0).
+		else if((a & 0xF0) == 0xE0)
+		{
+			if(i+2 < utf_length)
+			{
+				char b = modified_utf_8_string[i+1];
+				char c = modified_utf_8_string[i+2];
+				// Matches the pattern 10xx.xxxx, where the mask is 1100.0000 (0xC0)
+				// and the pattern is 1000.0000 (0x80). 
+				if( ((b & 0xC0) == 0x80) && ((c & 0xC0) == 0x80) )
+				{
+					utf_16_string[utf_16_index] = ((a & 0x0F) << 12) | ((b & 0x3F) << 6) | (c & 0x3F);
+					i += 2;
+				}
+				else
+				{
+					log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second (0x%08X) or third byte (0x%08X) does not match the pattern.", modified_utf_8_string, b, c);
+					return NULL;
+				}
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second or third byte in the group.", modified_utf_8_string);
+				return NULL;
+			}
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The first byte (0x%08X) does not match any pattern.", modified_utf_8_string, a);
+			return NULL;
+		}
+
+		++utf_16_index;
+	}
+
+	utf_16_string[utf_16_index] = L'\0';
+
+	#ifdef BUILD_9X
+
+		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
+		if(size_required_ansi == 0)
+		{
+			log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Failed to find the number of bytes necessary to represent the intermediate UTF-16 '%ls' as an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			return NULL;
+		}
+
+		char* ansi_string = push_arena(arena, size_required_ansi, char);
+		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
+		{
+			log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Failed to convert the intermediate UTF-16 string '%ls' to an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			return NULL;
+		}
+
+		return ansi_string;
+	#else
+		return utf_16_string;
+	#endif
+}
 
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index)
 {
@@ -285,8 +403,17 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index)
 	
 	if(index_file == NULL)
 	{
+		log_print(LOG_ERROR, "Read Index File: Failed to open the index file with the error code %lu. No files will be exported using this index.", GetLastError());
 		safe_close_handle(&index_handle);
 		return;		
+	}
+
+	if(index_file_size < HEADER_SIZE)
+	{
+		log_print(LOG_ERROR, "Read Index File: The size of the opened index file is smaller than the file format's header. No files will be exported using this index.");
+		safe_unmap_view_of_file((void**) &index_file);
+		safe_close_handle(&index_handle);
+		return;
 	}
 
 	u32 total_bytes_read = 0;
@@ -300,28 +427,39 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index)
 		total_bytes_read += num_bytes;\
 	} while(false, false)
 
-	#define COPY_AND_ADVANCE_BYTES(member)\
+	#define COPY_INTEGER_AND_ADVANCE_BYTES(variable)\
 	do\
 	{\
 		if(total_bytes_read >= index_file_size) break;\
 		\
-		CopyMemory(&(index->member), index_file, sizeof(index->member));\
-		index->member = swap_byte_order(index->member);\
+		CopyMemory(&variable, index_file, sizeof(variable));\
+		variable = swap_byte_order(variable);\
 		\
-		index_file = advance_bytes(index_file, sizeof(index->member));\
-		total_bytes_read += sizeof(index->member);\
+		index_file = advance_bytes(index_file, sizeof(variable));\
+		total_bytes_read += sizeof(variable);\
 	} while(false, false)
 
-	#define COPY_MODIFIED_UTF_8_STRING_AND_ADVANCE_BYTES(member)\
+	#define COPY_STRING_AND_ADVANCE_BYTES(variable)\
 	do\
 	{\
+		if(total_bytes_read >= index_file_size) break;\
 		\
+		u16 utf_length = 0;\
+		CopyMemory(&utf_length, index_file, sizeof(utf_length));\
+		utf_length = swap_byte_order(utf_length);\
+		index_file = advance_bytes(index_file, sizeof(utf_length));\
+		\
+		char* modified_utf_8_string = (char*) index_file;\
+		variable = convert_modified_utf_8_string_to_tchar(arena, modified_utf_8_string, utf_length);\
+		index_file = advance_bytes(index_file, utf_length);\
+		\
+		total_bytes_read += sizeof(utf_length) + utf_length;\
 	} while(false, false)
 
 	// Read the first bytes in section 1.
-	COPY_AND_ADVANCE_BYTES(busy);
-	COPY_AND_ADVANCE_BYTES(incomplete);
-	COPY_AND_ADVANCE_BYTES(cache_version);
+	COPY_INTEGER_AND_ADVANCE_BYTES(index->busy);
+	COPY_INTEGER_AND_ADVANCE_BYTES(index->incomplete);
+	COPY_INTEGER_AND_ADVANCE_BYTES(index->cache_version);
 
 	// Read the remaining bytes in section 1, whose layout depends
 	// on the current cache format version.
@@ -329,124 +467,91 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index)
 	{
 		case(VERSION_605):
 		{
-			COPY_AND_ADVANCE_BYTES(is_shortcut_image);
-			COPY_AND_ADVANCE_BYTES(content_length);
-			COPY_AND_ADVANCE_BYTES(last_modified_time);
-			COPY_AND_ADVANCE_BYTES(expiry_time);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->is_shortcut_image);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->content_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->last_modified_time);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->expiry_time);
 
-			COPY_AND_ADVANCE_BYTES(_reserved_1);
-			COPY_AND_ADVANCE_BYTES(_reserved_2);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_1);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_2);
 
-			COPY_AND_ADVANCE_BYTES(section_1_length);
-			COPY_AND_ADVANCE_BYTES(section_2_length);
-			COPY_AND_ADVANCE_BYTES(section_3_length);
-			COPY_AND_ADVANCE_BYTES(section_4_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_1_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_2_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_3_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_4_length);
 
-			COPY_AND_ADVANCE_BYTES(_reserved_3);
-			COPY_AND_ADVANCE_BYTES(_reserved_4);
-			COPY_AND_ADVANCE_BYTES(_reserved_5);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_3);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_4);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_5);
 
-			COPY_AND_ADVANCE_BYTES(reduced_manifest_length);
-			COPY_AND_ADVANCE_BYTES(section_4_pre_15_Length);
-			COPY_AND_ADVANCE_BYTES(has_only_signed_entries);
-			COPY_AND_ADVANCE_BYTES(has_single_code_source);
-			COPY_AND_ADVANCE_BYTES(section_4_certs_length);
-			COPY_AND_ADVANCE_BYTES(section_4_signers_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->reduced_manifest_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_4_pre_15_Length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->has_only_signed_entries);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->has_single_code_source);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_4_certs_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->section_4_signers_length);
 
-			COPY_AND_ADVANCE_BYTES(_reserved_6);
-			COPY_AND_ADVANCE_BYTES(_reserved_7);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_6);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->_reserved_7);
 
-			COPY_AND_ADVANCE_BYTES(reduced_manifest_2_length);
-			COPY_AND_ADVANCE_BYTES(is_proxied_host);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->reduced_manifest_2_length);
+			COPY_INTEGER_AND_ADVANCE_BYTES(index->is_proxied_host);
 
-			u32 header_padding_size = MIN(HEADER_SIZE - total_bytes_read, 0);
-			ADVANCE_BYTES(header_padding_size);
-
-			// Read section 2 if it exists.
-			if(index->section_2_length > 0)
+			if(total_bytes_read < HEADER_SIZE)
 			{
-				COPY_AND_ADVANCE_BYTES(version_utf_length);
-				if(index->version_utf_length > 0)
+				u32 header_padding_size = HEADER_SIZE - total_bytes_read;
+				ADVANCE_BYTES(header_padding_size);		
+			}
+
+			// Read section 1 if it exists.
+			if(index->section_1_length > 0)
+			{
+				// @Docs: https://docs.oracle.com/javase/7/docs/api/java/io/DataInput.html#readUTF()
+				COPY_STRING_AND_ADVANCE_BYTES(index->version);
+				COPY_STRING_AND_ADVANCE_BYTES(index->url);
+				COPY_STRING_AND_ADVANCE_BYTES(index->namespace_id);
+				COPY_STRING_AND_ADVANCE_BYTES(index->codebase_ip);
+
+				s32 num_headers = 0;
+				COPY_INTEGER_AND_ADVANCE_BYTES(num_headers);
+
+				for(s32 i = 0; i < num_headers; ++i)
 				{
-					// @Docs: https://docs.oracle.com/javase/7/docs/api/java/io/DataInput.html#readUTF()
-					char* modified_utf_8_str = (char*) index_file;
-					char* utf_8_str = push_arena(arena, index->version_utf_length + 1, char);
-					u16 actual_length = 0;
-					for(u16 i = 0; i < index->version_utf_length; ++i)
+					TCHAR* key = NULL;
+					TCHAR* value = NULL;
+					COPY_STRING_AND_ADVANCE_BYTES(key);
+					COPY_STRING_AND_ADVANCE_BYTES(value);
+
+					if(key == NULL || value == NULL) continue;
+
+					if(strings_are_equal(key, TEXT("<null>"), true))
 					{
-						char a = modified_utf_8_str[i];
-						// Matches the pattern 0xxx.xxxx, where the mask is 1000.0000 (0x80)
-						// and the pattern is 0000.0000 (0x00).
-						if((a & 0x80) == 0x00)
-						{
-							utf_8_str[actual_length] = a;
-						}
-						// Matches the pattern 110x.xxxx, where the mask is 0010.0000 (0x20)
-						// and the pattern is 1100.0000 (0xC0).
-						else if((a & 0x20) == 0xC0)
-						{
-							if(i+1 < index->version_utf_length)
-							{
-								char b = modified_utf_8_str[i+1];
-								// Matches the pattern 10xx.xxxx, where the mask is 0100.0000 (0x40)
-								// and the pattern is 1000.0000 (0x80). 
-								if((b & 0x40) == 0x80)
-								{
-									utf_8_str[actual_length] = ((a & 0x1F) << 6) | (b & 0x3F);
-									i += 1;
-								}
-								else
-								{
-									// Error
-									_ASSERT(false);
-								}
-							}
-							else
-							{
-								// Error
-								_ASSERT(false);
-							}
-						}
-						// Matches the pattern 1110.xxxx, where the mask is 0001.0000 (0x10)
-						// and the pattern is 1110.0000 (0xE0).
-						else if((a & 0x10) == 0xE0)
-						{
-							if(i+2 < index->version_utf_length)
-							{
-								char b = modified_utf_8_str[i+1];
-								char c = modified_utf_8_str[i+2];
-								// Matches the pattern 10xx.xxxx, where the mask is 0100.0000 (0x40)
-								// and the pattern is 1000.0000 (0x80). 
-								if( ((b & 0x40) == 0x80) && ((c & 0x40) == 0x80) )
-								{
-									utf_8_str[actual_length] = ((a & 0x0F) << 12) | ((b & 0x3F) << 6) | (c & 0x3F);
-									i += 2;
-								}
-								else
-								{
-									// Error
-									_ASSERT(false);
-								}
-							}
-							else
-							{
-								// Error
-								_ASSERT(false);
-							}
-						}
-						else
-						{
-							// Error
-							_ASSERT(false);
-						}
-
-						++actual_length;
+						index->response = value;
 					}
-					utf_8_str[actual_length] = '\0';
-
-					index->version = convert_utf_8_string_to_tchar(arena, utf_8_str);
+					else if(strings_are_equal(key, TEXT("server"), true))
+					{
+						index->server = value;
+					}
+					else if(strings_are_equal(key, TEXT("cache-control"), true))
+					{
+						index->cache_control = value;
+					}
+					else if(strings_are_equal(key, TEXT("pragma"), true))
+					{
+						index->pragma = value;
+					}
+					else if(strings_are_equal(key, TEXT("content-type"), true))
+					{
+						index->content_type = value;
+					}
+					else if(strings_are_equal(key, TEXT("content-encoding"), true))
+					{
+						index->content_encoding = value;
+					}
 				}
 			}
+
+			_ASSERT( (HEADER_SIZE + index->section_1_length) == total_bytes_read );
 
 		} break;
 

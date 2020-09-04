@@ -202,7 +202,7 @@ enum Traversal_Flag
 	TRAVERSE_DIRECTORIES = 1 << 1
 };
 
-#define TRAVERSE_DIRECTORY_CALLBACK(function_name) void function_name(const TCHAR* directory_path, WIN32_FIND_DATA* find_data, void* user_data)
+#define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(const TCHAR* directory_path, WIN32_FIND_DATA* find_data, void* user_data)
 typedef TRAVERSE_DIRECTORY_CALLBACK(Traverse_Directory_Callback);
 void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,

@@ -43,6 +43,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 
 	Exporter* exporter = (Exporter*) user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+
+	return true;
 }
 
 // Entry point for the file explorer exporter. This function assumes that the exporter's cache location was passed via the

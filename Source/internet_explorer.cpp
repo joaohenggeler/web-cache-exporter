@@ -600,7 +600,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 {
 	TCHAR* filename = find_data->cFileName;
 	// Skip the index.dat file itself. We only want the cached files.
-	if(strings_are_equal(filename, TEXT("index.dat"), true)) return;
+	if(strings_are_equal(filename, TEXT("index.dat"), true)) return true;
 
 	// Despite not using the index.dat file, we can find out where we're located on the cache.
 	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
@@ -620,6 +620,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 
 	Exporter* exporter = (Exporter*) user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+
+	return true;
 }
 
 // Exports Internet Explorer 4 through 9's cache from a given location.
@@ -1591,6 +1593,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", find_data->cFileName, GetLastError());
 			}
 		}
+
+		return true;
 	}
 
 	// Exports Internet Explorer 10 and 11's cache from a given location.

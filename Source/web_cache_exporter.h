@@ -207,7 +207,9 @@ struct Exporter
 	bool was_temporary_exporter_directory_created;
 	
 	// The paths to relevant Windows locations. These are sometimes used to find cache directories.
+	TCHAR windows_path[MAX_PATH_CHARS];
 	TCHAR windows_temporary_path[MAX_PATH_CHARS];
+	TCHAR user_profile_path[MAX_PATH_CHARS];
 	TCHAR roaming_appdata_path[MAX_PATH_CHARS];
 	TCHAR local_appdata_path[MAX_PATH_CHARS];
 	TCHAR local_low_appdata_path[MAX_PATH_CHARS];

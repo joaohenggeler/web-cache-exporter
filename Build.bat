@@ -36,7 +36,7 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
 	REM In our case, we use 7-Zip Extra 9.20.
-	SET "PACKAGE_BUILD=Yes"
+	SET "PACKAGE_BUILD=No"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.
@@ -56,7 +56,7 @@ PUSHD "%~dp0"
 	SET "THIRD_PARTY_LIBRARIES_PATH_64=%THIRD_PARTY_SOURCE_PATH%\Lib\x64"
 
 	REM Common compiler options and any other ones that only apply to a specific build target or mode.
-	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
+	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /wd4127 /wd4130 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
 	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT /GL"
 	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D DEBUG /D NDEBUG /D _DEBUG"
 	SET "COMPILER_OPTIONS_WIN_NT_ONLY="

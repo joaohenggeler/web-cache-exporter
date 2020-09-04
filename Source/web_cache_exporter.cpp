@@ -594,6 +594,11 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 	#endif
 
+	if(GetWindowsDirectory(exporter.windows_path, MAX_PATH_CHARS) != (MAX_PATH_CHARS - 1))
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the Windows directory path with error code %lu.", GetLastError());
+	}
+
 	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0)
 	{
 		log_print(LOG_INFO, "Startup: Deleting any previous temporary exporter directories with the prefix '%s'.", TEMPORARY_NAME_PREFIX);
@@ -612,6 +617,11 @@ int _tmain(int argc, TCHAR* argv[])
 	else
 	{
 		log_print(LOG_ERROR, "Startup: Failed to get the Temporary Files directory path with error code %lu.", GetLastError());
+	}
+
+	if(!get_special_folder_path(CSIDL_PROFILE, exporter.user_profile_path))
+	{
+		log_print(LOG_ERROR, "Startup: Failed to get the user profile directory path with error code %lu.", GetLastError());
 	}
 
 	if(!get_special_folder_path(CSIDL_APPDATA, exporter.roaming_appdata_path))
@@ -680,7 +690,9 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Exporter Temporary Path: '%s'", exporter.exporter_temporary_path);
 	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", (exporter.was_temporary_exporter_directory_created) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "- Windows Directory Path: '%s'", exporter.windows_path);
 	log_print(LOG_NONE, "- Windows Temporary Path: '%s'", exporter.windows_temporary_path);
+	log_print(LOG_NONE, "- User Profile Path: '%s'", exporter.user_profile_path);
 	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
 	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
@@ -848,7 +860,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 	if(entry_filename == NULL)
 	{
 		++(exporter->num_nameless_files);
-		StringCchPrintf(unique_filename, MAX_PATH_CHARS, TEXT("WCE-%Iu"), exporter->num_nameless_files);
+		StringCchPrintf(unique_filename, MAX_PATH_CHARS, TEXT("__WCE-%Iu"), exporter->num_nameless_files);
 		entry_filename = unique_filename;
 
 	}

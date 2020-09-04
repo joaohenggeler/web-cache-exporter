@@ -213,6 +213,18 @@ BEGIN_FILE_GROUP Pulse
 
 END
 
+BEGIN_FILE_GROUP Scratch
+
+	BEGIN_MIME_TYPES
+		application/x-scratch-project
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		sb sb2
+	END
+
+END
+
 BEGIN_FILE_GROUP ShiVa3D
 
 	BEGIN_MIME_TYPES

@@ -150,7 +150,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 	if(exporter->should_load_specific_groups_files
 		&& !should_load_group_with_filename(exporter->group_filenames_to_load, exporter->num_group_filenames_to_load, filename))
 	{
-		return;
+		return true;
 	}
 
 	TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
@@ -207,6 +207,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 
 	safe_unmap_view_of_file((void**) &group_file);
 	safe_close_handle(&group_file_handle);
+
+	return true;
 }
 
 // Finds each group file on disk and retrieves the number of groups and many bytes are (roughly) required to store them.
@@ -707,13 +709,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_group_files_callback)
 	if(exporter->should_load_specific_groups_files
 		&& !should_load_group_with_filename(exporter->group_filenames_to_load, exporter->num_group_filenames_to_load, filename))
 	{
-		return;
+		return true;
 	}
 
 	size_t size = string_size(filename);
 	push_and_copy_to_arena(&(exporter->temporary_arena), size, u8, filename, size);
 
 	++(result->num_group_files);
+
+	return true;
 }
 
 // Called by qsort() to sort group file's names alphabetically.

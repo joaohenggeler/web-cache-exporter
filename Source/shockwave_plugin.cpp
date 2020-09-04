@@ -177,4 +177,6 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 
 	Exporter* exporter = params->exporter;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+
+	return true;
 }

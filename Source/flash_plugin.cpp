@@ -68,4 +68,6 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_files_callback)
 
 	Exporter* exporter = (Exporter*) user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+
+	return true;
 }

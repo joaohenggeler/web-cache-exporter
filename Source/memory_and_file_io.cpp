@@ -797,23 +797,20 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 	return success;
 }
 
-// Converts an ANSI string to a TCHAR one and copies it to an arena.
+// Converts an ANSI string to a TCHAR one.
 // On the Windows 98 and ME builds, this function simply copies the ANSI string.
-// On the Windows 2000 through 10 builds, this function converts the ANSI string to a wide one.
+// On the Windows 2000 through 10 builds, this function converts the ANSI string to a UTF-16 one.
 //
 // @Parameters:
 // 1. arena - The Arena structure that will receive the converted TCHAR string.
-// 2. ansi_string - The ANSI string to convert and copy to the arena.
+// 2. ansi_string - The ANSI string to convert.
 //
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 {
 	#ifdef BUILD_9X
-		// In Windows 98 and ME, the resulting TCHAR string is also an ANSI string.
 		return push_string_to_arena(arena, ansi_string);
 	#else
-		// In Windows 2000 onwards, we'll have to find how much space we need and then convert
-		// the ANSI string to a Wide one.
 		int num_chars_required = MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, NULL, 0);
 
 		if(num_chars_required == 0)
@@ -836,16 +833,17 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 }
 
 // Converts an UTF-8 string to a TCHAR one and copies the final result to a memory arena. On the Windows 98 and ME builds, the
-// intermediary UTF-16 string is stored in a intermediary arena.
+// intermediary UTF-16 string is stored in an intermediary arena. If this is irrelevant, use convert_utf_8_string_to_tchar(2)
+// instead.
 //
-// On the Windows 98 and ME builds, this function converts the ANSI string to UTF-16, and then to UTF-8.
-// On the Windows 2000 through 10 builds, this function converts the UTF-16 string to a UTF-8 one.
+// On the Windows 98 and ME builds, this function converts the UTF-8 string to UTF-16, and then to an ANSI one.
+// On the Windows 2000 through 10 builds, this function converts the UTF-8 string to a UTF-16 one.
 //
 // @Parameters:
 // 1. final_arena - The Arena structure that will receive the final converted TCHAR string.
 // 2. intermediary_arena - The Arena structure that will receive the intermediary converted UTF-16 string. This only applies to Windows 98
 // and ME. On the Windows 2000 to 10 builds, this parameter is unused.
-// 3. utf_8_string - The UTF-8 string to convert and copy to the arena.
+// 3. utf_8_string - The UTF-8 string to convert.
 //
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string)
@@ -892,6 +890,9 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_are
 	#endif
 }
 
+// Behaves like convert_utf_8_string_to_tchar(3) but instead copies both the final and intermediary to the same memory arena.
+// 
+// @Returns: See convert_utf_8_string_to_tchar(3).
 TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
 {
 	return convert_utf_8_string_to_tchar(arena, arena, utf_8_string);
@@ -1654,13 +1655,15 @@ void safe_unmap_view_of_file(void** base_address)
 // 2. find_data - A pointer to the WIN32_FIND_DATA structure of the current object.
 // 3. user_data - A pointer to any additional data that was passed to traverse_directory_objects().
 //
-// @CallbackReturns: Nothing.
+// @CallbackReturns: True to keep traversing, or false to stop searching.
 //
 // @Returns: Nothing.
 void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data)
 {
+	bool should_continue_traversing = true;
+
 	/*
 		>>>> Traverse the files and directories that match the search query.
 	*/
@@ -1683,7 +1686,8 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 
 			if(should_process_object)
 			{
-				callback_function(path, &find_data, user_data);
+				should_continue_traversing = callback_function(path, &find_data, user_data);
+				if(!should_continue_traversing) break;
 			}
 		}
 
@@ -1696,7 +1700,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 		>>>> Traverse every subdirectory in this directory. We can't use the same search query here, otherwise we'd exclude directories.
 	*/
 
-	if(should_traverse_subdirectories)
+	if(should_traverse_subdirectories && should_continue_traversing)
 	{
 		PathCombine(search_path, path, TEXT("*"));
 		search_handle = FindFirstFile(search_path, &find_data);
@@ -1846,6 +1850,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_temporary_directories_callback)
 	TCHAR full_directory_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_directory_path, directory_path, find_data->cFileName);
 	delete_directory_and_contents(full_directory_path);
+	return true;
 }
 
 // Deletes every directory in a given location whose name starts with the exporter's identifier.

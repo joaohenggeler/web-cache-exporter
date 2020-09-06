@@ -51,7 +51,6 @@
 	@TODO:
 
 	- Add support for the Java Plugin.
-	- Handle export_cache_entry() with missing filenames (for the Java Plugin cache).
 */
 
 /*
@@ -184,6 +183,10 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		else if(strings_are_equal(option, TEXT("-filter-by-groups")))
 		{
 			exporter->should_filter_by_groups = true;
+		}
+		else if(strings_are_equal(option, TEXT("-show-full-paths")))
+		{
+			exporter->should_show_full_paths = true;
 		}
 		else if(strings_are_equal(option, TEXT("-load-group-files")))
 		{
@@ -652,14 +655,16 @@ int _tmain(int argc, TCHAR* argv[])
 	if(exporter.should_overwrite_previous_output)
 	{
 		TCHAR* directory_name = PathFindFileName(exporter.output_path);
+		console_print("Deleting the previous output directory '%s' before starting...", directory_name);
+
 		if(delete_directory_and_contents(exporter.output_path))
 		{
-			console_print("Deleted the previous output directory '%s' before starting.", directory_name);
+			console_print("Deleted the previous output directory successfully.");
 			log_print(LOG_INFO, "Startup: Deleted the previous output directory successfully.");
 		}
 		else
 		{	
-			console_print("Warning: Could not delete the previous output directory '%s'.", directory_name);
+			console_print("Warning: Could not delete the previous output directory.");
 			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s'.", directory_name);
 		}
 	}
@@ -737,6 +742,10 @@ int _tmain(int argc, TCHAR* argv[])
 
 			console_print("Exporting the Shockwave Plugin's cache...");
 			export_specific_or_default_shockwave_plugin_cache(&exporter);
+			log_print_newline();
+
+			console_print("Exporting the Java Plugin's cache...");
+			export_specific_or_default_java_plugin_cache(&exporter);
 		} break;
 
 		case(CACHE_EXPLORE):
@@ -753,9 +762,9 @@ int _tmain(int argc, TCHAR* argv[])
 		} break;
 	}
 
-	console_print("Finished running:\n- Created %Iu CSV files.\n- Processed %Iu cached files.\n- Copied %Iu cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
+	console_print("Finished running:\n- Created %Iu CSV files.\n- Processed %Iu cached files.\n- Copied %Iu cached files.\n- Assigned names to %Iu files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files, exporter.num_nameless_files);
 	log_print_newline();
-	log_print(LOG_INFO, "Finished Running: Created %Iu CSV files. Processed %Iu cache entries. Copied %Iu cached files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files);
+	log_print(LOG_INFO, "Finished Running: Created %Iu CSV files. Processed %Iu cache entries. Copied %Iu cached files. Assigned names to %Iu files.", exporter.num_csv_files_created, exporter.num_processed_files, exporter.num_copied_files, exporter.num_nameless_files);
 	
 	clean_up(&exporter);
 
@@ -932,6 +941,12 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 			} break;
 
 			// @UseFunctionParameter
+			case(CSV_LOCATION_ON_CACHE):
+			{
+				if(exporter->should_show_full_paths) column_values[i].value = full_entry_path;
+			} break;
+
+			// @UseFunctionParameter
 			case(CSV_LOCATION_ON_DISK):
 			{
 				if(value == NULL) column_values[i].value = full_entry_path;
@@ -944,6 +959,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 			} break;
 
 			// @FindData
+			case(CSV_CONTENT_LENGTH):
 			case(CSV_FILE_SIZE):
 			{
 				if(value == NULL && optional_find_data != NULL)

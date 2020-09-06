@@ -9,7 +9,7 @@
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
-static const TCHAR* OUTPUT_DIRECTORY_NAME = TEXT("EXPLORE");
+static const TCHAR* OUTPUT_NAME = TEXT("EXPLORE");
 
 // The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
@@ -25,7 +25,7 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
@@ -56,7 +56,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 // @Returns: Nothing.
 void export_explored_files(Exporter* exporter)
 {
-	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);
 		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, explore_files_callback, exporter);

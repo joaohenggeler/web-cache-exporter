@@ -2,13 +2,82 @@
 #include "java_plugin.h"
 
 /*
-	@TODO: 
+	This file defines how the exporter processes the Java Plugin's cache, which stores resources that are requested by Java applets.
+	In the beginning, the Java Plugin was only able to store these files in the browser's own cache (likely in Internet Explorer or
+	in Netscape Navigator's cache). Java 1.3 (2000) added a mechanism where applets could optionally store some of their archives
+	in a separate location on disk. This was done by using a specific applet tag parameter. Java 1.4 (2002) introduced a new cache
+	location where you didn't need to opt-in to use it. This location was divided into two subdirectories: another archive cache
+	(like in Java 1.3), and a file cache that only allowed commonly used file types (.class files, .gif and .jpg images, and .au
+	and .wav sounds). Each cached file had an index file (.idx) associated with it, which contained the requested resource's metadata.
+	Java 6 (2006) joined both of these cache locations, and allowed any type of file to be cached. The index files remained though
+	their format was changed slightly in a few subversions. Java 9 (2017) deprecated Java applets and Java Web Start applications,
+	and these were finally removed from the language in Java 11 (2018).
+
+	@SupportedFormats:
+	- The AppletStore JAR cache introduced in Java 1.3.
+	- Index files (.IDX) version 4 and 6 (6.02, 6.03, 6.04, 6.05) introduced in Java 1.4 and Java 6.
+
+	@DefaultCacheLocations:
+	- 98, ME 				C:\WINDOWS\java_plugin_AppletStore
+	- 2000, XP				C:\Documents and Settings\<Username>\java_plugin_AppletStore
+	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\java_plugin_AppletStore (theoretically)
+
+	This location is defined as "<User Home>\java_plugin_AppletStore", where <User Home> is Java's "user.home" system property.
+	
+	Let's call this location the "AppletStore cache".
+	Any archives that are specified in the "cache_archive" applet tag parameter are stored here.
+
+	- 98, ME 				C:\WINDOWS\Application Data\Sun\Java\Deployment\cache
+	- 2000, XP 				C:\Documents and Settings\<Username>\Application Data\Sun\Java\Deployment\cache
+	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\AppData\LocalLow\Sun\Java\Deployment\cache
+
+	Note that we currently only look at these default locations. It is possible Java's deployment properties to change the user and
+	system level cache locations using the "deployment.user.cachedir" and "deployment.system.cachedir" properties in the
+	deployment.properties file. These default to "<User Home>\cache" and <None>, respectively.
+
+	We can consider two sublocations:
+	1. <Cache Location>\javapi\v1.0
+	2. <Cache Location>\6.0
+
+	Where the first only stores archives (.JAR) in the "jar" subdirectory and specific files (.CLASS, .JPG, .GIF, .AU, .WAV) in
+	the "file" subdirectory. Note that this "jar" location always stores files with the .ZIP file extension. The second sublocation
+	can contain any type of file, stored in any of the 64 subdirectories, named "0" through "63".
+
+	Let's call 1. the "old cache" and 2. the "new cache".
+	Any archives that are specified in the "cache_archive" applet tag parameter are stored in the "jar" subdirectory in the old cache,
+	and in any subdirectory in the new cache.
+
+	@Resources: The index file format was investigated by looking at the decompiled code of the following Java archives and release:
+	- "jre\lib\jaws.jar" in JDK 1.3.1 update 28.
+	- "jre\lib\plugin.jar" in JDK 1.4.2 update 19.
+	- "jre\lib\plugin.jar" and "jre\lib\deploy.jar" in JDK 1.5.0 update 22.
+	- @TODO: JDK 6 u21
+	- "jre\lib\deploy.jar" in JDK 8 update 181.
+
+	Only after adding support for reading index files did I look for other resources (partly because I wanted to try to document it on
+	my own as a learning exercise). Any previously unknown struct members were added in this step.
+
+	[BB] "Java_IDX_Parser" - a script that reads the index file format.
+	--> https://github.com/Rurik/Java_IDX_Parser/
+	
+	[MW] "javaidx" - a console application that also contains documentation on the index file format.
+	--> https://github.com/woanware/javaidx
+
+	[JDK-SRC] JDK source code:
+	--> https://code.google.com/archive/p/jdk-source-code/
+
+	[JDK-DOCS] The Java API Specification
+	--> https://docs.oracle.com/javase/8/docs/api/index.html
+
+	@Tools: Used to investigate the index file format.
+
+	[JD] "JD-GUI 1.4.0"
+	--> http://java-decompiler.github.io/
+	--> Used to decompiled some Java classes to get a better understanding of how the cache works.
 */
 
-// The name of the CSV file and the directory where the cached files will be copied to.
-static const TCHAR* OUTPUT_DIRECTORY_NAME = TEXT("JV");
+static const TCHAR* OUTPUT_NAME = TEXT("JV");
 
-// The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION,
@@ -20,54 +89,114 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 };
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
+static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback);
 void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 {
 	if(exporter->is_exporting_from_default_locations)
 	{
-		if(!PathCombine(exporter->cache_path, exporter->local_low_appdata_path, TEXT("Sun\\Java\\Deployment\\cache")))
-		{
-			log_print(LOG_ERROR, "Java Plugin: Failed to determine the cache directory path.");
-			return;
-		}
+		TCHAR* appdata_path = exporter->local_low_appdata_path;
+		if(string_is_empty(appdata_path)) appdata_path = exporter->roaming_appdata_path;
+
+		PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
 	}
 
-	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
+		
 		traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
-		log_print(LOG_INFO, "Java Plugin: Finished exporting the cache.");	
+		
+		if(exporter->is_exporting_from_default_locations)
+		{
+			TCHAR* user_home_path = exporter->user_profile_path;
+			if(string_is_empty(user_home_path)) user_home_path = exporter->windows_path;
+
+			PathCombine(exporter->cache_path, user_home_path, TEXT("java_plugin_AppletStore"));
+			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
+			traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
+		
+			PathCombine(exporter->cache_path, user_home_path, TEXT(".jpi_cache"));
+			log_print(LOG_INFO, "Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
+			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
+		}
+
+		log_print(LOG_INFO, "Java Plugin: Finished exporting the cache.");
 	}
 	terminate_cache_exporter(exporter);
 }
 
+static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
+{
+	TCHAR* filename = find_data->cFileName;
+
+	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(short_file_path, TEXT("AppletStore"), filename);
+
+	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(full_file_path, directory_path, filename);
+
+	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	{
+		{/* Filename */}, {/* URL */}, {/* File Extension */},
+		{/* Last Modified Time */}, {/* Expiry Time */},
+		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */}, {/* Content Type */}, {/* Content Length */}, {/* Content Encoding */},
+		{/* Codebase IP */}, {/* Version */},
+		{short_file_path}, {/* Missing File */},
+		{/* Custom File Group */}, {/* Custom URL Group */}
+	};
+
+	Exporter* exporter = (Exporter*) user_data;
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+
+	return true;
+}
+
 // A helper enumeration used to tell what kind of cache location we're in while iterating over the found index files.
-// In earlier cache formats there were separate directories for files (images, sounds, and classes) and for archives (ZIPs and JARs).
+// In the old ache, there were separate directories for files (images, sounds, and classes) and for archives (ZIPs and JARs).
 enum Location_Type
 {
-	LOCATION_ALL = 0, // For any type of file.
+	LOCATION_ALL = 0, // For any type of file. Used by newer cache formats.
 
 	LOCATION_FILES = 1, // For .class, .gif, .jpg, .au, .wav files only. Used by older cache formats.
 	LOCATION_ARCHIVES = 2 // For .zip and .jar files only. Used by older cache formats.
 };
 
+// The version of the index file we're reading.
 enum Cache_Version
 {
-	// @Decompiled: Taken from sun.plugin.cache.Cache (Java 1.4).
-	VERSION_4 = 16,
-	// @Decompiled: Taken from XXX (Java 8).
+	// The old cache. @Java: Taken from "sun.plugin.cache.Cache" (JDK 1.4).
+	VERSION_4 = 0x10, // Possibly "javapi\v1.0" -> "10".
+	
+	// The new cache. @Java: Taken from "com.sun.deploy.cache.CacheEntry" (JDK 8).
 	VERSION_602 = 602,
 	VERSION_603 = 603,
 	VERSION_604 = 604,
 	VERSION_605 = 605
 };
 
+// The type of file that is allowed to be stored in either the "jar" and "file" subdirectories in the old cache.
+enum Java_File_Type
+{
+	JAVA_FILE_UNKNOWN = 0x00,
+
+	JAVA_FILE_JAR = 0x01,
+	JAVA_FILE_JARJAR = 0x02,
+	JAVA_FILE_NONJAR = 0x03,
+
+	JAVA_FILE_CLASS = 0x11,
+	JAVA_FILE_GIF_IMAGE = 0x21,
+	JAVA_FILE_JPEG_IMAGE = 0x22,
+	JAVA_FILE_AU_SOUND = 0x41,
+	JAVA_FILE_WAV_SOUND = 0x42
+};
+
+// The size of the header (section 1) of an index file in bytes. This only applies to the new cache.
 static const size_t VERSION_6_HEADER_SIZE = 128;
 
 struct Index
 {
 	// >>>> Version 4 only.
-
 	s32 file_type;
 
 	// >>>> Version 6 combined with a few attributes from earlier versions.
@@ -76,22 +205,36 @@ struct Index
 	s8 incomplete;
 	s32 cache_version;
 
+	s8 force_update;
+	s8 no_href;
+
 	s8 is_shortcut_image;
 	s32 content_length;
 	s64 last_modified_time; // In milliseconds.
 	s64 expiry_time; // In milliseconds.
 
-	// s32 section_1_length = VERSION_6_HEADER_SIZE
+	s64 validation_timestamp;
+	s8 known_to_be_signed;
+
 	s32 section_2_length;
 	s32 section_3_length;
 	s32 section_4_length;
 
+	s64 blacklist_validation_time;
+	s64 cert_expiration_date;
+	s8 class_verification_status;
+
 	s32 reduced_manifest_length;
 	s32 section_4_pre_15_Length;
+	
 	s8 has_only_signed_entries;
 	s8 has_single_code_source;
+	
 	s32 section_4_certs_length;
 	s32 section_4_signers_length;
+
+	s8 has_missing_signed_entries;
+	s64 trusted_libraries_validation_time;
 
 	s32 reduced_manifest_2_length;
 	s8 is_proxied_host;
@@ -101,16 +244,32 @@ struct Index
 	TCHAR* namespace_id;
 	TCHAR* codebase_ip;
 
-	// Only the following HTTP headers are allowed: "content-length", "last-modified", "expires", "content-type", "content-encoding",
-	// "date", "server". @Decompiled: sun.plugin.cache.CachedFileLoader (Java 1.4).
+	// @Java: "sun.plugin.cache.CachedFileLoader" (JDK 1.4): Only the following HTTP headers are saved:
+	// "content-length", "last-modified", "expires", "content-type", "content-encoding", "date", "server". 
 
 	TCHAR* response;
 	TCHAR* server;
 	TCHAR* cache_control;
 	TCHAR* pragma;
 	TCHAR* content_type;
+	TCHAR* content_length_string;
 	TCHAR* content_encoding;
 };
+
+static TCHAR* get_cached_file_extension_from_java_file_type(s32 type)
+{
+	switch(type)
+	{
+		case(JAVA_FILE_JAR):
+		case(JAVA_FILE_JARJAR): 	return TEXT(".zip"); // And not ".jar" or ".jarjar".
+		case(JAVA_FILE_CLASS): 		return TEXT(".class");
+		case(JAVA_FILE_GIF_IMAGE): 	return TEXT(".gif");
+		case(JAVA_FILE_JPEG_IMAGE): return TEXT(".jpg");
+		case(JAVA_FILE_AU_SOUND): 	return TEXT(".au");
+		case(JAVA_FILE_WAV_SOUND): 	return TEXT(".wav");
+		default:					return NULL;
+	}
+}
 
 struct Find_Filename_Result
 {
@@ -145,26 +304,37 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	Exporter* exporter = (Exporter*) user_data;
 	Arena* arena = &(exporter->temporary_arena);
 
+	// Find out what kind of cache location we're in by looking at the directory's name:
+	// - "[...]\cache\javapi\v1.0\file\file.ext"
+	// - "[...]\cache\javapi\v1.0\jar\archive.zip"
+	// Otherwise, we assume that we're a newer cache version whose directory structure is "[...]\cache\6.0\<Number>\<Random Characters>".
 	TCHAR* directory_name = PathFindFileName(directory_path);
-	Location_Type location_type = LOCATION_ALL;
+	// For the ".jpi_cache" directory, where the directory structure follows ".jpi_cache\file\1.0\file.ext" instead.
+	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(previous_directory_path, directory_path, TEXT(".."));
+	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
 
-	if(string_starts_with(directory_name, TEXT("file"), true))
+	Location_Type location_type = LOCATION_ALL;
+	if(string_starts_with(directory_name, TEXT("file"), true) || string_starts_with(previous_directory_name, TEXT("file"), true))
 	{
 		location_type = LOCATION_FILES;
 	}
-	else if(string_starts_with(directory_name, TEXT("jar"), true))
+	else if(string_starts_with(directory_name, TEXT("jar"), true) || string_starts_with(previous_directory_name, TEXT("jar"), true))
 	{
 		location_type = LOCATION_ARCHIVES;
 	}
 
 	TCHAR* index_filename = find_data->cFileName;
+	PathCombine(exporter->index_path, directory_path, index_filename);
 	Index index = {};
-	{
-		PathCombine(exporter->index_path, directory_path, index_filename);
-		read_index_file(arena, exporter->index_path, &index, location_type);
-	}
+	read_index_file(arena, exporter->index_path, &index, location_type);
 
+	// @Docs: According to Java's URL class description: "The URL class does not itself encode or decode
+	// any URL components according to the escaping mechanism defined in RFC2396." - java.net.URL - Java
+	// API Specification. We'll decode it anyways though it's technically possible that the final URL's
+	// representation isn't the intended one.
 	TCHAR* url = index.url;
+	decode_url(url);
 	TCHAR* filename = PathFindFileName(url);
 
 	// Note that the time information is stored in milliseconds while time_t is measured in seconds.
@@ -174,85 +344,95 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	format_time64_t_date_time(index.expiry_time / 1000, expiry_time);
 
-	TCHAR content_length[MAX_INT32_CHARS] = TEXT("");
+	TCHAR* content_length = NULL;
+	TCHAR content_length_buffer[MAX_INT32_CHARS] = TEXT("");
+	if(index.content_length_string != NULL)
 	{
-		convert_s32_to_string(index.content_length, content_length);
+		content_length = index.content_length_string;
+	}
+	else
+	{
+		convert_s32_to_string(index.content_length, content_length_buffer);
+		content_length = content_length_buffer;
 	}
 
 	// How we find the cached filename depends on the cache version.
 	//
 	// On older format versions where there's separate directories for the type of file, the cached file has the same name as the index
-	// but with its original file extension (e.g. ".class") instead of ".idx".
+	// but with its original file extension (e.g. ".class") instead of ".idx". The one exception are JAR files, which always use the
+	// ".zip" extension.
 	//
 	// On newer versions cache formats where every type of file is allowed, the cached file has the same name as the index but without
 	// the ".idx" file extension.
 	//
-	// Note that the older cache directroy may still exist in a newer Java version. For example, if a user updated their Java version
-	// and their cache version was upgraded from one format to the other.
+	// Note that the older cache directory may still exist in the new cache. For example, if a user updated their Java version
+	// and their cache version was upgraded from one format to the other (e.g. Java 5 to Java 6).
 	TCHAR cached_filename[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(cached_filename, MAX_PATH_CHARS, index_filename);
 	{
 		// Remove the .idx file extension:
-		// - "ABCDEFGH-12345678.idx" -> "ABCDEFGH-12345678".
-		// - "file.ext-ABCDEFGH-12345678.idx" -> "file.ext-ABCDEFGH-12345678" (not the actual filename though).
+		// - Old cache: "file.ext-ABCDEFGH-12345678.idx" -> "file.ext-ABCDEFGH-12345678" (not the actual filename though).
+		// - New cache: "ABCDEFGH-12345678.idx" -> "ABCDEFGH-12345678".
 		TCHAR* idx_file_extension = skip_to_file_extension(cached_filename, true);
 		*idx_file_extension = TEXT('\0');
 
-		// The above works for the newer version, but for the older ones (the file or archive cache) we still need to determine
+		// The above works for the new cache, but for the old one (the file or archive cache) we still need to determine
 		// the actual filename by appending the file extension. Otherwise, we won't be able to copy the file.
 		if(location_type != LOCATION_ALL)
 		{
-			// Attempt to find the file extension using the filename (which is determined using the URL).
-			TCHAR* actual_file_extension = skip_to_file_extension(filename, true);
-
-			if(actual_file_extension != NULL)
-			{
-				// If it worked, add the file extension to build the actual filename.
-				// This applies to the older cache directories that exist in their original Java versions.
-				StringCchCat(cached_filename, MAX_PATH_CHARS, actual_file_extension);
-			}
-			else
-			{
-				// If that fails, take the time to search on disk for the actual filename.
-				// This applies to the older cache directories that still exist in newer Java versions.
-				TCHAR actual_filename[MAX_PATH_CHARS] = TEXT("");
-				if(find_cached_filename_that_starts_with(directory_path, cached_filename, actual_filename))
-				{
-					StringCchCopy(cached_filename, MAX_PATH_CHARS, actual_filename);
-				}
-			}
-
-			// Another thing to take care of is that the filename to show in the first column may be NULL if the URL data wasn't
-			// stored in the index. Since the cached filename is something like "file.ext-ABCDEFGH-12345678.ext", we can truncate
-			// this string to find a good representation of the resource's name.
-			// E.g. "file.ext-ABCDEFGH-12345678.ext" -> "file.ext".
 			if(filename == NULL)
 			{
-				// This applies to the older cache directories that still exist in newer Java versions.
+				// The filename shown in the first column may be NULL if the URL data wasn't stored in the index.
+				// In the old cache, since the cached filename is something like "file.ext-ABCDEFGH-12345678.ext", we can truncate this
+				// string to find a good representation of the resource's name. E.g. "file.ext-ABCDEFGH-12345678.ext" -> "file.ext".
+				//
+				// This applies to the older cache directories that still exist in the new cache.
 				filename = push_string_to_arena(arena, cached_filename);
 				TCHAR* last_dash = _tcsrchr(filename, TEXT('-'));
 				if(last_dash != NULL)
 				{
 					*last_dash = TEXT('\0');
 					last_dash = _tcsrchr(filename, TEXT('-'));
-					
+					if(last_dash != NULL) *last_dash = TEXT('\0');
 				}
-				if(last_dash != NULL)
+			}
+
+			// We'll try to use the file's type to determine the file extension (note that ".jar" and ."jarjar"
+			// are cached using ".zip").
+			// If that fails, attempt to find the file extension using the filename (which is determined using
+			// the URL or the cached filename).
+			TCHAR* actual_file_extension = get_cached_file_extension_from_java_file_type(index.file_type);
+			if(actual_file_extension == NULL)
+			{
+				actual_file_extension = skip_to_file_extension(filename, true);
+				if(actual_file_extension != NULL && string_starts_with(actual_file_extension, TEXT(".jar"), true))
 				{
-					*last_dash = TEXT('\0');
-				}				
+					actual_file_extension = TEXT(".zip");
+				}
+			}
+
+			if(actual_file_extension != NULL)
+			{
+				// If it worked, add the file extension to build the actual filename.
+				// This applies to the older cache directories that exist in the old cache.
+				StringCchCat(cached_filename, MAX_PATH_CHARS, actual_file_extension);
+			}
+			else
+			{
+				// If that fails, take the time to search on disk for the actual filename.
+				// This applies to the older cache directories that still exist in the new cache.
+				TCHAR actual_filename[MAX_PATH_CHARS] = TEXT("");
+				if(find_cached_filename_that_starts_with(directory_path, cached_filename, actual_filename))
+				{
+					StringCchCopy(cached_filename, MAX_PATH_CHARS, actual_filename);
+				}
 			}
 		}
 	}
 
 	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	s32 format_version = index.cache_version;
-	if(location_type != LOCATION_ALL)
-	{
-		format_version = 4;
-	}
-
-	StringCchPrintf(short_file_path, MAX_PATH_CHARS, TEXT("v%I32d\\%s\\%s"), format_version, directory_name, cached_filename);
+	s32 format_version = (location_type == LOCATION_ALL) ? (index.cache_version) : (4);
+	StringCchPrintf(short_file_path, MAX_PATH_CHARS, TEXT("v%I32d\\%s\\%s\\%s"), format_version, previous_directory_name, directory_name, cached_filename);
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, cached_filename);
@@ -403,15 +583,21 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		return;		
 	}
 
-	/*if(index_file_size < VERSION_6_HEADER_SIZE)
-	{
-		log_print(LOG_ERROR, "Read Index File: The size of the opened index file is smaller than the file format's header. No files will be exported using this index.");
-		safe_unmap_view_of_file((void**) &index_file);
-		safe_close_handle(&index_handle);
-		return;
-	}*/
+	/*
+		@ByteOrder: Big Endian.
 
-	// @ByteOrder: Big Endian.
+		Primitive Types in Java:
+		- byte 	= 1 byte (signed) 		= s8
+		- short = 2 bytes (signed) 		= s16
+		- int 	= 4 bytes (signed) 		= s32
+		- long 	= 8 bytes (signed) 		= s64
+		- char 	= 2 bytes (unsigned) 	= u16
+
+		Reading and writing these primitives is done using the methods in the java.io.DataInput and DataOutput interfaces.
+		Strings are serialized using the modified UTF-8 character encoding.
+		- https://docs.oracle.com/javase/8/docs/api/java/io/DataInput.html
+		- https://docs.oracle.com/javase/8/docs/api/java/io/DataOutput.html
+	*/
 
 	u32 total_bytes_read = 0;
 
@@ -463,6 +649,11 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		total_bytes_read += sizeof(utf_length) + utf_length;\
 	} while(false, false)
 
+	// Helper macro function used to read multiple HTTP header values as modified UTF-8 strings.
+	// This emulates the behavior of the readHeaders() type of functions from the Java code that
+	// handles the cache. The variable passed to this macro specifies the key name used to retrieve
+	// the value of the 'codebase_ip' member from the headers map. This parameter may be NULL if
+	// the Codebase IP value is found elsewhere.
 	#define READ_HEADERS(codebase_ip_key)\
 	do\
 	{\
@@ -502,6 +693,10 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 			{\
 				index->content_type = value;\
 			}\
+			else if(strings_are_equal(key, TEXT("content-length"), true))\
+			{\
+				index->content_length_string = value;\
+			}\
 			else if(strings_are_equal(key, TEXT("content-encoding"), true))\
 			{\
 				index->content_encoding = value;\
@@ -509,9 +704,19 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		}\
 	} while(false, false)
 
-	#define READ_SECTION_2(...)\
+	// Helper macro function used to read the entrie second section from index files versions 6.03,
+	// 6.04, and 6.05. This emulates the behavior of the readSection2() function from the Java code
+	// that handles the cache. This macro will skip to the end of the header and retrieve any remaining
+	// strings and HTTP headers.
+	#define READ_SECTION_2()\
 	do\
 	{\
+		if(total_bytes_read < VERSION_6_HEADER_SIZE)\
+		{\
+			u32 header_padding_size = VERSION_6_HEADER_SIZE - total_bytes_read;\
+			SKIP_BYTES(header_padding_size);\
+		}\
+		\
 		if(index->section_2_length > 0)\
 		{\
 			READ_STRING(index->version);\
@@ -528,11 +733,14 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 	s8 first_byte = 0;
 	READ_INTEGER(first_byte);
 
-	// @Decompiled: In package sun.plugin.cache.* (Java 1.4).
+	// @Java: In package sun.plugin.cache.* (JDK 1.4).
 	// See FileCache.verifyFile() -> readHeaderFields() and CachedFileLoader.createCacheFiles() -> writeHeaders().
 	// See JarCache.verifyFile() and CachedJarLoader.authenticateFromCache() and authenticate().
 	if(first_byte == VERSION_4)
 	{
+		// In version 4, the first byte represents the status. It may also be incomplete (0), unusable (1), or in-use (29).
+		// index->status = first_byte;
+
 		READ_STRING(index->url);
 		READ_INTEGER(index->last_modified_time);
 		READ_INTEGER(index->expiry_time);
@@ -548,11 +756,11 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		}
 		else
 		{
-			// @Assert: We should never get here for the older cache formats.
+			// @Assert: We should never get here in the old cache.
 			_ASSERT(false);
 		}
 	}
-	// @Decompiled: In package com.sun.deploy.cache.* (Java 8).
+	// @Java: In package com.sun.deploy.cache.* (JDK 6).
 	else
 	{
 		index->busy = first_byte;
@@ -562,7 +770,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		// Read the remaining bytes in the header, whose layout depends on the previously read cache version.
 		switch(index->cache_version)
 		{
-			// @Decompiled: See CacheEntry.readIndexFile() -> readSection1Remaining() -> readSection2() -> readHeaders().
+			// @Java: See CacheEntry.readIndexFile() -> readSection1Remaining() -> readSection2() -> readHeaders().
 			case(VERSION_605):
 			{
 				READ_INTEGER(index->is_shortcut_image);
@@ -570,35 +778,31 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 				READ_INTEGER(index->last_modified_time);
 				READ_INTEGER(index->expiry_time);
 
-				SKIP_BYTES(sizeof(s64));
-				SKIP_BYTES(sizeof(s8));
+				READ_INTEGER(index->validation_timestamp);
+				READ_INTEGER(index->known_to_be_signed);
 
 				READ_INTEGER(index->section_2_length);
 				READ_INTEGER(index->section_3_length);
 				READ_INTEGER(index->section_4_length);
 
-				SKIP_BYTES(sizeof(s64));
-				SKIP_BYTES(sizeof(s64));
-				SKIP_BYTES(sizeof(s8));
+				READ_INTEGER(index->blacklist_validation_time);
+				READ_INTEGER(index->cert_expiration_date);
+				READ_INTEGER(index->class_verification_status);
 
 				READ_INTEGER(index->reduced_manifest_length);
 				READ_INTEGER(index->section_4_pre_15_Length);
+				
 				READ_INTEGER(index->has_only_signed_entries);
 				READ_INTEGER(index->has_single_code_source);
+				
 				READ_INTEGER(index->section_4_certs_length);
 				READ_INTEGER(index->section_4_signers_length);
 
-				SKIP_BYTES(sizeof(s8));
-				SKIP_BYTES(sizeof(s64));
+				READ_INTEGER(index->has_missing_signed_entries);
+				READ_INTEGER(index->trusted_libraries_validation_time);
 
 				READ_INTEGER(index->reduced_manifest_2_length);
 				READ_INTEGER(index->is_proxied_host);
-
-				if(total_bytes_read < VERSION_6_HEADER_SIZE)
-				{
-					u32 header_padding_size = VERSION_6_HEADER_SIZE - total_bytes_read;
-					SKIP_BYTES(header_padding_size);		
-				}
 
 				READ_SECTION_2();
 
@@ -606,40 +810,40 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 
 			} break;
 
-			// @Decompiled: See CacheEntry.readIndexFileOld() -> readSection1Remaining604() -> readSection2() -> readHeaders().
+			// @Java: See CacheEntry.readIndexFileOld() -> readSection1Remaining604() -> readSection2() -> readHeaders().
 			case(VERSION_604):
 			case(VERSION_603):
 			{
-				SKIP_BYTES(sizeof(s8));
-				SKIP_BYTES(sizeof(s8));
+				READ_INTEGER(index->force_update);
+				READ_INTEGER(index->no_href);
 
 				READ_INTEGER(index->is_shortcut_image);
 				READ_INTEGER(index->content_length);
 				READ_INTEGER(index->last_modified_time);
 				READ_INTEGER(index->expiry_time);
 
-				SKIP_BYTES(sizeof(s64));
-				SKIP_BYTES(sizeof(s8));
+				READ_INTEGER(index->validation_timestamp);
+				READ_INTEGER(index->known_to_be_signed);
 
 				READ_INTEGER(index->section_2_length);
 				READ_INTEGER(index->section_3_length);
 				READ_INTEGER(index->section_4_length);
 
-				SKIP_BYTES(sizeof(s64));
-				SKIP_BYTES(sizeof(s64));
-				SKIP_BYTES(sizeof(s8));
+				READ_INTEGER(index->blacklist_validation_time);
+				READ_INTEGER(index->cert_expiration_date);
+				READ_INTEGER(index->class_verification_status);
 
 				READ_INTEGER(index->reduced_manifest_length);
 				READ_INTEGER(index->section_4_pre_15_Length);
 
-				SKIP_BYTES(sizeof(s8));
-				SKIP_BYTES(sizeof(s8));
+				READ_INTEGER(index->has_only_signed_entries);
+				READ_INTEGER(index->has_single_code_source);
 
 				READ_INTEGER(index->section_4_certs_length);
 				READ_INTEGER(index->section_4_signers_length);
 
-				SKIP_BYTES(sizeof(s8));
-				SKIP_BYTES(sizeof(s64));
+				READ_INTEGER(index->has_missing_signed_entries);
+				READ_INTEGER(index->trusted_libraries_validation_time);
 
 				READ_INTEGER(index->reduced_manifest_2_length);
 
@@ -647,11 +851,11 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 
 			} break;
 
-			// @Decompiled: See CacheEntry.readIndexFileOld() -> readIndexFile602() -> readHeaders602().
+			// @Java: See CacheEntry.readIndexFileOld() -> readIndexFile602() -> readHeaders602().
 			case(VERSION_602):
 			{
-				SKIP_BYTES(sizeof(u8));
-				SKIP_BYTES(sizeof(u8));
+				READ_INTEGER(index->force_update);
+				READ_INTEGER(index->no_href);
 
 				READ_INTEGER(index->is_shortcut_image);
 				READ_INTEGER(index->content_length);
@@ -678,26 +882,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 }
 
 /*
-	@Resources: The Java API Specification - https://docs.oracle.com/javase/8/docs/api/index.html
-
-	Primitive Types in Java:
-	- byte 	= 1 byte (signed) 		= s8
-	- short = 2 bytes (signed) 		= s16
-	- int 	= 4 bytes (signed) 		= s32
-	- long 	= 8 bytes (signed) 		= s64
-	- char 	= 2 bytes (unsigned) 	= u16
-
-	Reading and writing these primitives is done using the methods in the java.io.DataInput and DataOutput interfaces.
-	Strings are serialized using the modified UTF-8 character encoding.
-	- https://docs.oracle.com/javase/8/docs/api/java/io/DataInput.html
-	- https://docs.oracle.com/javase/8/docs/api/java/io/DataOutput.html
-	
-	@ByteOrder: Big Endian.
-
-	@Resources: Decompiled Java classes related to the web plugin and its cache. Note that the Java Plugin and Java Web Start
-	are not included in OpenJDK.
-
-	@Decompiled: "jre\lib\jaws.jar" in JDK 1.3.1 update 28.
+	@Java: "jre\lib\jaws.jar" in JDK 1.3.1 update 28.
 	{
 		@Class: "sun.plugin.cachescheme.PluginCacheTable"
 		String userHome = (String) AccessController.doPrivileged(new GetPropertyAction("user.home"));
@@ -777,74 +962,5 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		- The "Last-Modified" value of the cache_archive on the web server is newer than the one stored locally in the applet cache, or
 		- The "Content-Length" of the cache_archive on the web server is different than the one stored locally in the applet cache.
 
-	}
-
-	@Decompiled: "jre\lib\plugin.jar" in JDK 1.4.2 update 19. Index files appear to have been introduced in Java 1.4.
-	This format looks to be the same in "jre\lib\plugin.jar" in JDK 1.5.0 update 22.
-	{
-		@Class: "com.sun.deploy.config.Config" in "jre\lib\deploy.jar" in JDK 1.5.0 update 22.
-		public static String getCacheDirectory()
-		{
-		    return getProperty("deployment.user.dir");
-		}
-
-		@Class: "sun.plugin.util.PluginConfig"
-  		private static final String JAVAPI = "javapi";
-		private static final String CACHE_VERSION = "v1.0";
-
-		private String getCacheDirectorySubStructure()
-		{
-		    return "javapi" + File.separator + "v1.0";
-		}
-
-		public String getPluginCacheDirectory()
-		{
-		    return Config.getCacheDirectory() + File.separator + getCacheDirectorySubStructure();
-		}
-
-		@Class: "sun.plugin.cache.Cache"
-		protected static String generateCacheFileName(File paramFile, URL paramURL) throws IOException
-		{
-	  		[...]
-			str2 = str1 + Integer.toString(getRandom(), 16);
-			localFile1 = new File(paramFile, str2 + getFileExtension(paramURL.toString()));
-			localFile2 = new File(paramFile, str2 + ".idx");
-	   		return str2;
-	 	}
-
-	 	protected static final File getIndexFile(File paramFile, URL paramURL)
-		{
-			String str = paramFile.getName();
-			str = str.substring(0, str.length() - getFileExtension(paramURL.toString()).length());
-			str = str + ".idx";
-			return new File(paramFile.getParentFile(), str);
-		}
-
-		protected static final File getDataFile(File paramFile, String paramString)
-		{
-			String str = paramFile.getName();
-			str = str.substring(0, str.length() - ".idx".length());
-			str = str + getFileExtension(paramString);
-			return new File(paramFile.getParentFile(), str);
-		}
-
-		protected static final String getFileExtension(String paramString)
-		{
-			String str = "";
-
-			int i = paramString.lastIndexOf('.');
-			if (i != -1) {
-				str = paramString.substring(i);
-			}
-			if ((str.equalsIgnoreCase(".jar")) || (str.equalsIgnoreCase(".jarjar"))) {
-				str = ".zip";
-			}
-			return str;
-		}
-	}
-
-	@Decompiled: "jre\lib\deploy.jar" in JDK 8 update 181.
-	{
-		@Class: "com.sun.deploy.cache.CacheEntry"
 	}
 */

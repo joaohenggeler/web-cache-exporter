@@ -36,7 +36,7 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
 	REM In our case, we use 7-Zip Extra 9.20.
-	SET "PACKAGE_BUILD=No"
+	SET "PACKAGE_BUILD=Yes"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.

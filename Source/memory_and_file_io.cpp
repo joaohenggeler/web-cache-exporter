@@ -1844,7 +1844,7 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_temporary_directories_callback)
 {
 	TCHAR full_directory_path[MAX_PATH_CHARS] = TEXT("");

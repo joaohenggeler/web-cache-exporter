@@ -174,6 +174,7 @@ struct Exporter
 	bool should_create_csv;
 	bool should_overwrite_previous_output;
 	bool should_filter_by_groups;
+	bool should_show_full_paths;
 
 	bool should_load_specific_groups_files;
 	size_t num_group_filenames_to_load;

@@ -140,7 +140,7 @@ struct Total_Group_File_Result
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 {
 	Total_Group_File_Result* result = (Total_Group_File_Result*) user_data;
@@ -699,7 +699,7 @@ struct Find_Group_Files_Result
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_group_files_callback)
 {
 	Find_Group_Files_Result* result = (Find_Group_Files_Result*) user_data;

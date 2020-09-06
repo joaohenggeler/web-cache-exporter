@@ -7,7 +7,7 @@
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
-static const TCHAR* OUTPUT_DIRECTORY_NAME = TEXT("FL");
+static const TCHAR* OUTPUT_NAME = TEXT("FL");
 
 // The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
@@ -31,14 +31,10 @@ void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 {
 	if(exporter->is_exporting_from_default_locations)
 	{
-		if(!PathCombine(exporter->cache_path, exporter->roaming_appdata_path, TEXT("Adobe\\Flash Player")))
-		{
-			log_print(LOG_ERROR, "Flash Plugin: Failed to determine the cache directory path.");
-			return;
-		}
+		PathCombine(exporter->cache_path, exporter->roaming_appdata_path, TEXT("Adobe\\Flash Player"));
 	}
 
-	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Flash Plugin: Exporting the cache from '%s'.", exporter->cache_path);
 		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_flash_files_callback, exporter);
@@ -51,7 +47,7 @@ void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;

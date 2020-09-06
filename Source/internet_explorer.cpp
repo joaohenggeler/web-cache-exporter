@@ -92,7 +92,7 @@
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
-static const TCHAR* OUTPUT_DIRECTORY_NAME = TEXT("IE");
+static const TCHAR* OUTPUT_NAME = TEXT("IE");
 
 // The order and type of each column in the CSV file. This applies to all supported cache database file format versions.
 static const Csv_Type CSV_COLUMN_TYPES[] =
@@ -115,7 +115,7 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // However, not every cache type lends itself to this kind of operation (e.g. if we're missing the database file, we might not even
 // be able to find the files themselves). For now, we'll only do this for IE 4 through 9.
 
-static const TCHAR* RAW_OUTPUT_DIRECTORY_NAME = TEXT("IE-RAW");
+static const TCHAR* RAW_OUTPUT_NAME = TEXT("IE-RAW");
 // Notice how we have less information due to not relying on the index/database file. We only know the file's properties.
 static const Csv_Type RAW_CSV_COLUMN_TYPES[] =
 {
@@ -127,6 +127,8 @@ static const Csv_Type RAW_CSV_COLUMN_TYPES[] =
 static const size_t RAW_CSV_NUM_COLUMNS = _countof(RAW_CSV_COLUMN_TYPES);
 
 // ----------------------------------------------------------------------------------------------------
+
+// @ByteOrder: Little Endian.
 
 // @Format: Various constants for index.dat.
 static const size_t NUM_SIGNATURE_CHARS = 28;
@@ -510,7 +512,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 	bool ie_4_to_9_cache_exists = false;
 
-	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		TCHAR* index_file_path = NULL;
 
@@ -566,7 +568,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 		log_print_newline();
 		log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
 
-		initialize_cache_exporter(exporter, RAW_OUTPUT_DIRECTORY_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
+		initialize_cache_exporter(exporter, RAW_OUTPUT_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
 		{
 			export_raw_internet_explorer_4_to_9_cache(exporter);		
 		}
@@ -595,7 +597,7 @@ static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter)
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
@@ -1555,7 +1557,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	//
 	// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 	//
-	// @Returns: Nothing.
+	// @Returns: True.
 	static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_10_to_11_ese_files_callback)
 	{
 		Copy_Ese_Files_Params* params = (Copy_Ese_Files_Params*) user_data;

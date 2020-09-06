@@ -26,7 +26,7 @@
 */
 
 // The name of the CSV file and the directory where the cached files will be copied to.
-static const TCHAR* OUTPUT_DIRECTORY_NAME = TEXT("SW");
+static const TCHAR* OUTPUT_NAME = TEXT("SW");
 
 // The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
@@ -127,14 +127,10 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 {
 	if(exporter->is_exporting_from_default_locations)
 	{
-		if(FAILED(StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path)))
-		{
-			log_print(LOG_ERROR, "Shockwave Plugin: Failed to determine the Temporary Files directory path.");
-			return;
-		}
+		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
 	}
 
-	initialize_cache_exporter(exporter, OUTPUT_DIRECTORY_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache from '%s'.", exporter->cache_path);
 		Find_Shockwave_Files_Params params = {};
@@ -155,7 +151,7 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
-// @Returns: Nothing.
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 {
 	Find_Shockwave_Files_Params* params = (Find_Shockwave_Files_Params*) user_data;

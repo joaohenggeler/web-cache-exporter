@@ -1,20 +1,7 @@
+; This file lists any other binary formats that aren't handled by the previously
+; loaded group files.
+
 BEGIN_FILE_GROUP Certificate
-
-	BEGIN_FILE_EXTENSIONS
-		p8 key
-		p10 csr
-		cer
-		crl
-		p7c
-
-		crt der
-
-		pem
-		p12 pfx
-
-		p7b spc
-		p7r
-	END
 
 	BEGIN_MIME_TYPES
 		application/pkcs
@@ -38,6 +25,22 @@ BEGIN_FILE_GROUP Certificate
 		; application/x-pkcs12
 		; application/x-pkcs7-certificates
 		; application/x-pkcs7-certreqresp
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		p8 key
+		p10 csr
+		cer
+		crl
+		p7c
+
+		crt der
+
+		pem
+		p12 pfx
+
+		p7b spc
+		p7r
 	END
 
 END
@@ -71,6 +74,18 @@ BEGIN_FILE_GROUP PDF
 
 	BEGIN_FILE_EXTENSIONS
 		pdf
+	END
+
+END
+
+BEGIN_FILE_GROUP Scratch
+
+	BEGIN_MIME_TYPES
+		application/x-scratch-project
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		sb sb2 sb3
 	END
 
 END

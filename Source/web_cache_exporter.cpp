@@ -51,6 +51,13 @@
 	@TODO:
 
 	- Add support for the Java Plugin.
+	- Handle external locations.
+	
+	- Decode URLs using UTF-8.
+	- Change Xtras location (going through Local or LocalLow every time is too slow!)
+	
+	- Force copy file with correct retry amount logic.
+	- Change ".<TLD>" to ".*" and allow second level domains.
 */
 
 /*
@@ -73,7 +80,9 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"-export-shockwave    to export the Shockwave Player cache.\n"
 												"\n"
-												"-find-and-export-all    to export all of the above at once, in the following order: IE > Flash > Shockwave. This option does not have an optional cache path argument.\n"
+												"-export-java    to export the Java Plugin cache.\n"
+												"\n"
+												"-find-and-export-all    to export all of the above at once, in the following order: IE > Flash > Shockwave > Java. This option does not have an optional cache path argument.\n"
 												"\n"
 												"-explore-files    to export the files in a directory and its subdirectories. This option must have the cache path argument.\n"
 												"\n"
@@ -97,6 +106,8 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"-no-create-csv    to stop the exporter from creating CSV files.\n"
 												"\n"
 												"-overwrite    to delete the previous output folder before running.\n"
+												"\n"
+												"-show-full-paths    to replace the Location On Cache column with the cached file's full path on disk.\n"
 												"\n"
 												"-filter-by-groups    to only export files that match any loaded groups.\n"
 												"\n"
@@ -180,13 +191,13 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			exporter->should_overwrite_previous_output = true;
 		}
-		else if(strings_are_equal(option, TEXT("-filter-by-groups")))
-		{
-			exporter->should_filter_by_groups = true;
-		}
 		else if(strings_are_equal(option, TEXT("-show-full-paths")))
 		{
 			exporter->should_show_full_paths = true;
+		}
+		else if(strings_are_equal(option, TEXT("-filter-by-groups")))
+		{
+			exporter->should_filter_by_groups = true;
 		}
 		else if(strings_are_equal(option, TEXT("-load-group-files")))
 		{
@@ -627,7 +638,7 @@ int _tmain(int argc, TCHAR* argv[])
 		log_print(LOG_ERROR, "Startup: Failed to get the user profile directory path with error code %lu.", GetLastError());
 	}
 
-	if(!get_special_folder_path(CSIDL_APPDATA, exporter.roaming_appdata_path))
+	if(!get_special_folder_path(CSIDL_APPDATA, exporter.appdata_path))
 	{
 		log_print(LOG_ERROR, "Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
 	}
@@ -674,6 +685,8 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_INFO, "Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(&exporter.temporary_arena));
 	clear_arena(&(exporter.temporary_arena));
 
+	log_print_newline();
+
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_INFO, "Exporter Options:");
 	log_print(LOG_NONE, "----------------------------------------");
@@ -681,6 +694,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", (exporter.should_overwrite_previous_output) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Show Full Paths: %hs", (exporter.should_show_full_paths) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Filter By Groups: %hs", (exporter.should_filter_by_groups) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Load Specific Groups: %hs", (exporter.should_load_specific_groups_files) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Number Of Groups To Load: %Iu", exporter.num_group_filenames_to_load);
@@ -690,6 +704,11 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
 	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
+	
+	log_print_newline();
+
+	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_INFO, "Current Locations:");
 	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Executable Path: '%s'", exporter.executable_path);
 	log_print(LOG_NONE, "- Exporter Temporary Path: '%s'", exporter.exporter_temporary_path);
@@ -698,12 +717,18 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Windows Directory Path: '%s'", exporter.windows_path);
 	log_print(LOG_NONE, "- Windows Temporary Path: '%s'", exporter.windows_temporary_path);
 	log_print(LOG_NONE, "- User Profile Path: '%s'", exporter.user_profile_path);
-	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.roaming_appdata_path);
+	log_print(LOG_NONE, "- Roaming AppData Path: '%s'", exporter.appdata_path);
 	log_print(LOG_NONE, "- Local AppData Path: '%s'", exporter.local_appdata_path);
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
 	log_print(LOG_NONE, "- WinINet Cache Path: '%s'", exporter.wininet_cache_path);
 
 	log_print_newline();
+
+	/*TCHAR* url = NULL;
+	url = decode_url(&(exporter.temporary_arena), TEXT("http://www.example.com/path+and%20spaces /%7B%7D/%C5%92/%E2%80%B0/index.html"));
+	bool result = copy_file_using_url_directory_structure(	&(exporter.temporary_arena), TEXT("C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\version.txt"), 
+															TEXT("C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\Output"), url, TEXT("abc"));
+	result;*/
 
 	switch(exporter.cache_type)
 	{
@@ -732,20 +757,17 @@ int _tmain(int argc, TCHAR* argv[])
 			_ASSERT(exporter.is_exporting_from_default_locations);
 			_ASSERT(string_is_empty(exporter.cache_path));
 
-			console_print("Exporting Internet Explorer's cache...");
 			export_specific_or_default_internet_explorer_cache(&exporter);
 			log_print_newline();
 
-			console_print("Exporting the Flash Plugin's cache...");
 			export_specific_or_default_flash_plugin_cache(&exporter);
 			log_print_newline();
 
-			console_print("Exporting the Shockwave Plugin's cache...");
 			export_specific_or_default_shockwave_plugin_cache(&exporter);
 			log_print_newline();
 
-			console_print("Exporting the Java Plugin's cache...");
 			export_specific_or_default_java_plugin_cache(&exporter);
+
 		} break;
 
 		case(CACHE_EXPLORE):

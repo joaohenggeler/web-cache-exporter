@@ -1068,57 +1068,90 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	return true;
 }
 
-// Decodes a percent-encoded URL. It does not validate or perform any other checks on the URL.
+// Decodes a percent-encoded URL using UTF-8 as the character encoding.
+//
+// This function will convert this decoded UTF-8 URL into a TCHAR (ANSI or UTF-16) string. This means that the final ANSI
+// string on the Windows 98 and ME builds may not be able to represent every character in the UTF-8 data.
+//
+// If an encoded character cannot be properly decoded to a byte, this function will end prematurely and truncate the URL.
 //
 // @Parameters:
-// 1. url - The URL string to decode.
+// 1. arena - The Arena structure that receives the decoded URL and where any intermediary strings are stored.
+// 2. url - The URL string to decode.
 //
-// @Returns: True unless one of the percent-encoded characters can't be decoded correctly. If it fails on an encoded character,
-// any remaining ones are unchanged. This function succeeds if the URL is NULL.
-bool decode_url(TCHAR* url)
+// @Returns: The decoded URL on success. If this function fails, it returns NULL. 
+TCHAR* decode_url(Arena* arena, const TCHAR* url)
 {
-	bool success = true;
+	// @Future: Right now this function takes a TCHAR but it would probably be more useful if it could take an ANSI or UTF-16
+	// string on both the Windows 98/ME and 2000 to 10 builds, which would avoid useless conversions.
 
-	if(url != NULL)
+	if(url == NULL) return NULL;
+	
+	const TCHAR* original_url = url;
+	char* utf_8_url = push_arena(arena, (string_length(url) + 1) * sizeof(char), char);
+	size_t utf_8_index = 0;
+
+	while(*url != TEXT('\0'))
 	{
-		while(*url != TEXT('\0'))
+		// Decode percent-encoded characters.
+		// @Docs: https://tools.ietf.org/html/rfc3986#section-2.1
+		if(*url == TEXT('%'))
 		{
-			// Decode percent-encoded characters.
-			// @Docs: https://tools.ietf.org/html/rfc3986#section-2.1
-			if(*url == TEXT('%'))
+			u8 decoded_char = 0;
+			if(convert_hexadecimal_string_to_byte(url + 1, &decoded_char))
 			{
-				TCHAR* after_percent_sign = url + 1;
-				u8 decoded_char = 0;
+				utf_8_url[utf_8_index] = decoded_char;
+				++utf_8_index;
 
-				if(convert_hexadecimal_string_to_byte(after_percent_sign, &decoded_char))
-				{
-					TCHAR* url_end_of_encoded_char = url + 2;
-					MoveMemory(url, url_end_of_encoded_char, string_size(url_end_of_encoded_char));
-					*url = decoded_char;
-				}
-				else
-				{
-					// If the percent sign isn't followed by two characters or if the characters
-					// don't represent a valid hexadecimal value.
-					success = false;
-					break;
-				}
+				// Skip the two hexadecimal characters.
+				url += 2;
 			}
-			else if(*url == TEXT('+'))
+			else
 			{
-				*url = TEXT(' ');
+				// If the percent sign isn't followed by two characters or if the characters
+				// don't represent a valid hexadecimal value.
+				log_print(LOG_WARNING, "Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
+				break;
 			}
-			
-			++url;
 		}
+		else if(*url == TEXT('+'))
+		{
+			utf_8_url[utf_8_index] = ' ';
+			++utf_8_index;
+		}
+		else
+		{
+			utf_8_url[utf_8_index] = (char) *url;
+			++utf_8_index;
+		}
+		
+		++url;
 	}
 
-	if(!success)
+	utf_8_url[utf_8_index] = '\0';
+	TCHAR* tchar_url = convert_utf_8_string_to_tchar(arena, utf_8_url);
+
+	if(tchar_url == NULL)
 	{
-		log_print(LOG_ERROR, "Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
+		log_print(LOG_ERROR, "Decode Url: Failed to convert the decoded URL from UTF-8 to an ANSI or UTF-16 string: '%s'.", original_url);
+		// It's possible that converting the decoded UTF-8 URL to the current active code page on Windows 98/ME is not possible
+		// without losing data (since it can't represent every character used in the specific Unicode string).
+		//
+		// Instead of returning NULL (which would leave an empty URL in the CSV file and would prevent the exporter from using
+		// the URL's host and path to create the output directories), we'll return the current UTF-8 data as is if it was an
+		// ANSI string. Any byte above 0x7F will be mapped to an incorrect character in the code page.
+		//
+		// This scenario is unlikely in the Windows 2000 to 10 builds (which use UTF-16), so if it does fail here for whatever
+		// reason, we will want to return NULL and make the error obvious.
+		//
+		// @Future: This is a weird behavior and this function might change in the future.
+		#ifdef BUILD_9X
+			tchar_url = utf_8_url;
+		#endif
+		
 	}
 
-	return success;
+	return tchar_url;
 }
 
 // Converts the host and path in a URL into a Windows directory path.
@@ -1662,6 +1695,8 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data)
 {
+	if(string_is_empty(path)) return;
+
 	bool should_continue_traversing = true;
 
 	/*
@@ -1984,7 +2019,6 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 		bool build_target_success = convert_url_to_path(arena, url, url_path) && PathAppend(full_copy_target_path, url_path);
 		if(!build_target_success)
 		{
-			console_print("The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
 			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
 			StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
 		}
@@ -2003,13 +2037,11 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 	bool build_target_success = PathAppend(full_copy_target_path, corrected_filename) == TRUE;
 	if(!build_target_success)
 	{
-		console_print("Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
 		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
 		
 		StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
 		if(!PathAppend(full_copy_target_path, corrected_filename))
 		{
-			console_print("Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
 			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
 			return false;
 		}
@@ -3106,14 +3138,14 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 								}
 								else if(overlapped_result_error_code == WAIT_TIMEOUT)
 								{
-									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation.", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written);
 									++num_read_retry_attempts;
+									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u).", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written, num_read_retry_attempts);
 									continue;
 								}
 								else
 								{
-									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation.", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written);
 									++num_read_retry_attempts;
+									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u).", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts);
 									continue;
 								}
 							}
@@ -3125,11 +3157,14 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 						}
 						else
 						{
-							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation.", copy_source_path, read_error_code, total_bytes_read, total_bytes_written);
 							++num_read_retry_attempts;
+							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u).", copy_source_path, read_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts);
 							continue;
 						}
 					}
+
+					// Reset the number of retries if the read operation was successful.
+					num_read_retry_attempts = 0;
 
 					if(!reached_end_of_file)
 					{

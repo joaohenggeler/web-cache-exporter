@@ -163,7 +163,7 @@ struct Url_Parts
 };
 
 bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
-bool decode_url(TCHAR* url);
+TCHAR* decode_url(Arena* arena, const TCHAR* url);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>

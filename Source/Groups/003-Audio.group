@@ -1,3 +1,5 @@
+; This file lists audio formats, which use the major MIME type "audio".
+
 BEGIN_FILE_GROUP MIDI
 
 	BEGIN_FILE_SIGNATURES
@@ -18,8 +20,14 @@ END
 BEGIN_FILE_GROUP Audio
 
 	BEGIN_FILE_SIGNATURES
+		; AIFF - "FORM____AIFF"
+		46 4F 52 4D __ __ __ __ 41 49 46 46
+
 		; AU - ".snd"
 		2E 73 6E 64
+
+		; FLAC - "fLaC"
+		66 4C 61 43
 
 		; WAVE - "RIFF____WAVEfmt "
 		52 49 46 46 __ __ __ __ 57 41 56 45 66 6D 74 20
@@ -30,7 +38,8 @@ BEGIN_FILE_GROUP Audio
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		aif aiff au mp3 ogg wav
+		aif aiff aifc au flac mka mp3 wav weba wma
+		ogg oga
 	END
 
 END

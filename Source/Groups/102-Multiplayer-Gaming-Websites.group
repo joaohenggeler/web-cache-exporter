@@ -1,0 +1,18 @@
+; This file lists some popular online multiplayer game websites between 1995 and now.
+; Be sure to check the Lost Websites group file first before adding any others.
+
+BEGIN_URL_GROUP Club Penguin
+
+	BEGIN_DOMAINS
+		clubpenguin.com
+	END
+
+END
+
+BEGIN_URL_GROUP Poptropica
+
+	BEGIN_DOMAINS
+		poptropica.com
+	END
+
+END

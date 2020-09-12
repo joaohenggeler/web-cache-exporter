@@ -505,6 +505,8 @@ static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporte
 
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
+	console_print("Exporting Internet Explorer's cache...");
+	
 	if(exporter->is_exporting_from_default_locations)
 	{
 		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
@@ -802,7 +804,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					// which is the name of the actual cached file on disk, and the undecorated name (e.g. image.gif)
 					// which is what we'll show in the CSV.
 					TCHAR* decorated_filename = TEXT("");
-					TCHAR* filename = TEXT("");
+					TCHAR* filename = NULL;
 					if(entry_offset_to_filename > 0)
 					{
 						const char* filename_in_mmf = (char*) advance_bytes(entry, entry_offset_to_filename);
@@ -815,12 +817,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					GET_URL_ENTRY_MEMBER(entry_offset_to_url, entry_offset_to_url);
 					// @Format: The stored URL is encoded. We'll decode it for the CSV and to correctly create
 					// the website's original directory structure when we copy the cached file.
-					TCHAR* url = TEXT("");
+					TCHAR* url = NULL;
 					if(entry_offset_to_url > 0)
 					{
 						const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
 						url = convert_ansi_string_to_tchar(arena, url_in_mmf);
-						decode_url(url);
+						url = decode_url(arena, url);
 					}
 
 					u32 entry_offset_to_headers;
@@ -2005,7 +2007,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									wchar_t* decorated_filename = push_string_to_arena(arena, filename);
 									undecorate_path(filename);
 
-									decode_url(url);
+									url = decode_url(arena, url);
 
 									wchar_t cached_file_size[MAX_INT64_CHARS] = L"";
 									convert_s64_to_string(file_size, cached_file_size);

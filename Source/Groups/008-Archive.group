@@ -1,3 +1,8 @@
+; This file lists common archive formats. Note that files based on these formats may
+; be labeled differently if their group is loaded first. For example, the Plugin group
+; file labels a JAR file as "Java", even though this type of file is based on the ZIP
+; format.
+
 BEGIN_FILE_GROUP 7-Zip
 
 	BEGIN_FILE_SIGNATURES
@@ -11,6 +16,24 @@ BEGIN_FILE_GROUP 7-Zip
 
 	BEGIN_FILE_EXTENSIONS
 		7z
+	END
+
+END
+
+BEGIN_FILE_GROUP Bzip2
+
+	BEGIN_FILE_SIGNATURES
+		; "BZh"
+		42 5A 68
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-bzip
+		application/x-bzip2
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		bz bz2
 	END
 
 END
@@ -31,6 +54,23 @@ BEGIN_FILE_GROUP GZIP
 
 END
 
+BEGIN_FILE_GROUP LHA
+
+	BEGIN_FILE_SIGNATURES
+		; "__-lh"
+		__ __ 2D 6C 68
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-lzh-compressed
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		lha lzh
+	END
+
+END
+
 BEGIN_FILE_GROUP RAR
 
 	BEGIN_FILE_SIGNATURES
@@ -47,6 +87,18 @@ BEGIN_FILE_GROUP RAR
 
 	BEGIN_FILE_EXTENSIONS
 		rar
+	END
+
+END
+
+BEGIN_FILE_GROUP TAR
+
+	BEGIN_MIME_TYPES
+		application/x-tar
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		tar
 	END
 
 END

@@ -56,6 +56,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 // @Returns: Nothing.
 void export_explored_files(Exporter* exporter)
 {
+	console_print("Exploring and exporting the files from '%s'...", exporter->cache_path);
+
 	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);

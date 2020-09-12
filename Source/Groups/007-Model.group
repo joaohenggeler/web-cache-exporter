@@ -1,3 +1,5 @@
+; This file lists 3D file formats, which use the major MIME types "model" and "x-world".
+
 BEGIN_FILE_GROUP Model
 
 	BEGIN_MIME_TYPES

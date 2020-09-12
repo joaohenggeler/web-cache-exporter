@@ -93,7 +93,7 @@
 #ifdef BUILD_VERSION
 	const char* const EXPORTER_BUILD_VERSION = BUILD_VERSION;
 #else
-	const char* const EXPORTER_BUILD_VERSION = "Unknown";
+	const char* const EXPORTER_BUILD_VERSION = "0.0.0";
 #endif
 
 #ifdef DEBUG
@@ -208,13 +208,38 @@ struct Exporter
 	bool was_temporary_exporter_directory_created;
 	
 	// The paths to relevant Windows locations. These are sometimes used to find cache directories.
+	// @DefaultCacheLocations:
 	TCHAR windows_path[MAX_PATH_CHARS];
+	// - 98, ME, XP, Vista, 7, 8.1, 10 			C:\WINDOWS
+	// - 2000 									C:\WINNT
 	TCHAR windows_temporary_path[MAX_PATH_CHARS];
+	// - 98, ME									C:\WINDOWS\TEMP
+	// - 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Temp
+	// - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Local\Temp
 	TCHAR user_profile_path[MAX_PATH_CHARS];
-	TCHAR roaming_appdata_path[MAX_PATH_CHARS];
+	// - 98, ME 								<None>
+	// - 2000, XP	 							C:\Documents and Settings\<Username>
+	// - Vista, 7, 8.1, 10						C:\Users\<Username>
+	TCHAR appdata_path[MAX_PATH_CHARS];
+	// - 98, ME 								C:\WINDOWS\Application Data
+	// - 2000, XP	 							C:\Documents and Settings\<Username>\Application Data
+	// - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Roaming
 	TCHAR local_appdata_path[MAX_PATH_CHARS];
+	// - 98, ME 								<None>
+	// - 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Application Data
+	// - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Local
 	TCHAR local_low_appdata_path[MAX_PATH_CHARS];
+	// - 98, ME 								<None>
+	// - 2000, XP	 							<None>
+	// - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\LocalLow
 	TCHAR wininet_cache_path[MAX_PATH_CHARS];
+	// - 98, ME 								C:\WINDOWS\Temporary Internet Files
+	// - 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Temporary Internet Files
+	// - Vista, 7								C:\Users\<Username>\AppData\Local\Microsoft\Windows\Temporary Internet Files
+	// - 8.1, 10								C:\Users\<Username>\AppData\Local\Microsoft\Windows\INetCache
+
+	// TCHAR program_files_path[MAX_PATH_CHARS];
+	// - 98, ME, 2000, XP, Vista, 7, 8.1, 10	C:\Program Files
 
 	// General purpose variables that are freely changed by each cache exporter:
 	// - The currently open CSV file.

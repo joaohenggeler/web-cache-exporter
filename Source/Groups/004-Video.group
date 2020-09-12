@@ -1,3 +1,5 @@
+; This file lists video formats, which use the major MIME type "video".
+
 BEGIN_FILE_GROUP Video
 
 	BEGIN_FILE_SIGNATURES
@@ -13,7 +15,7 @@ BEGIN_FILE_GROUP Video
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		avi flv mov mp4 mpeg mpg ogv webm
+		avi flv mkv ogv webm wmv
 	END
 
 END

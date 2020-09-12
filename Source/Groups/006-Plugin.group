@@ -1,4 +1,4 @@
-; This is a comment.
+; This file lists any formats that require a web plugin to be viewed in a browser.
 
 BEGIN_FILE_GROUP 3D Groove GX
 
@@ -9,7 +9,7 @@ BEGIN_FILE_GROUP 3D Groove GX
 END
 
 ; Virtools / 3D Life Player
-BEGIN_FILE_GROUP 3DVIA
+BEGIN_FILE_GROUP 3DVIA Player
 
 	BEGIN_FILE_SIGNATURES
 		; "Nemo Fi"
@@ -124,8 +124,6 @@ BEGIN_FILE_GROUP Flash
 	BEGIN_FILE_EXTENSIONS
 		swf spl
 		fla
-		
-		; Signed Flash Player Library
 		swz
 	END
 
@@ -140,8 +138,9 @@ BEGIN_FILE_GROUP Hypercosm
 
 	BEGIN_MIME_TYPES
 		application/x-hypercosm
+		; Matches:
 		; application/x-hypercosm
-		; application/x-Hypercosm-3D-Applet
+		; application/x-hypercosm-3d-applet
 	END
 
 	BEGIN_FILE_EXTENSIONS
@@ -209,18 +208,6 @@ BEGIN_FILE_GROUP Pulse
 
 	BEGIN_FILE_EXTENSIONS
 		pwc pw3 pws pwn pwv pwr
-	END
-
-END
-
-BEGIN_FILE_GROUP Scratch
-
-	BEGIN_MIME_TYPES
-		application/x-scratch-project
-	END
-
-	BEGIN_FILE_EXTENSIONS
-		sb sb2
 	END
 
 END

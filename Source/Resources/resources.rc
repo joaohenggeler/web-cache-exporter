@@ -1,0 +1,33 @@
+#include "resources.h"
+
+1 VERSIONINFO
+FILEVERSION 		WCE_COMMA_VERSION
+PRODUCTVERSION 		WCE_COMMA_VERSION
+FILEOS 				WCE_FILE_OS
+FILETYPE 			WCE_FILE_TYPE
+{
+	BLOCK "StringFileInfo"
+	{
+		// langID 		= 0x0409 = U.S. English
+		// charsetID 	= 0x04B0 = Unicode
+		BLOCK "040904B0"
+		{
+			VALUE "Comments", 			WCE_COMMENTS
+			VALUE "CompanyName", 		WCE_COMPANY_NAME
+			VALUE "FileDescription", 	WCE_FILE_DESCRIPTION
+			VALUE "FileVersion", 		WCE_FILE_VERSION
+			VALUE "InternalName", 		WCE_INTERNAL_NAME
+			VALUE "LegalCopyright", 	WCE_LEGAL_COPYRIGHT
+			VALUE "OriginalFilename", 	WCE_ORIGINAL_FILENAME
+			VALUE "ProductName", 		WCE_PRODUCT_NAME
+			VALUE "ProductVersion", 	WCE_PRODUCT_VERSION
+		}
+	}
+
+	BLOCK "VarFileInfo"
+	{
+		VALUE "Translation", 0x0409, 0x04B0
+	}
+}
+
+//2 ICON WCE_ICON_PATH

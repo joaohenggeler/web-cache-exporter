@@ -30,7 +30,8 @@
 	and "https://download.example.com/path/updates/file.php?version=123&platform=ABC#top". This check allows you to match subdomains.
 	1b. Using the same example, if a group specifies "example.com/path", it will match the last two URLs. If a group instead specifies
 	"example.com/path/updates", it will only match the last one.
-	1c. If a group specifies "example.<TLD>", it will match any top level domain, like "example.com", "example.net", "example.org", etc.
+	1c. If a group specifies "example.*", it will match any top or second level domain, like "example.com", "example.net", "example.org",
+	"example.co.uk", etc.
 
 
 	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
@@ -65,7 +66,7 @@
 		BEGIN_DOMAINS
 			cartoonnetwork.com
 			turner.com/toon
-			cartoonnetworkhq.<TLD>
+			cartoonnetworkhq.*
 		END
 
 	END
@@ -89,7 +90,7 @@ static const TCHAR* BYTE_DELIMITERS = TEXT(" ");
 static const char* BEGIN_MIME_TYPES = "BEGIN_MIME_TYPES";
 static const char* BEGIN_FILE_EXTENSIONS = "BEGIN_FILE_EXTENSIONS";
 static const char* BEGIN_DOMAINS = "BEGIN_DOMAINS";
-static const TCHAR* ANY_TOP_LEVEL_DOMAIN = TEXT(".<TLD>");
+static const TCHAR* ANY_TOP_OR_SECOND_LEVEL_DOMAIN = TEXT(".*");
 static const TCHAR* URL_PATH_DELIMITERS = TEXT("/");
 
 // The maximum size of the file signature buffer in bytes.
@@ -489,15 +490,15 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						TCHAR* path = NULL;
 						TCHAR* host = _tcstok_s(domain_strings, URL_PATH_DELIMITERS, &path);
 
-						if(string_ends_with(host, ANY_TOP_LEVEL_DOMAIN))
+						if(string_ends_with(host, ANY_TOP_OR_SECOND_LEVEL_DOMAIN))
 						{
-							domain->any_top_level_domain = true;
+							domain->match_any_top_or_second_level_domain = true;
 							TCHAR* last_period = _tcsrchr(host, TEXT('.'));
 							if(last_period != NULL) *last_period = TEXT('\0');
 						}
 						else
 						{
-							domain->any_top_level_domain = false;
+							domain->match_any_top_or_second_level_domain = false;
 						}
 
 						domain->host = push_string_to_arena(permanent_arena, host);
@@ -931,26 +932,41 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 					Domain* domain = group.url_info.domains[j];
 
 					// Match any top level domain if it was requested in the URL group.
-					// We'll do this by removing the current host's top level domain before comparing strings.
 					TCHAR* host_to_match = url_parts_to_match.host;
 					TCHAR* last_period = NULL;
-					if(domain->any_top_level_domain && host_to_match != NULL)
+					TCHAR* second_to_last_period = NULL;
+
+					// We'll do this by first removing the current host's top level domain before doing the first comparison.
+					if(domain->match_any_top_or_second_level_domain && host_to_match != NULL)
 					{
 						last_period = _tcsrchr(host_to_match, TEXT('.'));
 						if(last_period != NULL)
 						{
 							*last_period = TEXT('\0');
+							second_to_last_period = _tcsrchr(host_to_match, TEXT('.'));
 						}
 					}
 
 					bool urls_match = (host_to_match != NULL) && string_ends_with(host_to_match, domain->host, true);
 
 					// Put any removed top level domains back.
-					if(domain->any_top_level_domain && last_period != NULL)
+					if(last_period != NULL)
 					{
 						*last_period = TEXT('.');
 					}
 
+					// And by then removing the current host's second level domain before doing a second comparison.
+					// We only need to do this if there wasn't a previous match.
+					if(!urls_match && second_to_last_period != NULL)
+					{
+						*second_to_last_period = TEXT('\0');
+						urls_match = (host_to_match != NULL) && string_ends_with(host_to_match, domain->host, true);
+						// Put any removed second level domains back.
+						*second_to_last_period = TEXT('.');
+					}
+
+					// If there is also a path to compare, it must necessarily match the current URL's path.
+					// Otherwise, the whole match fails.
 					if(domain->path != NULL)
 					{
 						urls_match = urls_match && string_starts_with(url_parts_to_match.path, domain->path, true);

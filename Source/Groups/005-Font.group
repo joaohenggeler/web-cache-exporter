@@ -1,3 +1,5 @@
+; This file lists font formats, which commonly use the major MIME type "font".
+
 BEGIN_FILE_GROUP Font
 
 	BEGIN_MIME_TYPES

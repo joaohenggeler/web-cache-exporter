@@ -29,9 +29,11 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_files_callback);
 void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 {
+	console_print("Exporting the Flash Plugin's cache...");
+	
 	if(exporter->is_exporting_from_default_locations)
 	{
-		PathCombine(exporter->cache_path, exporter->roaming_appdata_path, TEXT("Adobe\\Flash Player"));
+		PathCombine(exporter->cache_path, exporter->appdata_path, TEXT("Adobe\\Flash Player"));
 	}
 
 	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);

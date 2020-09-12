@@ -33,10 +33,13 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to build the Windows 98 and ME version.
 	SET "WIN9X_BUILD=Yes"
 
+	REM Set to "Yes" to compile and link the resource file. This will add an icon and version information to the executable.
+	SET "COMPILE_RESOURCES=Yes"
+
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
 	REM In our case, we use 7-Zip Extra 9.20.
-	SET "PACKAGE_BUILD=Yes"
+	SET "PACKAGE_BUILD=No"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.
@@ -89,6 +92,13 @@ PUSHD "%~dp0"
 	SET "EXE_FILENAME_32=WCE32.exe"
 	SET "EXE_FILENAME_64=WCE64.exe"
 	SET "EXE_FILENAME_9X_32=WCE9x32.exe"
+
+	REM @TODO
+	SET "RESOURCE_FILE_PATH=%SOURCE_PATH%\Resources\resources.rc"
+	SET "COMPILED_RESOURCE_FILENAME=resources.res"
+
+	SET "RESOURCE_OPTIONS_32_ONLY=/D BUILD_32_BIT"
+	SET "RESOURCE_OPTIONS_WIN_9X_ONLY=/D BUILD_9X"
 	
 	REM ---------------------------------------------------------------------------
 	REM The locations of the output directories.
@@ -118,8 +128,21 @@ PUSHD "%~dp0"
 	) ELSE (
 		ECHO [%~nx0] The version file was not found. A placeholder value will be used instead.
 		ECHO.
-		SET "BUILD_VERSION=UNKNOWN"
+		SET "BUILD_VERSION=0.0.0"
 	)
+
+	REM Extract the individual version numbers from the version string.
+	SET "MAJOR_VERSION="
+	SET "MINOR_VERSION="
+	SET "PATCH_VERSION="
+	SET "BUILD_NUMBER=0"
+	FOR /F "tokens=1-3 delims=." %%I IN ('ECHO %BUILD_VERSION%') DO (
+		SET "MAJOR_VERSION=%%I"
+		SET "MINOR_VERSION=%%J"
+		SET "PATCH_VERSION=%%K"
+	)
+
+	SET "RESOURCE_VERSION_OPTIONS=/D MAJOR_VERSION=%MAJOR_VERSION% /D MINOR_VERSION=%MINOR_VERSION% /D PATCH_VERSION=%PATCH_VERSION% /D BUILD_NUMBER=%BUILD_NUMBER%"
 
 	REM Delete the build directories.
 	IF "%CLEAN_BUILD%"=="Yes" (
@@ -207,8 +230,28 @@ PUSHD "%~dp0"
 			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_32_ONLY%"
 
 			CALL "%VCVARSALL_PATH%" x86
+
+			SET "COMPILED_RESOURCE_PATH="
+			IF "%COMPILE_RESOURCES%" NEQ "Yes" (
+				GOTO SKIP_RESOURCES_32
+			)
+
+			ECHO.
+			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_32%"...
+
+			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_32%\%COMPILED_RESOURCE_FILENAME%"
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_32%\" %RESOURCE_OPTIONS_32_ONLY%"
 			@ECHO ON
-			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" %LIBRARIES% %LINKER_OPTIONS%
+			rc %RESOURCE_OPTIONS% "%RESOURCE_FILE_PATH%"
+			@ECHO OFF
+
+			:SKIP_RESOURCES_32
+			
+			ECHO.
+			ECHO [%~nx0] Compiling "%EXE_FILENAME_32%"...
+
+			@ECHO ON
+			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" "%COMPILED_RESOURCE_PATH%" %LIBRARIES% %LINKER_OPTIONS%
 			@ECHO OFF
 			
 		POPD
@@ -250,10 +293,33 @@ PUSHD "%~dp0"
 			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_WIN_NT_ONLY%"
 			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_WIN_NT_ONLY%"
 			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_64_ONLY%"
+
+			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_64%\%COMPILED_RESOURCE_FILENAME%"
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" /D WCE_EXE_FILENAME=\"%EXE_FILENAME_64%\""
 			
 			CALL "%VCVARSALL_PATH%" x64
+
+			SET "COMPILED_RESOURCE_PATH="
+			IF "%COMPILE_RESOURCES%" NEQ "Yes" (
+				GOTO SKIP_RESOURCES_64
+			)
+
+			ECHO.
+			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_64%"...
+
+			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_64%\%COMPILED_RESOURCE_FILENAME%"
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_64%\""
 			@ECHO ON
-			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" %LIBRARIES% %LINKER_OPTIONS%
+			rc %RESOURCE_OPTIONS% "%RESOURCE_FILE_PATH%"
+			@ECHO OFF
+
+			:SKIP_RESOURCES_64
+
+			ECHO.
+			ECHO [%~nx0] Compiling "%EXE_FILENAME_64%"...
+
+			@ECHO ON
+			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" "%COMPILED_RESOURCE_PATH%" %LIBRARIES% %LINKER_OPTIONS%
 			@ECHO OFF
 
 		POPD
@@ -300,8 +366,28 @@ PUSHD "%~dp0"
 			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_32_ONLY%"
 			
 			CALL "%VCVARSALL_PATH%" x86
+
+			SET "COMPILED_RESOURCE_PATH="
+			IF "%COMPILE_RESOURCES%" NEQ "Yes" (
+				GOTO SKIP_RESOURCES_9X_32
+			)
+
+			ECHO.
+			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_9X_32%"...
+
+			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_9X_32%\%COMPILED_RESOURCE_FILENAME%"
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_9X_32%\" %RESOURCE_OPTIONS_32_ONLY% %RESOURCE_OPTIONS_WIN_9X_ONLY%"
 			@ECHO ON
-			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" %LIBRARIES% %LINKER_OPTIONS%
+			rc %RESOURCE_OPTIONS% "%RESOURCE_FILE_PATH%"
+			@ECHO OFF
+
+			:SKIP_RESOURCES_9X_32
+
+			ECHO.
+			ECHO [%~nx0] Compiling "%EXE_FILENAME_9X_32%"...
+
+			@ECHO ON		
+			cl %COMPILER_OPTIONS% "%SOURCE_CODE_FILES%" "%COMPILED_RESOURCE_PATH%" %LIBRARIES% %LINKER_OPTIONS%
 			@ECHO OFF
 
 		POPD
@@ -315,15 +401,16 @@ PUSHD "%~dp0"
 
 	:SKIP_BUILD_9X
 
-	REM Delete the .obj files for the release builds.
+	REM Delete the .obj and .res files for the release builds.
 	IF "%BUILD_MODE%"=="release" (
 
 		ECHO.
 		ECHO.
 		ECHO.
-		ECHO [%~nx0] Deleting *.obj files.
+		ECHO [%~nx0] Deleting any *.obj and *.res files.
 
 		DEL /Q "%RELEASE_BUILD_PATH%\*.obj"
+		DEL /Q "%RELEASE_BUILD_PATH%\*.res"
 	)
 
 	ECHO.

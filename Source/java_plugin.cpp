@@ -93,10 +93,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback);
 void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 {
+	console_print("Exporting the Java Plugin's cache...");
+	
+	TCHAR* appdata_path = NULL;
 	if(exporter->is_exporting_from_default_locations)
 	{
-		TCHAR* appdata_path = exporter->local_low_appdata_path;
-		if(string_is_empty(appdata_path)) appdata_path = exporter->roaming_appdata_path;
+		appdata_path = exporter->local_low_appdata_path;
+		if(string_is_empty(appdata_path)) appdata_path = exporter->appdata_path;
 
 		PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
 	}
@@ -119,6 +122,11 @@ void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 			PathCombine(exporter->cache_path, user_home_path, TEXT(".jpi_cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
+		
+			PathCombine(exporter->cache_path, appdata_path, TEXT("IBM\\Java\\Deployment\\cache"));
+			log_print(LOG_INFO, "Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
+			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
+
 		}
 
 		log_print(LOG_INFO, "Java Plugin: Finished exporting the cache.");
@@ -333,8 +341,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	// any URL components according to the escaping mechanism defined in RFC2396." - java.net.URL - Java
 	// API Specification. We'll decode it anyways though it's technically possible that the final URL's
 	// representation isn't the intended one.
-	TCHAR* url = index.url;
-	decode_url(url);
+	TCHAR* url = decode_url(arena, index.url);
 	TCHAR* filename = PathFindFileName(url);
 
 	// Note that the time information is stored in milliseconds while time_t is measured in seconds.

@@ -1,7 +1,34 @@
+; This file lists some popular game portal websites between 1995 and now.
+; Be sure to check the Lost Websites group file first before adding any others.
+
 BEGIN_URL_GROUP Addicting Games
 
 	BEGIN_DOMAINS
 		addictinggames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Albino Blacksheep
+
+	BEGIN_DOMAINS
+		albinoblacksheep.com
+	END
+
+END
+
+BEGIN_URL_GROUP Andkon Arcade
+
+	BEGIN_DOMAINS
+		andkon.com
+	END
+
+END
+
+BEGIN_URL_GROUP ArcadeTown
+
+	BEGIN_DOMAINS
+		arcadetown.com
 	END
 
 END
@@ -31,10 +58,34 @@ BEGIN_URL_GROUP Coolmath Games
 
 END
 
+BEGIN_URL_GROUP Crazy Monkey Games
+
+	BEGIN_DOMAINS
+		crazymonkeygames.com
+	END
+
+END
+
 BEGIN_URL_GROUP Jay Is Games
 
 	BEGIN_DOMAINS
 		jayisgames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Kongregate
+
+	BEGIN_DOMAINS
+		kongregate.com
+	END
+
+END
+
+BEGIN_URL_GROUP Max Games
+
+	BEGIN_DOMAINS
+		maxgames.com
 	END
 
 END
@@ -55,11 +106,35 @@ BEGIN_URL_GROUP Newgrounds
 
 END
 
+BEGIN_URL_GROUP Nitrome
+
+	BEGIN_DOMAINS
+		nitrome.com
+	END
+
+END
+
+BEGIN_URL_GROUP PopCap
+
+	BEGIN_DOMAINS
+		popcap.com
+	END
+
+END
+
 BEGIN_URL_GROUP Shockwave.com
 
 	BEGIN_DOMAINS
 		shockwave.com
 		shockrave.com
+	END
+
+END
+
+BEGIN_URL_GROUP Y8
+
+	BEGIN_DOMAINS
+		y8.com
 	END
 
 END

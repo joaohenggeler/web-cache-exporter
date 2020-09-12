@@ -1,0 +1,304 @@
+; This file lists some popular websites and services between 1995 and now.
+
+BEGIN_URL_GROUP About.com
+
+	BEGIN_DOMAINS
+		about.com
+	END
+
+END
+
+BEGIN_URL_GROUP AltaVista
+
+	BEGIN_DOMAINS
+		altavista.com
+	END
+
+END
+
+BEGIN_URL_GROUP Amazon
+
+	BEGIN_DOMAINS
+		amazon.*
+	END
+
+END
+
+BEGIN_URL_GROUP Angelfire
+
+	BEGIN_DOMAINS
+		angelfire.com
+		angelfire.lycos.com
+	END
+
+END
+
+BEGIN_URL_GROUP AOL
+
+	BEGIN_DOMAINS
+		aol.com
+	END
+
+END
+
+BEGIN_URL_GROUP Ask.com
+
+	BEGIN_DOMAINS
+		ask.com
+	END
+
+END
+
+BEGIN_URL_GROUP Baidu
+
+	BEGIN_DOMAINS
+		baidu.com
+	END
+
+END
+
+BEGIN_URL_GROUP Bing
+
+	BEGIN_DOMAINS
+		bing.com
+	END
+
+END
+
+BEGIN_URL_GROUP CNET
+
+	BEGIN_DOMAINS
+		cnet.com
+	END
+
+END
+
+BEGIN_URL_GROUP CompuServe
+
+	BEGIN_DOMAINS
+		compuserve.com
+	END
+
+END
+
+BEGIN_URL_GROUP DeviantArt
+
+	BEGIN_DOMAINS
+		deviantart.com
+	END
+
+END
+
+BEGIN_URL_GROUP Discord
+
+	BEGIN_DOMAINS
+		discordapp.com
+		discord.*
+	END
+
+END
+
+BEGIN_URL_GROUP eBay
+
+	BEGIN_DOMAINS
+		ebay.com
+	END
+
+END
+
+BEGIN_URL_GROUP Excite
+
+	BEGIN_DOMAINS
+		excite.*
+	END
+
+END
+
+BEGIN_URL_GROUP Facebook
+
+	BEGIN_DOMAINS
+		facebook.com
+	END
+
+END
+
+BEGIN_URL_GROUP GeoCities
+
+	BEGIN_DOMAINS
+		geocities.*
+	END
+
+END
+
+BEGIN_URL_GROUP The Go Network
+
+	BEGIN_DOMAINS
+		go.com
+	END
+
+END
+
+BEGIN_URL_GROUP Google
+
+	BEGIN_DOMAINS
+		google.*
+	END
+
+END
+
+BEGIN_URL_GROUP Infoseek
+
+	BEGIN_DOMAINS
+		infoseek.com
+		infoseek.co.jp
+	END
+
+END
+
+BEGIN_URL_GROUP Instagram
+
+	BEGIN_DOMAINS
+		instagram.com
+	END
+
+END
+
+BEGIN_URL_GROUP Internet Archive
+
+	BEGIN_DOMAINS
+		archive.org
+	END
+
+END
+
+BEGIN_URL_GROUP Juno
+
+	BEGIN_DOMAINS
+		juno.com
+	END
+
+END
+
+BEGIN_URL_GROUP Microsoft
+
+	BEGIN_DOMAINS
+		microsoft.com
+		microsoftonline.com
+	END
+
+END
+
+BEGIN_URL_GROUP MSN
+
+	BEGIN_DOMAINS
+		msn.com
+	END
+
+END
+
+BEGIN_URL_GROUP Myspace
+
+	BEGIN_DOMAINS
+		myspace.com
+	END
+
+END
+
+BEGIN_URL_GROUP Netscape
+
+	BEGIN_DOMAINS
+		netscape.com
+	END
+
+END
+
+BEGIN_URL_GROUP Real.com
+
+	BEGIN_DOMAINS
+		real.com
+	END
+
+END
+
+BEGIN_URL_GROUP Reddit
+
+	BEGIN_DOMAINS
+		reddit.com
+	END
+
+END
+
+BEGIN_URL_GROUP Tripod
+
+	BEGIN_DOMAINS
+		tripod.com
+		tripod.lycos.com
+	END
+
+END
+
+BEGIN_URL_GROUP Lycos
+
+	BEGIN_DOMAINS
+		lycos.com
+	END
+
+END
+
+BEGIN_URL_GROUP Twitch
+
+	BEGIN_DOMAINS
+		justin.tv
+		twitch.tv
+	END
+
+END
+
+BEGIN_URL_GROUP Twitter
+
+	BEGIN_DOMAINS
+		twitter.com
+	END
+
+END
+
+BEGIN_URL_GROUP Wikipedia
+
+	BEGIN_DOMAINS
+		wikipedia.org
+	END
+
+END
+
+BEGIN_URL_GROUP Windows Live
+
+	BEGIN_DOMAINS
+		live.com
+	END
+
+END
+
+BEGIN_URL_GROUP Yahoo!
+
+	BEGIN_DOMAINS
+		yahoo.com
+		yahoo.co.jp
+	END
+
+END
+
+BEGIN_URL_GROUP Yandex
+
+	BEGIN_DOMAINS
+		yandex.*
+	END
+
+END
+
+BEGIN_URL_GROUP YouTube
+
+	BEGIN_DOMAINS
+		youtube.com
+	END
+
+END

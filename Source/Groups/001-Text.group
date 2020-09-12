@@ -1,4 +1,12 @@
+; This file lists text based formats, which commonly use the major MIME type "text".
+; This includes HTML, CSS, and JavaScript files.
+
 BEGIN_FILE_GROUP Server-Side Script
+
+	BEGIN_MIME_TYPES
+		; JavaServer Pages (JSP)
+		application/jsp
+	END
 
 	BEGIN_FILE_EXTENSIONS
 		; Active Server Pages (ASP) and ASP.NET
@@ -19,11 +27,6 @@ BEGIN_FILE_GROUP Server-Side Script
 		
 		; Server Side Includes (SSI)
 		shtml shtm stm
-	END
-
-	BEGIN_MIME_TYPES
-		; JavaServer Pages (JSP)
-		application/jsp
 	END
 
 END
@@ -151,6 +154,24 @@ BEGIN_FILE_GROUP XML
 
 	BEGIN_FILE_EXTENSIONS
 		xml
+	END
+
+END
+
+BEGIN_FILE_GROUP Rich Text Format
+
+	BEGIN_FILE_SIGNATURES
+		; "{\rtf"
+		7B 5C 72 74 66
+	END
+
+	BEGIN_MIME_TYPES
+		text/rtf
+		application/rtf
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		rtf
 	END
 
 END

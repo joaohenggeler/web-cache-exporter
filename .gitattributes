@@ -4,12 +4,12 @@
 *.c text
 *.h text
 
-*.rc text
 *.java text
 *.md text
 
 *.bat text eol=crlf
 *.group text eol=crlf
+*.rc text eol=crlf
 *.txt text eol=crlf
 
 *.png binary

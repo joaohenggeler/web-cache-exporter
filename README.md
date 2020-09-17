@@ -42,6 +42,7 @@ Only one export argument may be used. All arguments after the first export optio
 
 The following options can take two arguments:
 > WCE.exe -export-option [Optional Cache Path] [Optional Output Path]
+
 If a path is empty or not specified, then the application will replace it with a default value. For the cache path, this includes various default locations that vary depending on the browser/plugin. For the output path, this value is set to "ExportedCache".
 
 You can use "." to refer to the current working directory's path.
@@ -70,6 +71,7 @@ There are two other options that have a similar behavior but that take different
 
 The -explore-files option can take two arguments:
 > WCE.exe -explore-files <Mandatory Cache Path> [Optional Output Path]
+
 This option may be used to explore the files in an unsupported cache format (e.g. an obscure web plugin), meaning the first argument must always be passed. This feature is useful when combined with [group files](#group-files).
 
 For example:
@@ -107,6 +109,7 @@ The <Group Files> argument is mandatory and specifies a filename list, where eac
 
 For example:
 > WCE.exe -filter-by-groups -load-group-files "006-Plugin 101-Gaming-Websites" -export-option
+
 This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group".
 
 The following options should only be used when exporting the WinINet cache using -export-ie.

@@ -8,10 +8,8 @@
 	combined with group files, which allow you to potentially find the types of files based on their file signatures.
 */
 
-// The name of the CSV file and the directory where the cached files will be copied to.
 static const TCHAR* OUTPUT_NAME = TEXT("EXPLORE");
 
-// The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
@@ -19,6 +17,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LOCATION_ON_DISK,
 	CSV_CUSTOM_FILE_GROUP
 };
+
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Called every time a file is found in the specified directory and subdirectories. Used to export every file.

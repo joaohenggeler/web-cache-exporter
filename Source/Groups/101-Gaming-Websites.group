@@ -25,6 +25,14 @@ BEGIN_URL_GROUP Andkon Arcade
 
 END
 
+BEGIN_URL_GROUP ArcadePod
+
+	BEGIN_DOMAINS
+		arcadepod.com
+	END
+
+END
+
 BEGIN_URL_GROUP ArcadeTown
 
 	BEGIN_DOMAINS
@@ -50,6 +58,14 @@ BEGIN_URL_GROUP Bonus.com
 
 END
 
+BEGIN_URL_GROUP Coffee Break Arcade
+
+	BEGIN_DOMAINS
+		coffeebreakarcade.com
+	END
+
+END
+
 BEGIN_URL_GROUP Coolmath Games
 
 	BEGIN_DOMAINS
@@ -62,6 +78,15 @@ BEGIN_URL_GROUP Crazy Monkey Games
 
 	BEGIN_DOMAINS
 		crazymonkeygames.com
+	END
+
+END
+
+BEGIN_URL_GROUP FreeArcade
+
+	BEGIN_DOMAINS
+		javaarcade.com
+		freearcade.com
 	END
 
 END
@@ -110,6 +135,14 @@ BEGIN_URL_GROUP Nitrome
 
 	BEGIN_DOMAINS
 		nitrome.com
+	END
+
+END
+
+BEGIN_URL_GROUP Not Doppler
+
+	BEGIN_DOMAINS
+		notdoppler.com
 	END
 
 END

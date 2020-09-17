@@ -33,6 +33,6 @@
 	#ifdef BUILD_32_BIT
 		#define WCE_ICON_PATH 	"icon_red.ico"
 	#else
-		#define WCE_ICON_PATH 	"icon_blue.ico"
+		#define WCE_ICON_PATH 	"icon_yellow.ico"
 	#endif
 #endif

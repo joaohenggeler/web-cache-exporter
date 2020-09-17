@@ -87,6 +87,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP
 };
+
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback);
@@ -733,6 +734,8 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 			\
 			READ_HEADERS(NULL);\
 		}\
+		\
+		_ASSERT( (VERSION_6_HEADER_SIZE + index->section_2_length) == total_bytes_read );\
 	} while(false, false)
 
 	// Read the first bytes in the header.
@@ -745,7 +748,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 	// See JarCache.verifyFile() and CachedJarLoader.authenticateFromCache() and authenticate().
 	if(first_byte == VERSION_4)
 	{
-		// In version 4, the first byte represents the status. It may also be incomplete (0), unusable (1), or in-use (29).
+		// In version 4, the first byte represents the status. It may also be incomplete (0), unusable (1), or in-use (2).
 		// index->status = first_byte;
 
 		READ_STRING(index->url);
@@ -812,8 +815,6 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 				READ_INTEGER(index->is_proxied_host);
 
 				READ_SECTION_2();
-
-				_ASSERT( (VERSION_6_HEADER_SIZE + index->section_2_length) == total_bytes_read );
 
 			} break;
 

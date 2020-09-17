@@ -15,7 +15,8 @@
 
 	The names of these cached files start with "mp", followed by at least six more characters (e.g. mpb02684.w3d).
 
-	This exporter will also copy any Xtras (.x32 files) in Temporary Files directory and its subdirectories.
+	This exporter will also copy any Xtras (.x32 files) in the Temporary Files directory, AppData, LocalLow AppData, and their
+	subdirectories.
 
 	@Resources: TOMYSSHADOW's extensive knowledge of Macromedia / Adobe Director: https://github.com/tomysshadow
 
@@ -25,10 +26,8 @@
 	feature.
 */
 
-// The name of the CSV file and the directory where the cached files will be copied to.
 static const TCHAR* OUTPUT_NAME = TEXT("SW");
 
-// The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
@@ -37,6 +36,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LOCATION_ON_CACHE,
 	CSV_CUSTOM_FILE_GROUP
 };
+
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // A structure that defines the first 12 bytes of Director files (movies or external casts). Since cached Shockwave files can be

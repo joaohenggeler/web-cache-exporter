@@ -6,16 +6,15 @@
 	files (though there doesn't seem to be too much useful stuff to show anyways, so we might never read anything from it).
 */
 
-// The name of the CSV file and the directory where the cached files will be copied to.
 static const TCHAR* OUTPUT_NAME = TEXT("FL");
 
-// The order and type of each column in the CSV file.
 static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_CUSTOM_FILE_GROUP
 };
+
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Entry point for the Flash Player's cache exporter. This function will determine where to look for the cache before

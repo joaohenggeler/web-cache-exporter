@@ -7,7 +7,7 @@ PUSHD "%~dp0"
 
 	CLS
 
-	java -cp "." GenerateIndexFiles "WCE.idx"
+	java -cp "." GenerateIndexFile "WCE.idx"
 
 POPD
 ENDLOCAL

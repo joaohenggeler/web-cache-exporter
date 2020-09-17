@@ -21,11 +21,11 @@ PUSHD "%~dp0"
 	REM Basic build parameters.
 
 	REM The build mode.
-	REM - "debug" - turns off optimizations, enables run-time error checks, generates debug information, and defines
+	REM - debug - turns off optimizations, enables run-time error checks, generates debug information, and defines
 	REM certain macros (like DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
-	SET "BUILD_MODE=debug"
+	SET "BUILD_MODE=release"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
@@ -39,7 +39,7 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
 	REM In our case, we use 7-Zip Extra 9.20.
-	SET "PACKAGE_BUILD=No"
+	SET "PACKAGE_BUILD=Yes"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.
@@ -78,7 +78,7 @@ PUSHD "%~dp0"
 
 	REM Common linker options and any other ones that only apply to a specific build target or mode.
 	REM Note that the /OPT:WIN98 and /OPT:NOWIN98 options don't exist in modern MSVC versions since they dropped support
-	REM for Winodws 95, 98, and ME.
+	REM for Windows 95, 98, and ME.
 	REM We used to statically link to ESENT.lib in the Windows 2000 to 10 (NT) builds.
 	SET "LINKER_OPTIONS=/link /WX /NODEFAULTLIB"
 	SET "LINKER_OPTIONS_RELEASE_ONLY=/OPT:REF"
@@ -93,10 +93,11 @@ PUSHD "%~dp0"
 	SET "EXE_FILENAME_64=WCE64.exe"
 	SET "EXE_FILENAME_9X_32=WCE9x32.exe"
 
-	REM @TODO
+	REM The paths and filenames to the uncompiled and compiled resource files.
 	SET "RESOURCE_FILE_PATH=%SOURCE_PATH%\Resources\resources.rc"
 	SET "COMPILED_RESOURCE_FILENAME=resources.res"
 
+	REM Resource compiler options that only apply to a specific build target.
 	SET "RESOURCE_OPTIONS_32_ONLY=/D BUILD_32_BIT"
 	SET "RESOURCE_OPTIONS_WIN_9X_ONLY=/D BUILD_9X"
 	
@@ -112,9 +113,10 @@ PUSHD "%~dp0"
 	SET "DEBUG_BUILD_PATH_64=%DEBUG_BUILD_PATH%\Build-x86-64"
 	SET "DEBUG_BUILD_PATH_9X_32=%DEBUG_BUILD_PATH%\Build-98-ME-x86-32"
 
-	SET "BUILD_ARCHIVE_NAME=Archives"
-	SET "BUILD_ARCHIVE_PATH=%MAIN_BUILD_PATH%\%BUILD_ARCHIVE_NAME%"
-	REM SET "_7ZIP_EXE_PATH=_7z920_extra\7zr.exe"
+	REM The location of the compressed archives.
+	SET "BUILD_ARCHIVE_DIR=Archives"
+	SET "BUILD_ARCHIVE_PATH=%MAIN_BUILD_PATH%\%BUILD_ARCHIVE_DIR%"
+	REM The path to the 7-Zip executable.
 	SET "_7ZIP_EXE_PATH=_7za920\7za.exe"
 
 	REM ---------------------------------------------------------------------------
@@ -131,7 +133,7 @@ PUSHD "%~dp0"
 		SET "BUILD_VERSION=0.0.0"
 	)
 
-	REM Extract the individual version numbers from the version string.
+	REM Extract the individual version numbers from the version string...
 	SET "MAJOR_VERSION="
 	SET "MINOR_VERSION="
 	SET "PATCH_VERSION="
@@ -142,6 +144,7 @@ PUSHD "%~dp0"
 		SET "PATCH_VERSION=%%K"
 	)
 
+	REM ...so we can pass them to the resource compiler.
 	SET "RESOURCE_VERSION_OPTIONS=/D MAJOR_VERSION=%MAJOR_VERSION% /D MINOR_VERSION=%MINOR_VERSION% /D PATCH_VERSION=%PATCH_VERSION% /D BUILD_NUMBER=%BUILD_NUMBER%"
 
 	REM Delete the build directories.
@@ -151,9 +154,9 @@ PUSHD "%~dp0"
 		ECHO.
 
 		IF EXIST "%MAIN_BUILD_PATH%" (
-			REM Delete everything except .sln and .suo Visual Studio project files.
+			REM Delete everything except .sln and .suo Visual Studio project files, and the compressed archives directory.
 			MKDIR "TemporaryDirectory" >NUL
-			ROBOCOPY "%MAIN_BUILD_PATH%" "TemporaryDirectory" /MOVE /S /XF *.sln *.suo /XD "%BUILD_ARCHIVE_NAME%" >NUL
+			ROBOCOPY "%MAIN_BUILD_PATH%" "TemporaryDirectory" /MOVE /S /XF *.sln *.suo /XD "%BUILD_ARCHIVE_DIR%" >NUL
 			RMDIR /S /Q "TemporaryDirectory"
 		)
 
@@ -263,6 +266,14 @@ PUSHD "%~dp0"
 		EXIT /B 1
 	)
 
+	IF "%BUILD_MODE%"=="release" (
+		ECHO.
+		ECHO [%~nx0] Deleting any *.obj and *.res files...
+
+		DEL /Q "%RELEASE_BUILD_PATH%\*.obj"
+		DEL /Q "%RELEASE_BUILD_PATH%\*.res"
+	)
+
 	ECHO.
 	ECHO.
 	ECHO.
@@ -329,6 +340,14 @@ PUSHD "%~dp0"
 		ECHO.
 		ECHO [%~nx0] Error while building "%EXE_FILENAME_64%"
 		EXIT /B 1
+	)
+
+	IF "%BUILD_MODE%"=="release" (
+		ECHO.
+		ECHO [%~nx0] Deleting any *.obj and *.res files...
+
+		DEL /Q "%RELEASE_BUILD_PATH%\*.obj"
+		DEL /Q "%RELEASE_BUILD_PATH%\*.res"
 	)
 
 	ECHO.
@@ -401,13 +420,9 @@ PUSHD "%~dp0"
 
 	:SKIP_BUILD_9X
 
-	REM Delete the .obj and .res files for the release builds.
 	IF "%BUILD_MODE%"=="release" (
-
 		ECHO.
-		ECHO.
-		ECHO.
-		ECHO [%~nx0] Deleting any *.obj and *.res files.
+		ECHO [%~nx0] Deleting any *.obj and *.res files...
 
 		DEL /Q "%RELEASE_BUILD_PATH%\*.obj"
 		DEL /Q "%RELEASE_BUILD_PATH%\*.res"
@@ -461,7 +476,7 @@ PUSHD "%~dp0"
 	)
 
 	ECHO [%~nx0] Packaging the source files...
-	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\*" >NUL
+	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\*" -r "-x!*.md" "-x!esent.h" >NUL
 
 	ECHO.
 

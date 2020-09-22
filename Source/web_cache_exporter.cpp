@@ -50,14 +50,13 @@
 
 	@TODO:
 
-	- Add support for the Java Plugin.
+	- Add support for the Java Plugin. Document and refactor.
+	- Document and refactor flash_plugin.cpp
+
 	- Handle external locations.
-	
-	- Decode URLs using UTF-8.
-	- Change Xtras location (going through Local or LocalLow every time is too slow!)
-	
-	- Force copy file with correct retry amount logic.
-	- Change ".<TLD>" to ".*" and allow second level domains.
+
+	- Update readme.
+	- Update command line help message (right below).
 */
 
 /*

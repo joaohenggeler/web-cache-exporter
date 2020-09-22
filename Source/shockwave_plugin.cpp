@@ -6,7 +6,7 @@
 	For this type of cache, we'll work directly with the files stored on disk instead of parsing a database with metadata
 	on each file.
 
-	@SupportedFormats: Unknown, likely Shockwave 8 to 12.
+	@SupportedFormats: Unknown, likely Shockwave Player 8 to 12.
 
 	@DefaultCacheLocations: The Temporary Files directory. This location is specified in the TEMP or TMP environment variables.
 	- 98, ME 				C:\WINDOWS\TEMP
@@ -23,7 +23,7 @@
 	@Tools: None.
 
 	But I did use the Director game "Adventure Elf" (developed by Blockdot and published by Kewlbox.com) to test the Xtras export
-	feature.
+	feature in the Temporary Files directory.
 */
 
 static const TCHAR* OUTPUT_NAME = TEXT("SW");

@@ -2,8 +2,33 @@
 #include "flash_plugin.h"
 
 /*
-	@TODO: This file is still under construction. Right now it doesn't read any useful data from the HEU Flash Player Cache Metadata
-	files (though there doesn't seem to be too much useful stuff to show anyways, so we might never read anything from it).
+	This file defines how the exporter processes the Adobe (previously Macromedia) Flash Player's cache. Note that this cache doesn't
+	contain actual Flash movies (SWF files) and is instead used for other types of files, like shared library code (SWZ files). This
+	might not be useful when looking for lost web game assets, but these SWZ files could potentially be used to get specific Flash
+	games working (e.g. their files were found but they require a currently missing library).
+
+	These SWZ files are located in the Asset Cache and each one has a HEU metadata file associated with it. Unlike other cache metadata
+	files (like the Java Plugin IDX files), we won't extract any information from these since there doesn't seem to be much relevant
+	stuff to show. We'll perform a naive export and copy these files directly. There are other cache subdirectories in the main cache
+	location so we'll cover these too for good measure. This export process might change if new information is found.
+
+	@SupportedFormats: Flash Player 9.0.115.0 and later.
+
+	@DefaultCacheLocations:
+	- 98, ME 				C:\WINDOWS\Application Data\Adobe\Flash Player
+	- 2000, XP 				C:\Documents and Settings\<Username>\Application Data\Adobe\Flash Player
+	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\AppData\Roaming\Adobe\Flash Player
+
+	The previously mentioned Asset Cache is in: <Cache Location>\AssetCache\<8 Character Directory>
+
+	@Resources: A few pages of interest:
+
+	- https://community.ccleaner.com/topic/24286-a-new-plague-of-flash-trash-on-the-way/
+	- https://web.archive.org/web/20090306164003/http://www.adobe.com/devnet/flashplayer/articles/flash_player_admin_guide/flash_player_8_9_admin_guide.pdf
+	- https://web.archive.org/web/20090206112134/http://www.adobe.com/devnet/flashplayer/articles/flash_player_admin_guide/flash_player_admin_guide.pdf
+
+	@Tools: None.
+
 */
 
 static const TCHAR* OUTPUT_NAME = TEXT("FL");

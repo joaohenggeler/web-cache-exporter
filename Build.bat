@@ -102,7 +102,7 @@ PUSHD "%~dp0"
 	SET "RESOURCE_OPTIONS_WIN_9X_ONLY=/D BUILD_9X"
 	
 	REM ---------------------------------------------------------------------------
-	REM The locations of the output directories.
+	REM The locations of the output directories and other key files.
 
 	SET "MAIN_BUILD_PATH=%~dp0Builds"
 
@@ -119,14 +119,23 @@ PUSHD "%~dp0"
 	REM The path to the 7-Zip executable.
 	SET "_7ZIP_EXE_PATH=_7za920\7za.exe"
 
+	REM The location of the README body template to add to the final release README.
+	SET "README_BODY_PATH=%SOURCE_PATH%\readme_body.txt"
+	SET "RELEASE_README_PATH=%RELEASE_BUILD_PATH%\readme.txt"
+
+	REM The location of this batch file, the version file, and the license.
+	SET "BATCH_FILE_PATH=%~dpnx0"
+	SET "VERSION_FILE_PATH=%~dp0version.txt"
+	SET "LICENSE_FILE_PATH=%~dp0LICENSE"
+
 	REM ---------------------------------------------------------------------------
 
 	CLS
 
 	REM Get the build version from our file or default to an unknown one.
 	SET BUILD_VERSION=
-	IF EXIST "version.txt" (
-		SET /P BUILD_VERSION=<"version.txt"
+	IF EXIST "%VERSION_FILE_PATH%" (
+		SET /P BUILD_VERSION=<"%VERSION_FILE_PATH%"
 	) ELSE (
 		ECHO [%~nx0] The version file was not found. A placeholder value will be used instead.
 		ECHO.
@@ -156,7 +165,7 @@ PUSHD "%~dp0"
 		IF EXIST "%MAIN_BUILD_PATH%" (
 			REM Delete everything except .sln and .suo Visual Studio project files, and the compressed archives directory.
 			MKDIR "TemporaryDirectory" >NUL
-			ROBOCOPY "%MAIN_BUILD_PATH%" "TemporaryDirectory" /MOVE /S /XF *.sln *.suo /XD "%BUILD_ARCHIVE_DIR%" >NUL
+			ROBOCOPY "%MAIN_BUILD_PATH%" "TemporaryDirectory" /MOVE /S /XF "*.sln" "*.suo" /XD "%BUILD_ARCHIVE_DIR%" >NUL
 			RMDIR /S /Q "TemporaryDirectory"
 		)
 
@@ -220,8 +229,7 @@ PUSHD "%~dp0"
 		PUSHD "%BUILD_PATH_32%"
 
 			ECHO [%~nx0] Copying the source .group files...
-			XCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%\" /S /I /C /Y
-
+			ROBOCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
 			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_NT_ONLY%"
@@ -293,8 +301,7 @@ PUSHD "%~dp0"
 		PUSHD "%BUILD_PATH_64%"
 
 			ECHO [%~nx0] Copying the source .group files...
-			XCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%\" /S /I /C /Y
-
+			ROBOCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
 			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_NT_ONLY%"
@@ -373,7 +380,7 @@ PUSHD "%~dp0"
 		PUSHD "%BUILD_PATH_9X_32%"
 
 			ECHO [%~nx0] Copying the source .group files...
-			XCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%\" /S /I /C /Y
+			ROBOCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
 			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_9X_ONLY%"
@@ -426,6 +433,15 @@ PUSHD "%~dp0"
 
 		DEL /Q "%RELEASE_BUILD_PATH%\*.obj"
 		DEL /Q "%RELEASE_BUILD_PATH%\*.res"
+
+		ECHO.
+		ECHO [%~nx0] Creating the release README file...
+	
+		ECHO Web Cache Exporter v%BUILD_VERSION%> "%RELEASE_README_PATH%"
+		ECHO.>> "%RELEASE_README_PATH%"
+		TYPE "%README_BODY_PATH%">> "%RELEASE_README_PATH%"
+		ECHO.>> "%RELEASE_README_PATH%"
+		TYPE "%LICENSE_FILE_PATH%">> "%RELEASE_README_PATH%"
 	)
 
 	ECHO.
@@ -476,7 +492,8 @@ PUSHD "%~dp0"
 	)
 
 	ECHO [%~nx0] Packaging the source files...
-	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\*" -r "-x!*.md" "-x!esent.h" >NUL
+	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\" -r0 "-x!*.md" "-x!esent.*" "-x!*.class" "-x!*.idx" >NUL
+	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%BATCH_FILE_PATH%" "%VERSION_FILE_PATH%" "%LICENSE_FILE_PATH%" >NUL
 
 	ECHO.
 

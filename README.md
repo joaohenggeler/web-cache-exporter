@@ -1,6 +1,6 @@
 # Web Cache Exporter
 
-This command line tool allows you to more easily view and obtain the contents a web browser or plugin's HTTP cache that's stored on disk. It runs on Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10, and supports the following cache formats:
+This command line tool allows you to more easily view and obtain the contents of a web browser or web plugin's HTTP cache that's stored on disk. It runs on Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10, and supports the following cache formats:
 
 * The WinINet cache - Internet Explorer 4 to 11, Microsoft Edge.
 * The Flash Player's shared library (SWZ) cache.
@@ -9,15 +9,15 @@ This command line tool allows you to more easily view and obtain the contents a 
 
 This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed/played when they were still available.
 
-[Here's a list of some previously lost games that were found by searching the web cache.](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache)
+[Here's a list of some previously lost browser games that were found by searching the web cache.](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache)
 
 ## Features
 
 * Finds and exports the cache by copying the cached files using their original URL's structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, etc).
 
-![Image 1](Images/screenshot_1.png?raw=true)
+![Image 1](Images/screenshot_1.png)
 
-![Image 2](Images/screenshot_2.png?raw=true)
+![Image 2](Images/screenshot_2.png)
 
 * Supports labelling cached files based on their file signatures, MIME types, file extensions, and URLs. Files can be grouped and filtered by their format or original domain.
 
@@ -49,7 +49,7 @@ The following options can take two arguments:
 WCE.exe -export-option [Optional Cache Path] [Optional Output Path]
 ```
 
-If a path is empty or not specified, then the application will replace it with a default value. For the cache path, this includes various default locations that vary depending on the browser/plugin. For the output path, this value is set to "ExportedCache".
+If a path is empty or not specified, then the application will replace it with a default value. For the cache path, this includes several default locations that vary depending on the browser/plugin. For the output path, this value is set to "ExportedCache".
 
 You can use "." to refer to the current working directory's path.
 
@@ -94,7 +94,7 @@ WCE.exe -explore-files "C:\PathToExplore" "My Exploration"
 
 ### Other Arguments
 
-These extra command line arguments are optional. **-export-option** is used to refer to any of the previous export options.
+These extra command line arguments are optional. The **-export-option** argument is used to refer to any of the previous export options.
 
 The following options don't require any additional arguments.
 
@@ -127,7 +127,7 @@ For example:
 ```
 WCE.exe -filter-by-groups -load-group-files "006-Plugin 101-Gaming-Websites" -export-option
 ```
-This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group".
+This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group", and would filter the output based on the groups that they define.
 
 The following options should only be used when exporting the WinINet cache using -export-ie.
 
@@ -212,4 +212,4 @@ See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.htm
 
 ## Special Thanks
 
-* Special thanks to Computerdude77 for helping me test this tool with older Windows versions.
+* Special thanks to Computerdude77 for his general assistance and for helping me test this tool in older Windows versions.

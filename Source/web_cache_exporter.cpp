@@ -51,7 +51,6 @@
 	@TODO:
 
 	- Add support for the Java Plugin. Document and refactor.
-	- Document and refactor flash_plugin.cpp
 
 	- Handle external locations.
 
@@ -476,7 +475,7 @@ static void clean_up(Exporter* exporter)
 	and how much memory is roughly required.
 	>>>> 8. Create the permanent memory arena based on the number of group files. On error, terminate.
 	>>>> 9. Dynamically load any necessary functions.
-	>>>> 10. Find the location of the Temporary Files and Application Data directories.
+	>>>> 10. Find the paths to relevant locations like the Temporary Files and Application Data directories.
 	>>>> 11. Delete any previous temporary exporter directories in this last location.
 	>>>> 12. Delete the previous output directory if requested in the command line options.
 	>>>> 13. Start exporting the cache based on the command line options.
@@ -485,11 +484,13 @@ static void clean_up(Exporter* exporter)
 */
 int _tmain(int argc, TCHAR* argv[])
 {
+	console_print("Web Cache Exporter v%hs", EXPORTER_BUILD_VERSION);
+
 	Exporter exporter = {};	
 
 	if(!create_log_file(LOG_FILE_NAME))
 	{
-		console_print("Warning: Failed to create the log file.");
+		console_print("Error: Failed to create the log file.");
 	}
 
 	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.",
@@ -723,12 +724,6 @@ int _tmain(int argc, TCHAR* argv[])
 
 	log_print_newline();
 
-	/*TCHAR* url = NULL;
-	url = decode_url(&(exporter.temporary_arena), TEXT("http://www.example.com/path+and%20spaces /%7B%7D/%C5%92/%E2%80%B0/index.html"));
-	bool result = copy_file_using_url_directory_structure(	&(exporter.temporary_arena), TEXT("C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\version.txt"), 
-															TEXT("C:\\NonASCIIHaven\\Flashpoint\\GitHub\\web-cache-exporter\\Output"), url, TEXT("abc"));
-	result;*/
-
 	switch(exporter.cache_type)
 	{
 		case(CACHE_INTERNET_EXPLORER):
@@ -859,6 +854,8 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 // - CSV_URL - determined using the 'entry_url' parameter.
 // - CSV_LOCATION_ON_DISK - determined using the 'full_entry_path' parameter.
 // - CSV_MISSING_FILE - determined using the 'full_entry_path' parameter.
+//
+// - CSV_LOCATION_ON_CACHE - replaced with 'full_entry_path' if the exporter option 'should_show_full_paths' is true.
 //
 // If these columns should be automatically handled, their corresponding array element must be set to {NULL}. For CSV columns that
 // aren't related to group files, you can override this behavior by explicitly setting their value instead of using NULL.

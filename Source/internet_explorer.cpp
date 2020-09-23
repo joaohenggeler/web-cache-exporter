@@ -100,7 +100,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
-	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE,
+	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP
 };
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -713,14 +713,17 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// We only handle two versions of the index file format: 4.7 and 5.2.
 	char major_version = header->signature[24];
 	char minor_version = header->signature[26];
-	
+	const size_t MAX_CACHE_VERSION_CHARS = 4;
+	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
+	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("%hc.%hc"), major_version, minor_version);
+
 	if( (major_version == '4' && minor_version == '7') || (major_version == '5' && minor_version == '2') )
 	{
-		log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %hc.%hc) was opened successfully. Starting the export process.", major_version, minor_version);
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %s) was opened successfully. Starting the export process.", cache_version);
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was opened successfully but its version (%hc.%hc) is not supported. No files will be exported from this cache.", major_version, minor_version);
+		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file was opened successfully but its version (%s) is not supported. No files will be exported from this cache.", cache_version);
 		safe_unmap_view_of_file((void**) &index_file);
 		safe_close_handle(&index_handle);
 		return;
@@ -804,7 +807,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					// which is the name of the actual cached file on disk, and the undecorated name (e.g. image.gif)
 					// which is what we'll show in the CSV.
 					TCHAR* decorated_filename = TEXT("");
-					TCHAR* filename = NULL;
+					TCHAR* filename = TEXT("");
 					if(entry_offset_to_filename > 0)
 					{
 						const char* filename_in_mmf = (char*) advance_bytes(entry, entry_offset_to_filename);
@@ -817,7 +820,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					GET_URL_ENTRY_MEMBER(entry_offset_to_url, entry_offset_to_url);
 					// @Format: The stored URL is encoded. We'll decode it for the CSV and to correctly create
 					// the website's original directory structure when we copy the cached file.
-					TCHAR* url = NULL;
+					TCHAR* url = TEXT("");
 					if(entry_offset_to_url > 0)
 					{
 						const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
@@ -960,13 +963,9 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					convert_u32_to_string(num_entry_locks, num_hits);
 
 					TCHAR* format_version_prefix = TEXT("");
-					if(major_version == '4')
+					if(major_version == '5')
 					{
-						format_version_prefix = TEXT("IE4");
-					}
-					else
-					{
-						format_version_prefix = TEXT("IE5");
+						format_version_prefix = TEXT("Content.IE5");
 					}
 
 					TCHAR short_file_path_with_prefix[MAX_PATH_CHARS] = TEXT("");
@@ -977,7 +976,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path_with_prefix}, {/* Missing File */},
+						{num_hits}, {short_file_path_with_prefix}, {cache_version}, {/* Missing File */},
 						{/* Custom File Group */}, {/* Custom URL Group */}
 					};
 
@@ -1046,14 +1045,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// for the WinINet cache. It doesn't make sense to stop the whole application from running because of this specific type of cache.
 
 	#define JET_GET_DATABASE_FILE_INFO_W(function_name) JET_ERR JET_API function_name(JET_PCWSTR szDatabaseName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_GET_DATABASE_FILE_INFO_W(stub_jet_get_database_file_info_w)
 	{
 		log_print(LOG_WARNING, "JetGetDatabaseFileInfoW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_GET_DATABASE_FILE_INFO_W(Jet_Get_Database_File_Info_W);
 	static Jet_Get_Database_File_Info_W* dll_jet_get_database_file_info_w = stub_jet_get_database_file_info_w;
 	#define JetGetDatabaseFileInfoW dll_jet_get_database_file_info_w
@@ -1063,14 +1059,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_GET_SYSTEM_PARAMETER_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance, JET_SESID sesid, unsigned long paramid, JET_API_PTR* plParam, JET_PWSTR szParam, unsigned long cbMax)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_GET_SYSTEM_PARAMETER_W(stub_jet_get_system_parameter_w)
 	{
 		log_print(LOG_WARNING, "JetGetSystemParameterW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_GET_SYSTEM_PARAMETER_W(Jet_Get_System_Parameter_W);
 	static Jet_Get_System_Parameter_W* dll_jet_get_system_parameter_w = stub_jet_get_system_parameter_w;
 	#define JetGetSystemParameterW dll_jet_get_system_parameter_w
@@ -1080,14 +1073,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_SET_SYSTEM_PARAMETER_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance, JET_SESID sesid, unsigned long paramid, JET_API_PTR lParam, JET_PCWSTR szParam)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_SET_SYSTEM_PARAMETER_W(stub_jet_set_system_parameter_w)
 	{
 		log_print(LOG_WARNING, "JetSetSystemParameterW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_SET_SYSTEM_PARAMETER_W(Jet_Set_System_Parameter_W);
 	static Jet_Set_System_Parameter_W* dll_jet_set_system_parameter_w = stub_jet_set_system_parameter_w;
 	#define JetSetSystemParameterW dll_jet_set_system_parameter_w
@@ -1097,14 +1087,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_CREATE_INSTANCE_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance, JET_PCWSTR szInstanceName)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_CREATE_INSTANCE_W(stub_jet_create_instance_w)
 	{
 		log_print(LOG_WARNING, "JetCreateInstanceW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_CREATE_INSTANCE_W(Jet_Create_Instance_W);
 	static Jet_Create_Instance_W* dll_jet_create_instance_w = stub_jet_create_instance_w;
 	#define JetCreateInstanceW dll_jet_create_instance_w
@@ -1114,14 +1101,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_INIT(function_name) JET_ERR JET_API function_name(JET_INSTANCE* pinstance)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_INIT(stub_jet_init)
 	{
 		log_print(LOG_WARNING, "JetInit: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_INIT(Jet_Init);
 	static Jet_Init* dll_jet_init = stub_jet_init;
 	#define JetInit dll_jet_init
@@ -1131,14 +1115,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_TERM(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_TERM(stub_jet_term)
 	{
 		log_print(LOG_WARNING, "JetTerm: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_TERM(Jet_Term);
 	static Jet_Term* dll_jet_term = stub_jet_term;
 	#define JetTerm dll_jet_term
@@ -1148,14 +1129,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_BEGIN_SESSION_W(function_name) JET_ERR JET_API function_name(JET_INSTANCE instance, JET_SESID* psesid, JET_PCWSTR szUserName, JET_PCWSTR szPassword)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_BEGIN_SESSION_W(stub_jet_begin_session_w)
 	{
 		log_print(LOG_WARNING, "JetBeginSessionW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_BEGIN_SESSION_W(Jet_Begin_Session_W);
 	static Jet_Begin_Session_W* dll_jet_begin_session_w = stub_jet_begin_session_w;
 	#define JetBeginSessionW dll_jet_begin_session_w
@@ -1165,14 +1143,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_END_SESSION(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_GRBIT grbit)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_END_SESSION(stub_jet_end_session)
 	{
 		log_print(LOG_WARNING, "JetEndSession: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_END_SESSION(Jet_End_Session);
 	static Jet_End_Session* dll_jet_end_session = stub_jet_end_session;
 	#define JetEndSession dll_jet_end_session
@@ -1182,14 +1157,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_ATTACH_DATABASE_2_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename, const unsigned long cpgDatabaseSizeMax, JET_GRBIT grbit)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_ATTACH_DATABASE_2_W(stub_jet_attach_database_2_w)
 	{
 		log_print(LOG_WARNING, "JetAttachDatabase2W: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_ATTACH_DATABASE_2_W(Jet_Attach_Database_2_W);
 	static Jet_Attach_Database_2_W* dll_jet_attach_database_2_w = stub_jet_attach_database_2_w;
 	#define JetAttachDatabase2W dll_jet_attach_database_2_w
@@ -1199,14 +1171,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_DETACH_DATABASE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_DETACH_DATABASE_W(stub_jet_detach_database_w)
 	{
 		log_print(LOG_WARNING, "JetDetachDatabaseW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_DETACH_DATABASE_W(Jet_Detach_Database_W);
 	static Jet_Detach_Database_W* dll_jet_detach_database_w = stub_jet_detach_database_w;
 	#define JetDetachDatabaseW dll_jet_detach_database_w
@@ -1216,14 +1185,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_OPEN_DATABASE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_PCWSTR szFilename, JET_PCWSTR szConnect, JET_DBID* pdbid, JET_GRBIT grbit)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_OPEN_DATABASE_W(stub_jet_open_database_w)
 	{
 		log_print(LOG_WARNING, "JetOpenDatabaseW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_OPEN_DATABASE_W(Jet_Open_Database_W);
 	static Jet_Open_Database_W* dll_jet_open_database_w = stub_jet_open_database_w;
 	#define JetOpenDatabaseW dll_jet_open_database_w
@@ -1233,14 +1199,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_CLOSE_DATABASE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_DBID dbid, JET_GRBIT grbit)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_CLOSE_DATABASE(stub_jet_close_database)
 	{
 		log_print(LOG_WARNING, "JetCloseDatabase: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_CLOSE_DATABASE(Jet_Close_Database);
 	static Jet_Close_Database* dll_jet_close_database = stub_jet_close_database;
 	#define JetCloseDatabase dll_jet_close_database
@@ -1250,14 +1213,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_OPEN_TABLE_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_DBID dbid, JET_PCWSTR szTableName, const void* pvParameters, unsigned long cbParameters, JET_GRBIT grbit, JET_TABLEID* ptableid)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_OPEN_TABLE_W(stub_jet_open_table_w)
 	{
 		log_print(LOG_WARNING, "JetOpenTableW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_OPEN_TABLE_W(Jet_Open_Table_W);
 	static Jet_Open_Table_W* dll_jet_open_table_w = stub_jet_open_table_w;
 	#define JetOpenTableW dll_jet_open_table_w
@@ -1267,14 +1227,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_CLOSE_TABLE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_CLOSE_TABLE(stub_jet_close_table)
 	{
 		log_print(LOG_WARNING, "JetCloseTable: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_CLOSE_TABLE(Jet_Close_Table);
 	static Jet_Close_Table* dll_jet_close_table = stub_jet_close_table;
 	#define JetCloseTable dll_jet_close_table
@@ -1284,14 +1241,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_GET_TABLE_COLUMN_INFO_W(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_PCWSTR szColumnName, void* pvResult, unsigned long cbMax, unsigned long InfoLevel)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_GET_TABLE_COLUMN_INFO_W(stub_jet_get_table_column_info_w)
 	{
 		log_print(LOG_WARNING, "JetGetTableColumnInfoW: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_GET_TABLE_COLUMN_INFO_W(Jet_Get_Table_Column_Info_W);
 	static Jet_Get_Table_Column_Info_W* dll_jet_get_table_column_info_w = stub_jet_get_table_column_info_w;
 	#define JetGetTableColumnInfoW dll_jet_get_table_column_info_w
@@ -1301,14 +1255,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_RETRIEVE_COLUMN(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_COLUMNID columnid, void* pvData, unsigned long cbData, unsigned long* pcbActual, JET_GRBIT grbit, JET_RETINFO* pretinfo)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_RETRIEVE_COLUMN(stub_jet_retrieve_column)
 	{
 		log_print(LOG_WARNING, "JetRetrieveColumn: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_RETRIEVE_COLUMN(Jet_Retrieve_Column);
 	static Jet_Retrieve_Column* dll_jet_retrieve_column = stub_jet_retrieve_column;
 	#define JetRetrieveColumn dll_jet_retrieve_column
@@ -1318,14 +1269,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_RETRIEVE_COLUMNS(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_RETRIEVECOLUMN* pretrievecolumn, unsigned long cretrievecolumn)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_RETRIEVE_COLUMNS(stub_jet_retrieve_columns)
 	{
 		log_print(LOG_WARNING, "JetRetrieveColumns: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_RETRIEVE_COLUMNS(Jet_Retrieve_Columns);
 	static Jet_Retrieve_Columns* dll_jet_retrieve_columns = stub_jet_retrieve_columns;
 	#define JetRetrieveColumns dll_jet_retrieve_columns
@@ -1335,14 +1283,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_GET_RECORD_POSITION(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, JET_RECPOS* precpos, unsigned long cbRecpos)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_GET_RECORD_POSITION(stub_jet_get_record_position)
 	{
 		log_print(LOG_WARNING, "JetGetRecordPosition: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_GET_RECORD_POSITION(Jet_Get_Record_Position);
 	static Jet_Get_Record_Position* dll_jet_get_record_position = stub_jet_get_record_position;
 	#define JetGetRecordPosition dll_jet_get_record_position
@@ -1352,14 +1297,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// ----------------------------------------------------------------------
 
 	#define JET_MOVE(function_name) JET_ERR JET_API function_name(JET_SESID sesid, JET_TABLEID tableid, long cRow, JET_GRBIT grbit)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static JET_MOVE(stub_jet_move)
 	{
 		log_print(LOG_WARNING, "JetMove: Calling the stub version of this function.");
 		return JET_wrnNyi;
 	}
-	#pragma warning(pop)
 	typedef JET_MOVE(Jet_Move);
 	static Jet_Move* dll_jet_move = stub_jet_move;
 	#define JetMove dll_jet_move
@@ -1547,7 +1489,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 	}
 
-	// Helper structure to pass some values to find_internet_explorer_10_to_11_ese_files_callback(). 
+	// Helper structure to pass some values to find_internet_explorer_10_to_11_ese_files_callback().
 	struct Copy_Ese_Files_Params
 	{
 		wchar_t* temporary_directory_path;
@@ -1684,9 +1626,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 		JET_DBINFOMISC database_info = {};
 		error_code = JetGetDatabaseFileInfoW(temporary_database_path, &database_info, sizeof(database_info), JET_DbInfoMisc);
+		const size_t MAX_CACHE_VERSION_CHARS = 64;
+		wchar_t cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
 		if(error_code == JET_errSuccess)
 		{
-			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's state is '%ls'.", windows_nt_get_database_state_string(database_info.dbstate));
+			StringCchPrintfW(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("ESE-v%Xu%X"), database_info.ulVersion, database_info.ulUpdate);
+			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's version is '%ls' and the state is '%ls'.", cache_version, windows_nt_get_database_state_string(database_info.dbstate));
 		}
 
 		error_code = JetCreateInstanceW(&instance, L"WebCacheExporter");
@@ -2079,14 +2024,14 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									PathAppendW(full_file_path, short_file_path);
 
 									wchar_t short_file_path_with_prefix[MAX_PATH_CHARS] = L"";
-									StringCchPrintfW(short_file_path_with_prefix, MAX_PATH_CHARS, L"ESE[%I64d]\\%ls", container_id, short_file_path);
+									StringCchPrintfW(short_file_path_with_prefix, MAX_PATH_CHARS, L"Content[%I64d]\\%ls", container_id, short_file_path);
 
 									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 									{
 										{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-										{num_hits}, {short_file_path_with_prefix}, {/* Missing File */},
+										{num_hits}, {short_file_path_with_prefix}, {cache_version}, {/* Missing File */},
 										{/* Custom File Group*/}, {/* Custom URL Group */}
 									};
 

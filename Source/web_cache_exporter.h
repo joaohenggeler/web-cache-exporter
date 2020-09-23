@@ -246,7 +246,7 @@ struct Exporter
 	HANDLE csv_file_handle;
 	// - The number of columns in the CSV file.
 	size_t num_csv_columns;
-	// - The types of each column as an arrayof length 'num_csv_columns'.
+	// - The types of each column as an array of length 'num_csv_columns'.
 	const Csv_Type* csv_column_types;
 	// - The path to the base directory where the cached files will be copied to.
 	TCHAR output_copy_path[MAX_PATH_CHARS];

@@ -257,7 +257,7 @@ bool destroy_arena(Arena* arena)
 	}
 
 	void* base_memory = retreat_bytes(arena->available_memory, arena->used_size);
-	bool success = VirtualFree(base_memory, 0, MEM_RELEASE) == TRUE;
+	bool success = VirtualFree(base_memory, 0, MEM_RELEASE) != FALSE;
 	#ifdef DEBUG
 		DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = retreat_bytes(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 	#endif
@@ -1298,14 +1298,14 @@ bool get_full_path_name(TCHAR* result_full_path)
 //
 // @Parameters:
 // 1. csidl - The CSIDL that identifies the special folder.
-// 2. result_path - The buffer which receives the absolute path to the special folder. This buffer must be at least MAX_PATH
+// 2. result_path - The buffer which receives the absolute path to the special folder. This buffer must be at least MAX_PATH_CHARS
 // characters in size.
 //
 // @Returns: True if it succeeds. Otherwise, false.
 bool get_special_folder_path(int csidl, TCHAR* result_path)
 {
 	#ifdef BUILD_9X
-		return SHGetSpecialFolderPathA(NULL, result_path, csidl, FALSE) == TRUE;
+		return SHGetSpecialFolderPathA(NULL, result_path, csidl, FALSE) != FALSE;
 	#else
 		// @Note:
 		// Third parameter (hToken): "Microsoft Windows 2000 and earlier: Always set this parameter to NULL."
@@ -1604,7 +1604,7 @@ bool get_file_size(HANDLE file_handle, u64* result_file_size)
 		return success;
 	#else
 		LARGE_INTEGER file_size;
-		bool success = GetFileSizeEx(file_handle, &file_size) == TRUE;
+		bool success = GetFileSizeEx(file_handle, &file_size) != FALSE;
 		if(success) *result_file_size = file_size.QuadPart;
 		return success;
 	#endif
@@ -1726,7 +1726,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 			}
 		}
 
-		found_object = FindNextFile(search_handle, &find_data) == TRUE;
+		found_object = FindNextFile(search_handle, &find_data) != FALSE;
 	}
 
 	safe_find_close(&search_handle);
@@ -1758,7 +1758,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 				}			
 			}
 
-			found_object = FindNextFile(search_handle, &find_data) == TRUE;
+			found_object = FindNextFile(search_handle, &find_data) != FALSE;
 		}
 
 		safe_find_close(&search_handle);		
@@ -1867,7 +1867,7 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	do
 	{
 		create_success = GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, unique_id, result_directory_path) != 0
-						&& CreateDirectory(result_directory_path, NULL) == TRUE;
+						&& CreateDirectory(result_directory_path, NULL) != FALSE;
 		++unique_id;
 	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
 
@@ -1922,7 +1922,7 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 	bool get_handle_success = false;
 
 	copy_success = GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, 0, result_file_destination_path) != 0
-					&& CopyFile(file_source_path, result_file_destination_path, FALSE) == TRUE;
+					&& CopyFile(file_source_path, result_file_destination_path, FALSE) != FALSE;
 
 	if(copy_success)
 	{
@@ -1982,7 +1982,7 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 //
 // Since the URL and filename can be invalid Windows paths, these may be modified accordingly (e.g. replacing invalid characters).
 //
-// Note that all of these paths are limited to MAX_PATH characters. This limit used to be extended by using the "\\?\" prefix
+// Note that all of these paths are limited to MAX_PATH_CHARS characters. This limit used to be extended by using the "\\?\" prefix
 // on the Windows 2000 through 10 builds. However, in practice that would result in paths that would be too long for the File Explorer
 // to delete. This is a problem for this application since the whole point is to get the average user to check their cache for lost
 // web media files.
@@ -2034,7 +2034,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 	correct_reserved_path_components(corrected_filename);
 
 	// Copy Target = Base Destination Path + Url Converted To Path (if it exists) + Filename
-	bool build_target_success = PathAppend(full_copy_target_path, corrected_filename) == TRUE;
+	bool build_target_success = PathAppend(full_copy_target_path, corrected_filename) != FALSE;
 	if(!build_target_success)
 	{
 		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
@@ -2053,7 +2053,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
 		copy_success = create_empty_file(full_copy_target_path);
 	#else
-		copy_success = CopyFile(full_file_path, full_copy_target_path, TRUE) == TRUE;
+		copy_success = CopyFile(full_file_path, full_copy_target_path, TRUE) != FALSE;
 	#endif
 
 	u32 num_naming_collisions = 0;
@@ -2092,7 +2092,7 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 		#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
 			copy_success = create_empty_file(full_unique_copy_target_path);
 		#else
-			copy_success = CopyFile(full_file_path, full_unique_copy_target_path, TRUE) == TRUE;
+			copy_success = CopyFile(full_file_path, full_unique_copy_target_path, TRUE) != FALSE;
 		#endif
 	}
 
@@ -2773,14 +2773,11 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 	// Define a stub version of the function we want to dynamically load, and a variable that will either contain the pointer to
 	// this loaded function or to the stub version (if we can't load the real one).
 	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS WINAPI function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
-	#pragma warning(push)
-	#pragma warning(disable : 4100)
 	static NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
 	{
 		log_print(LOG_WARNING, "NtQuerySystemInformation: Calling the stub version of this function.");
 		return STATUS_NOT_IMPLEMENTED;
 	}
-	#pragma warning(pop)
 	typedef NT_QUERY_SYSTEM_INFORMATION(Nt_Query_System_Information);
 	static Nt_Query_System_Information* dll_nt_query_system_information = stub_nt_query_system_information;
 	#define NtQuerySystemInformation dll_nt_query_system_information
@@ -3116,7 +3113,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 				do
 				{
 					DWORD num_bytes_read = 0;
-					bool read_success = ReadFile(source_file_handle, file_buffer, file_buffer_size, &num_bytes_read, &overlapped) == TRUE;
+					bool read_success = ReadFile(source_file_handle, file_buffer, file_buffer_size, &num_bytes_read, &overlapped) != FALSE;
 					
 					if(!read_success)
 					{

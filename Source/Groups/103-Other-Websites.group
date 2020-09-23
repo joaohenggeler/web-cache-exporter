@@ -24,15 +24,6 @@ BEGIN_URL_GROUP Amazon
 
 END
 
-BEGIN_URL_GROUP Angelfire
-
-	BEGIN_DOMAINS
-		angelfire.com
-		angelfire.lycos.com
-	END
-
-END
-
 BEGIN_URL_GROUP AOL
 
 	BEGIN_DOMAINS
@@ -130,14 +121,6 @@ BEGIN_URL_GROUP GeoCities
 
 END
 
-BEGIN_URL_GROUP The Go Network
-
-	BEGIN_DOMAINS
-		go.com
-	END
-
-END
-
 BEGIN_URL_GROUP Google
 
 	BEGIN_DOMAINS
@@ -149,8 +132,7 @@ END
 BEGIN_URL_GROUP Infoseek
 
 	BEGIN_DOMAINS
-		infoseek.com
-		infoseek.co.jp
+		infoseek.*
 	END
 
 END
@@ -175,6 +157,44 @@ BEGIN_URL_GROUP Juno
 
 	BEGIN_DOMAINS
 		juno.com
+	END
+
+END
+
+BEGIN_URL_GROUP Lego
+
+	BEGIN_DOMAINS
+		lego.*
+	END
+
+END
+
+BEGIN_URL_GROUP Angelfire
+
+	BEGIN_DOMAINS
+		angelfire.*
+		; Matches:
+		; angelfire.com
+		; angelfire.lycos.com
+	END
+
+END
+
+BEGIN_URL_GROUP Tripod
+
+	BEGIN_DOMAINS
+		tripod.*
+		; Matches:
+		; tripod.com
+		; tripod.lycos.com
+	END
+
+END
+
+BEGIN_URL_GROUP Lycos
+
+	BEGIN_DOMAINS
+		lycos.*
 	END
 
 END
@@ -228,23 +248,6 @@ BEGIN_URL_GROUP Reddit
 
 END
 
-BEGIN_URL_GROUP Tripod
-
-	BEGIN_DOMAINS
-		tripod.com
-		tripod.lycos.com
-	END
-
-END
-
-BEGIN_URL_GROUP Lycos
-
-	BEGIN_DOMAINS
-		lycos.com
-	END
-
-END
-
 BEGIN_URL_GROUP Twitch
 
 	BEGIN_DOMAINS
@@ -281,8 +284,7 @@ END
 BEGIN_URL_GROUP Yahoo!
 
 	BEGIN_DOMAINS
-		yahoo.com
-		yahoo.co.jp
+		yahoo.*
 	END
 
 END
@@ -299,6 +301,14 @@ BEGIN_URL_GROUP YouTube
 
 	BEGIN_DOMAINS
 		youtube.com
+	END
+
+END
+
+BEGIN_URL_GROUP The Go Network
+
+	BEGIN_DOMAINS
+		go.com
 	END
 
 END

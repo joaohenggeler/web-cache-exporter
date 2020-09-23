@@ -15,9 +15,11 @@
 
 	@SupportedFormats:
 	- The AppletStore JAR cache introduced in Java 1.3.
-	- Index files (.IDX) version 4 and 6 (6.02, 6.03, 6.04, 6.05) introduced in Java 1.4 and Java 6.
+	- Index files (.IDX) version 1 and 6 (6.02, 6.03, 6.04, 6.05) introduced in Java 1.4 and Java 6.
 
 	@DefaultCacheLocations:
+	
+	The AppletStore cache:
 	- 98, ME 				C:\WINDOWS\java_plugin_AppletStore
 	- 2000, XP				C:\Documents and Settings\<Username>\java_plugin_AppletStore
 	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\java_plugin_AppletStore (theoretically)
@@ -27,15 +29,16 @@
 	Let's call this location the "AppletStore cache".
 	Any archives that are specified in the "cache_archive" applet tag parameter are stored here.
 
+	The IDX file cache:
 	- 98, ME 				C:\WINDOWS\Application Data\Sun\Java\Deployment\cache
 	- 2000, XP 				C:\Documents and Settings\<Username>\Application Data\Sun\Java\Deployment\cache
 	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\AppData\LocalLow\Sun\Java\Deployment\cache
 
-	Note that we currently only look at these default locations. It is possible Java's deployment properties to change the user and
+	Note that we currently only look at these default locations. It's possible for Java's deployment properties to change the user and
 	system level cache locations using the "deployment.user.cachedir" and "deployment.system.cachedir" properties in the
 	deployment.properties file. These default to "<User Home>\cache" and <None>, respectively.
 
-	We can consider two sublocations:
+	We can consider two sublocations in the IDX file cache:
 	1. <Cache Location>\javapi\v1.0
 	2. <Cache Location>\6.0
 
@@ -43,19 +46,27 @@
 	the "file" subdirectory. Note that this "jar" location always stores files with the .ZIP file extension. The second sublocation
 	can contain any type of file, stored in any of the 64 subdirectories, named "0" through "63".
 
-	Let's call 1. the "old cache" and 2. the "new cache".
-	Any archives that are specified in the "cache_archive" applet tag parameter are stored in the "jar" subdirectory in the old cache,
-	and in any subdirectory in the new cache.
+	Note that for Java 1.4, the first sublocation is different:
+	- For archives: <User Home>\.jpi_cache\jar\1.0
+	- For files: 	<User Home>\.jpi_cache\file\1.0
+	Notice the use of <User Home> instead of <Cache Location>.
+
+	Note also that different Java vendors might have slightly different directory names. In IBM Java, for example, the second location
+	is: "<...>\IBM\Java\Deployment\cache"
+
+	Let's call 1. the "version 1 cache" and 2. the "version 6 cache".
+	Any archives that are specified in the "cache_archive" applet tag parameter are stored in the "jar" subdirectory in version 1,
+	and in any subdirectory in version 6.
 
 	@Resources: The index file format was investigated by looking at the decompiled code of the following Java archives and release:
 	- "jre\lib\jaws.jar" in JDK 1.3.1 update 28.
 	- "jre\lib\plugin.jar" in JDK 1.4.2 update 19.
 	- "jre\lib\plugin.jar" and "jre\lib\deploy.jar" in JDK 1.5.0 update 22.
-	- @TODO: JDK 6 u21
+	- "jre\lib\deploy.jar" in JDK 6 update 1
 	- "jre\lib\deploy.jar" in JDK 8 update 181.
 
 	Only after adding support for reading index files did I look for other resources (partly because I wanted to try to document it on
-	my own as a learning exercise). Any previously unknown struct members were added in this step.
+	my own as a learning exercise). Any previously unknown fields were added in this step.
 
 	[BB] "Java_IDX_Parser" - a script that reads the index file format.
 	--> https://github.com/Rurik/Java_IDX_Parser/
@@ -84,12 +95,20 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LAST_MODIFIED_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING,
 	CSV_CODEBASE_IP, CSV_VERSION,
-	CSV_LOCATION_ON_CACHE, CSV_MISSING_FILE,
+	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP
 };
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
+// Entry point for the Java Plugin's cache exporter. This function will determine where to look for the cache before
+// processing its contents.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the cache should be exported.
+// If the path to this location isn't defined, this function will look in the current AppData directory.
+//
+// @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback);
 void export_specific_or_default_java_plugin_cache(Exporter* exporter)
@@ -135,12 +154,25 @@ void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 	terminate_cache_exporter(exporter);
 }
 
+// Called every time a file is found in the AppletStore cache. Used to export every cache entry in this location.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
 
+	TCHAR* directory_name = PathFindFileName(directory_path);
+	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(previous_directory_path, directory_path, TEXT(".."));
+	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
+
 	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(short_file_path, TEXT("AppletStore"), filename);
+	PathCombine(short_file_path, previous_directory_name, directory_name);
+	PathAppend(short_file_path, filename);
+
+	TCHAR* cache_version = TEXT("AppletStore");
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, filename);
@@ -151,7 +183,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 		{/* Last Modified Time */}, {/* Expiry Time */},
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */}, {/* Content Type */}, {/* Content Length */}, {/* Content Encoding */},
 		{/* Codebase IP */}, {/* Version */},
-		{short_file_path}, {/* Missing File */},
+		{short_file_path}, {cache_version}, {/* Missing File */},
 		{/* Custom File Group */}, {/* Custom URL Group */}
 	};
 
@@ -161,30 +193,31 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 	return true;
 }
 
-// A helper enumeration used to tell what kind of cache location we're in while iterating over the found index files.
-// In the old ache, there were separate directories for files (images, sounds, and classes) and for archives (ZIPs and JARs).
+// The type of cache location where the index files are kept.
+// In version 1, there were separate directories for files (images, sounds, and classes) and for archives (ZIPs and JARs).
+// In version 6, all types of files were allowed.
 enum Location_Type
 {
-	LOCATION_ALL = 0, // For any type of file. Used by newer cache formats.
+	LOCATION_ALL = 0, // For any type of file. Used by version 6.
 
-	LOCATION_FILES = 1, // For .class, .gif, .jpg, .au, .wav files only. Used by older cache formats.
-	LOCATION_ARCHIVES = 2 // For .zip and .jar files only. Used by older cache formats.
+	LOCATION_FILES = 1, // For .class, .gif, .jpg, .au, .wav files only. Used by version 1.
+	LOCATION_ARCHIVES = 2 // For .zip and .jar files only. Used by version 1.
 };
 
-// The version of the index file we're reading.
+// The version of the supported index file formats.
 enum Cache_Version
 {
-	// The old cache. @Java: Taken from "sun.plugin.cache.Cache" (JDK 1.4).
-	VERSION_4 = 0x10, // Possibly "javapi\v1.0" -> "10".
+	// Version 1. @Java: Taken from "sun.plugin.cache.Cache" (JDK 1.4).
+	VERSION_1 = 16,
 	
-	// The new cache. @Java: Taken from "com.sun.deploy.cache.CacheEntry" (JDK 8).
+	// Version 6. @Java: Taken from "com.sun.deploy.cache.CacheEntry" (JDK 6).
 	VERSION_602 = 602,
 	VERSION_603 = 603,
 	VERSION_604 = 604,
 	VERSION_605 = 605
 };
 
-// The type of file that is allowed to be stored in either the "jar" and "file" subdirectories in the old cache.
+// The type of file that is allowed to be stored in either the "jar" and "file" subdirectories in version 1.
 enum Java_File_Type
 {
 	JAVA_FILE_UNKNOWN = 0x00,
@@ -200,15 +233,19 @@ enum Java_File_Type
 	JAVA_FILE_WAV_SOUND = 0x42
 };
 
-// The size of the header (section 1) of an index file in bytes. This only applies to the new cache.
-static const size_t VERSION_6_HEADER_SIZE = 128;
+// The size of the header (section 1) of an index file in bytes. This only applies to version 6.
+static const u32 VERSION_6_HEADER_SIZE = 128;
 
+// A structure that represents the contents of an index file for all supported versions.
+// Note that the following layout doesn't correspond byte for byte to the index file format.
+// The members of this structure are filled by read_index_file().
 struct Index
 {
-	// >>>> Version 4 only.
+	// >>>> Version 1 only.
+	s8 status;
 	s32 file_type;
 
-	// >>>> Version 6 combined with a few attributes from earlier versions.
+	// >>>> Version 6 combined with a few attributes from version 1.
 
 	s8 busy;
 	s8 incomplete;
@@ -253,18 +290,22 @@ struct Index
 	TCHAR* namespace_id;
 	TCHAR* codebase_ip;
 
-	// @Java: "sun.plugin.cache.CachedFileLoader" (JDK 1.4): Only the following HTTP headers are saved:
-	// "content-length", "last-modified", "expires", "content-type", "content-encoding", "date", "server". 
-
 	TCHAR* response;
 	TCHAR* server;
 	TCHAR* cache_control;
 	TCHAR* pragma;
 	TCHAR* content_type;
+	// This value is used in the Content Length CSV column if it exists. Otherwise, the content length numeric value is used instead.
 	TCHAR* content_length_string;
 	TCHAR* content_encoding;
 };
 
+// Maps a cached resource's file type to its respective file extension. Note that JAR and JARJAR files map to ".zip".
+//
+// @Parameters:
+// 1. type - The file type.
+//
+// @Returns: The file extension.
 static TCHAR* get_cached_file_extension_from_java_file_type(s32 type)
 {
 	switch(type)
@@ -280,12 +321,18 @@ static TCHAR* get_cached_file_extension_from_java_file_type(s32 type)
 	}
 }
 
+// Helper structure to pass some values to and from find_cached_filename_that_starts_with_callback().
 struct Find_Filename_Result
 {
 	bool was_found;
 	TCHAR* result_buffer;
 };
 
+// Called every time a cached file that begins with a given prefix is found.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: True if the file was not found (to keep searching) or false if it was found (to stop searching).
 static TRAVERSE_DIRECTORY_CALLBACK(find_cached_filename_that_starts_with_callback)
 {
 	Find_Filename_Result* result = (Find_Filename_Result*) user_data;
@@ -294,6 +341,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_cached_filename_that_starts_with_callbac
 	return !result->was_found;
 }
 
+// Finds the first file that begins with a given prefix in a given directory. This search does not include any subdirectories.
+//
+// @Parameters:
+// 1. directory_path - The path to the directory to search.
+// 2. filename_prefix - The filename prefix to search for.
+// 3. result_filename - The buffer which receives the found filename. This buffer must be able to hold MAX_PATH_CHARS characters.
+// 
+// @Returns: True if the file was found. Otherwise, false.
 static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, const TCHAR* filename_prefix, TCHAR* result_filename)
 {
 	TCHAR search_query[MAX_PATH_CHARS] = TEXT("");
@@ -307,6 +362,11 @@ static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, c
 	return result.was_found;
 }
 
+// Called every time an index file is found in the Java Plugin's cache. Used to export every cache entry.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: True.
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 {
@@ -316,9 +376,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	// Find out what kind of cache location we're in by looking at the directory's name:
 	// - "[...]\cache\javapi\v1.0\file\file.ext"
 	// - "[...]\cache\javapi\v1.0\jar\archive.zip"
-	// Otherwise, we assume that we're a newer cache version whose directory structure is "[...]\cache\6.0\<Number>\<Random Characters>".
+	// Otherwise, we assume that it's version 6, whose directory structure is "[...]\cache\6.0\<Number>\<Random Characters>".
 	TCHAR* directory_name = PathFindFileName(directory_path);
-	// For the ".jpi_cache" directory, where the directory structure follows ".jpi_cache\file\1.0\file.ext" instead.
+	
+	// For the ".jpi_cache" directory (version 1), where the directory structure follows ".jpi_cache\file\1.0\file.ext" instead.
 	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(previous_directory_path, directory_path, TEXT(".."));
 	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
@@ -343,8 +404,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	// API Specification. We'll decode it anyways though it's technically possible that the final URL's
 	// representation isn't the intended one.
 	TCHAR* url = decode_url(arena, index.url);
-	TCHAR* filename = PathFindFileName(url);
-
+	Url_Parts url_parts = {};
+	TCHAR* filename = NULL;
+	if(partition_url(arena, url, &url_parts))
+	{
+		filename = PathFindFileName(url_parts.path);
+	}
+	
 	// Note that the time information is stored in milliseconds while time_t is measured in seconds.
 	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	format_time64_t_date_time(index.last_modified_time / 1000, last_modified_time);
@@ -366,35 +432,36 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 
 	// How we find the cached filename depends on the cache version.
 	//
-	// On older format versions where there's separate directories for the type of file, the cached file has the same name as the index
-	// but with its original file extension (e.g. ".class") instead of ".idx". The one exception are JAR files, which always use the
+	// In version 1, where there's separate directories for the type of file, the cached file has the same name as the index but
+	// with its original file extension (e.g. ".class") instead of ".idx". The one exception are JAR files, which always use the
 	// ".zip" extension.
 	//
-	// On newer versions cache formats where every type of file is allowed, the cached file has the same name as the index but without
-	// the ".idx" file extension.
+	// In version 6, where every type of file is allowed, the cached file has the same name as the index but without the ".idx"
+	// file extension.
 	//
-	// Note that the older cache directory may still exist in the new cache. For example, if a user updated their Java version
+	// Note that the version 1 cache directory may still exist in version 6. For example, if a user updated their Java version
 	// and their cache version was upgraded from one format to the other (e.g. Java 5 to Java 6).
 	TCHAR cached_filename[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(cached_filename, MAX_PATH_CHARS, index_filename);
 	{
 		// Remove the .idx file extension:
-		// - Old cache: "file.ext-ABCDEFGH-12345678.idx" -> "file.ext-ABCDEFGH-12345678" (not the actual filename though).
-		// - New cache: "ABCDEFGH-12345678.idx" -> "ABCDEFGH-12345678".
+		// - Version 1: "file.ext-ABCDEFGH-12345678.idx" -> "file.ext-ABCDEFGH-12345678" (not the actual filename though).
+		// - Version 6: "ABCDEFGH-12345678.idx" -> "ABCDEFGH-12345678".
 		TCHAR* idx_file_extension = skip_to_file_extension(cached_filename, true);
 		*idx_file_extension = TEXT('\0');
 
-		// The above works for the new cache, but for the old one (the file or archive cache) we still need to determine
+		// The above works for version 6, but for version 1 (the file or archive cache) we still need to determine
 		// the actual filename by appending the file extension. Otherwise, we won't be able to copy the file.
 		if(location_type != LOCATION_ALL)
 		{
 			if(filename == NULL)
 			{
 				// The filename shown in the first column may be NULL if the URL data wasn't stored in the index.
-				// In the old cache, since the cached filename is something like "file.ext-ABCDEFGH-12345678.ext", we can truncate this
-				// string to find a good representation of the resource's name. E.g. "file.ext-ABCDEFGH-12345678.ext" -> "file.ext".
+				// In version 1, since the cached filename is something like "file.ext-ABCDEFGH-12345678.ext",
+				// we can truncate this string to find a good representation of the resource's name.
+				// E.g. "file.ext-ABCDEFGH-12345678.ext" -> "file.ext".
 				//
-				// This applies to the older cache directories that still exist in the new cache.
+				// This applies to the version 1 cache directories that still exist in version 6.
 				filename = push_string_to_arena(arena, cached_filename);
 				TCHAR* last_dash = _tcsrchr(filename, TEXT('-'));
 				if(last_dash != NULL)
@@ -422,13 +489,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 			if(actual_file_extension != NULL)
 			{
 				// If it worked, add the file extension to build the actual filename.
-				// This applies to the older cache directories that exist in the old cache.
+				// This applies to the version 1 cache directories that exist in their original Java version.
 				StringCchCat(cached_filename, MAX_PATH_CHARS, actual_file_extension);
 			}
 			else
 			{
 				// If that fails, take the time to search on disk for the actual filename.
-				// This applies to the older cache directories that still exist in the new cache.
+				// This applies to the version 1 cache directories that still exist in version 6.
 				TCHAR actual_filename[MAX_PATH_CHARS] = TEXT("");
 				if(find_cached_filename_that_starts_with(directory_path, cached_filename, actual_filename))
 				{
@@ -439,8 +506,20 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 
 	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	s32 format_version = (location_type == LOCATION_ALL) ? (index.cache_version) : (4);
-	StringCchPrintf(short_file_path, MAX_PATH_CHARS, TEXT("v%I32d\\%s\\%s\\%s"), format_version, previous_directory_name, directory_name, cached_filename);
+	PathCombine(short_file_path, previous_directory_name, directory_name);
+	PathAppend(short_file_path, cached_filename);
+	
+	TCHAR* cache_version = NULL;
+	TCHAR cache_version_buffer[MAX_INT32_CHARS] = TEXT("");
+	if(location_type != LOCATION_ALL)
+	{
+		cache_version = TEXT("1");
+	}
+	else
+	{
+		convert_s32_to_string(index.cache_version, cache_version_buffer);
+		cache_version = cache_version_buffer;
+	}
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, cached_filename);
@@ -451,7 +530,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		{last_modified_time}, {expiry_time},
 		{index.response}, {index.server}, {index.cache_control}, {index.pragma}, {index.content_type}, {content_length}, {index.content_encoding},
 		{index.codebase_ip}, {index.version},
-		{short_file_path}, {/* Missing File */},
+		{short_file_path}, {cache_version}, {/* Missing File */},
 		{/* Custom File Group */}, {/* Custom URL Group */}
 	};
 	
@@ -578,6 +657,17 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 	#endif
 }
 
+// Reads any of the supported index file formats and fills an Index structure with any relevant information.
+//
+// @Parameters:
+// 1. arena - The Arena structure where any read string values are stored.
+// 2. index_path - The path to the index file to read.
+// 3. index - The Index structure that receives the index file's contents. This structure must be cleared to zero before calling this
+// function.
+// 4. location_type - The type of location where the index file is stored on disk. For version 1, this must be LOCATION_ARCHIVES or
+// LOCATION_FILES. For version 6, this may be any location type (LOCATION_ARCHIVES, LOCATION_FILES, or LOCATION_ALL).
+// 
+// @Returns: Nothing.
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type)
 {
 	HANDLE index_handle = INVALID_HANDLE_VALUE;
@@ -586,7 +676,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 	
 	if(index_file == NULL)
 	{
-		log_print(LOG_ERROR, "Read Index File: Failed to open the index file with the error code %lu. No files will be exported using this index.", GetLastError());
+		log_print(LOG_ERROR, "Read Index File: Failed to open the index file '%s' with the error code %lu. No files will be exported using this index.", index_path, GetLastError());
 		safe_close_handle(&index_handle);
 		return;		
 	}
@@ -677,7 +767,11 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 			\
 			if(key == NULL || value == NULL) continue;\
 			\
+			/* Disable the constant expression and logical operation on string literal warnings. */\
+			__pragma(warning(push))\
+			__pragma(warning(disable : 4127 4130))\
 			if(codebase_ip_key != NULL && strings_are_equal(key, codebase_ip_key, true))\
+			__pragma(warning(pop))\
 			{\
 				index->codebase_ip = value;\
 			}\
@@ -735,7 +829,11 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 			READ_HEADERS(NULL);\
 		}\
 		\
-		_ASSERT( (VERSION_6_HEADER_SIZE + index->section_2_length) == total_bytes_read );\
+		u32 expected_total_bytes_read = VERSION_6_HEADER_SIZE + index->section_2_length;\
+		if(total_bytes_read < expected_total_bytes_read)\
+		{\
+			log_print(LOG_WARNING, "Read Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but got %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
+		}\
 	} while(false, false)
 
 	// Read the first bytes in the header.
@@ -746,10 +844,10 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 	// @Java: In package sun.plugin.cache.* (JDK 1.4).
 	// See FileCache.verifyFile() -> readHeaderFields() and CachedFileLoader.createCacheFiles() -> writeHeaders().
 	// See JarCache.verifyFile() and CachedJarLoader.authenticateFromCache() and authenticate().
-	if(first_byte == VERSION_4)
+	if(first_byte == VERSION_1)
 	{
-		// In version 4, the first byte represents the status. It may also be incomplete (0), unusable (1), or in-use (2).
-		// index->status = first_byte;
+		// In version 1, the first byte also represents the status. It may also be incomplete (0), unusable (1), or in-use (2).
+		index->status = first_byte;
 
 		READ_STRING(index->url);
 		READ_INTEGER(index->last_modified_time);
@@ -766,7 +864,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		}
 		else
 		{
-			// @Assert: We should never get here in the old cache.
+			// @Assert: We should never get here in version 1.
 			_ASSERT(false);
 		}
 	}
@@ -969,6 +1067,5 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		- The cache_archive has not been cached before, or
 		- The "Last-Modified" value of the cache_archive on the web server is newer than the one stored locally in the applet cache, or
 		- The "Content-Length" of the cache_archive on the web server is different than the one stored locally in the applet cache.
-
 	}
 */

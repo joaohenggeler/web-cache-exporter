@@ -9,10 +9,42 @@ BEGIN_URL_GROUP Club Penguin
 
 END
 
+BEGIN_URL_GROUP FusionFall
+
+	BEGIN_DOMAINS
+		fusionfall.com
+	END
+
+END
+
+BEGIN_URL_GROUP Habbo
+
+	BEGIN_DOMAINS
+		habbo.*
+	END
+
+END
+
 BEGIN_URL_GROUP Poptropica
 
 	BEGIN_DOMAINS
 		poptropica.com
+	END
+
+END
+
+BEGIN_URL_GROUP RuneScape
+
+	BEGIN_DOMAINS
+		runescape.com
+	END
+
+END
+
+BEGIN_URL_GROUP Transformice
+
+	BEGIN_DOMAINS
+		transformice.com
 	END
 
 END

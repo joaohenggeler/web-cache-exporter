@@ -335,6 +335,7 @@ enum Csv_Type
 	CSV_CONTENT_ENCODING,
 
 	CSV_LOCATION_ON_CACHE,
+	CSV_CACHE_VERSION,
 	CSV_LOCATION_ON_DISK,
 	CSV_MISSING_FILE,
 
@@ -361,8 +362,8 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
-	"Response", "Server", "Cache-Control", "Pragma", "Content Type", "Content Length", "Content Encoding",
-	"Location On Cache", "Location On Disk", "Missing File",
+	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Encoding",
+	"Location On Cache", "Cache Version", "Location On Disk", "Missing File",
 	"Custom File Group", "Custom URL Group",
 	"Hits",
 	"Director File Type",

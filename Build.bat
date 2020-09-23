@@ -25,7 +25,7 @@ PUSHD "%~dp0"
 	REM certain macros (like DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
-	SET "BUILD_MODE=release"
+	SET "BUILD_MODE=debug"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
@@ -59,7 +59,9 @@ PUSHD "%~dp0"
 	SET "THIRD_PARTY_LIBRARIES_PATH_64=%THIRD_PARTY_SOURCE_PATH%\Lib\x64"
 
 	REM Common compiler options and any other ones that only apply to a specific build target or mode.
-	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /wd4127 /wd4130 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
+	REM Disabled warnings:
+	REM - C4100 - unused function parameter.
+	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
 	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT /GL"
 	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D DEBUG /D NDEBUG /D _DEBUG"
 	SET "COMPILER_OPTIONS_WIN_NT_ONLY="
@@ -111,7 +113,7 @@ PUSHD "%~dp0"
 	SET "DEBUG_BUILD_PATH=%MAIN_BUILD_PATH%\Debug"
 	SET "DEBUG_BUILD_PATH_32=%DEBUG_BUILD_PATH%\Build-x86-32"
 	SET "DEBUG_BUILD_PATH_64=%DEBUG_BUILD_PATH%\Build-x86-64"
-	SET "DEBUG_BUILD_PATH_9X_32=%DEBUG_BUILD_PATH%\Build-98-ME-x86-32"
+	SET "DEBUG_BUILD_PATH_9X_32=%DEBUG_BUILD_PATH%\Build-9x-x86-32"
 
 	REM The location of the compressed archives.
 	SET "BUILD_ARCHIVE_DIR=Archives"
@@ -174,9 +176,6 @@ PUSHD "%~dp0"
 	REM Check if the build mode is valid and add the previously specified compiler and linkers options, and static libraries. 
 	IF "%BUILD_MODE%"=="debug" (
 
-		ECHO [%~nx0] Compiling in %BUILD_MODE% mode...
-		ECHO.
-
 		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_DEBUG_ONLY% /D BUILD_VERSION=\"%BUILD_VERSION%\""
 		SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_DEBUG_ONLY%"
 		SET "LIBRARIES=%LIBRARIES% %LIBRARIES_DEBUG_ONLY%"
@@ -186,9 +185,6 @@ PUSHD "%~dp0"
 		SET "BUILD_PATH_9X_32=%DEBUG_BUILD_PATH_9X_32%"
 
 	) ELSE IF "%BUILD_MODE%"=="release" (
-
-		ECHO [%~nx0] Compiling in %BUILD_MODE% mode...
-		ECHO.
 
 		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_RELEASE_ONLY% /D BUILD_VERSION=\"%BUILD_VERSION%\""
 		SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_RELEASE_ONLY%"
@@ -202,6 +198,9 @@ PUSHD "%~dp0"
 		ECHO [%~nx0] Unknown build mode "%BUILD_MODE%".
 		EXIT /B 1
 	)
+
+	ECHO [%~nx0] Building in %BUILD_MODE% mode...
+	ECHO.
 
 	REM Any any remaining command line arguments to the compiler options.
 	SET "COMMAND_LINE_COMPILER_OPTIONS=%*"
@@ -270,7 +269,7 @@ PUSHD "%~dp0"
 
 	IF ERRORLEVEL 1 (
 		ECHO.
-		ECHO [%~nx0] Error while building "%EXE_FILENAME_32%"
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_32%".
 		EXIT /B 1
 	)
 
@@ -345,7 +344,7 @@ PUSHD "%~dp0"
 
 	IF ERRORLEVEL 1 (
 		ECHO.
-		ECHO [%~nx0] Error while building "%EXE_FILENAME_64%"
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_64%".
 		EXIT /B 1
 	)
 
@@ -421,7 +420,7 @@ PUSHD "%~dp0"
 
 	IF ERRORLEVEL 1 (
 		ECHO.
-		ECHO [%~nx0] Error while building "%EXE_FILENAME_9X_32%"
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_9X_32%".
 		EXIT /B 1
 	)
 
@@ -483,7 +482,7 @@ PUSHD "%~dp0"
 	)
 
 	ECHO [%~nx0] Packaging the built executables...
-	"%_7ZIP_EXE_PATH%" a "%EXE_ARCHIVE_PATH%" "%BUILD_PATH_TO_ZIP%\*" >NUL
+	"%_7ZIP_EXE_PATH%" a "%EXE_ARCHIVE_PATH%" "%BUILD_PATH_TO_ZIP%\*" -r0 "-x!*.sln" "-x!*.suo" >NUL
 
 	ECHO.
 

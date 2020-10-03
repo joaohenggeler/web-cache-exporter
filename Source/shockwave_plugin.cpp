@@ -163,8 +163,8 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 				traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);\
 			} while(false, false)
 
-			TRAVERSE_APPDATA_XTRA_FILES(exporter->appdata_path, TEXT("AppData"));
-			TRAVERSE_APPDATA_XTRA_FILES(exporter->local_low_appdata_path, TEXT("AppData\\LocalLow"));
+			TRAVERSE_APPDATA_XTRA_FILES(exporter->appdata_path, TEXT("<AppData>"));
+			TRAVERSE_APPDATA_XTRA_FILES(exporter->local_low_appdata_path, TEXT("<AppData LocalLow>"));
 		}
 
 		log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");	

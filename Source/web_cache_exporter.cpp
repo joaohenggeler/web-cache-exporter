@@ -274,6 +274,12 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			{
 				StringCchCopy(exporter->output_path, MAX_PATH_CHARS, DEFAULT_EXPORT_DIRECTORY_NAME);
 			}
+
+			if(i+2 < num_arguments)
+			{
+				StringCchCopy(exporter->external_locations_path, MAX_PATH_CHARS, arguments[i+2]);
+				exporter->should_load_external_locations = true;
+			}
 	
 			exporter->is_exporting_from_default_locations = true;
 			seen_export_option = true;
@@ -372,6 +378,22 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		console_print("The -load-group-files option requires one or more group filenames as its argument.");
 		log_print(LOG_ERROR, "Argument Parsing: The -load-group-files option was used but the supplied value does not contain filenames.");
 		success = false;
+	}
+
+	if(exporter->should_load_external_locations)
+	{
+		if(string_is_empty(exporter->external_locations_path))
+		{
+			console_print("The second argument in the -find-and-export-all option requires a non-empty path.");
+			log_print(LOG_ERROR, "Argument Parsing: The -find-and-export-all option was used with the external locations argument but the supplied path was empty.");
+			success = false;
+		}
+		else if(!does_file_exist(exporter->external_locations_path))
+		{
+			console_print("The external locations file in the -find-and-export-all option doesn't exist.");
+			log_print(LOG_ERROR, "Argument Parsing: The -find-and-export-all option supplied an external locations file path that doesn't exist: '%s'.", exporter->external_locations_path);
+			success = false;
+		}
 	}
 
 	if(exporter->should_use_ie_hint && string_is_empty(exporter->ie_hint_path))
@@ -482,6 +504,11 @@ static void clean_up(Exporter* exporter)
 	>>>> 14. Perform any clean up operations after finishing exporting. These are also done when any of the
 	previous errors occur.
 */
+
+static void export_all_default_cache_locations(Exporter* exporter);
+static size_t get_total_external_locations_size(Exporter* exporter, u32* result_num_profiles);
+static void load_external_locations(Exporter* exporter, u32 num_profiles);
+
 int _tmain(int argc, TCHAR* argv[])
 {
 	console_print("Web Cache Exporter v%hs", EXPORTER_BUILD_VERSION);
@@ -582,7 +609,14 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 
 		u32 num_groups = 0;
-		size_t permanent_memory_size = get_total_group_files_size(&exporter, &num_groups);
+		u32 num_profiles = 0;
+		
+		size_t permanent_memory_size = 	get_total_group_files_size(&exporter, &num_groups);
+		if(exporter.should_load_external_locations)
+		{
+			permanent_memory_size += get_total_external_locations_size(&exporter, &num_profiles);
+		}
+
 		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the permanent memory arena.", permanent_memory_size);
 
 		if(!create_arena(&exporter.permanent_arena, permanent_memory_size))
@@ -595,7 +629,14 @@ int _tmain(int argc, TCHAR* argv[])
 
 		log_print(LOG_INFO, "Startup: Loading %I32u groups.", num_groups);
 		load_all_group_files(&exporter, num_groups);
-		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity after loading the group files.", get_used_arena_capacity(&exporter.permanent_arena));
+
+		if(exporter.should_load_external_locations)
+		{
+			log_print(LOG_INFO, "Startup: Loading %I32u profiles from the external locations file '%s'.", num_profiles, exporter.external_locations_path);
+			load_external_locations(&exporter, num_profiles);			
+		}
+
+		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity.", get_used_arena_capacity(&exporter.permanent_arena));
 	}
 
 	#ifndef BUILD_9X
@@ -701,6 +742,9 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
 	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "- Should Load External Locations: %hs", (exporter.should_load_external_locations) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- External Locations Path: '%s'", exporter.external_locations_path);
+	log_print(LOG_NONE, "----------------------------------------");
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
 	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
@@ -751,16 +795,78 @@ int _tmain(int argc, TCHAR* argv[])
 			_ASSERT(exporter.is_exporting_from_default_locations);
 			_ASSERT(string_is_empty(exporter.cache_path));
 
-			export_specific_or_default_internet_explorer_cache(&exporter);
-			log_print_newline();
+			if(exporter.should_load_external_locations)
+			{
+				External_Locations* external_locations = exporter.external_locations;
+				_ASSERT(external_locations != NULL);
 
-			export_specific_or_default_flash_plugin_cache(&exporter);
-			log_print_newline();
+				console_print("Exporting the default cache from %I32u external locations...", external_locations->num_profiles);
+				log_print(LOG_INFO, "Startup: Exporting the default cache from %I32u external locations.", external_locations->num_profiles);
+				log_print_newline();
 
-			export_specific_or_default_shockwave_plugin_cache(&exporter);
-			log_print_newline();
+				for(u32 i = 0; i < external_locations->num_profiles; ++i)
+				{
+					Profile profile = external_locations->profiles[i];
+					exporter.current_profile_name = profile.name;
+					console_print("- [%I32u of %I32u] Exporting from the profile '%s'...", i+1, external_locations->num_profiles, profile.name);
+					
+					log_print(LOG_NONE, "----------------------------------------");
+					log_print(LOG_INFO, "Exporting from the profile '%s' (%I32u).", profile.name, i);
+					log_print(LOG_NONE, "----------------------------------------");
+					log_print_newline();
 
-			export_specific_or_default_java_plugin_cache(&exporter);
+					if(FAILED(StringCchCopy(exporter.windows_path, MAX_PATH_CHARS, profile.windows_path)))
+					{
+						console_print("The Windows path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					if(FAILED(StringCchCopy(exporter.windows_temporary_path, MAX_PATH_CHARS, profile.windows_temporary_path)))
+					{
+						console_print("The Temporary path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					if(FAILED(StringCchCopy(exporter.user_profile_path, MAX_PATH_CHARS, profile.user_profile_path)))
+					{
+						console_print("The User Profile path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					if(FAILED(StringCchCopy(exporter.appdata_path, MAX_PATH_CHARS, profile.appdata_path)))
+					{
+						console_print("The Appdata path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					if(FAILED(StringCchCopy(exporter.local_appdata_path, MAX_PATH_CHARS, profile.local_appdata_path)))
+					{
+						console_print("The Local Appdata path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					if(FAILED(StringCchCopy(exporter.local_low_appdata_path, MAX_PATH_CHARS, profile.local_low_appdata_path)))
+					{
+						console_print("The Local Low Appdata path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					if(FAILED(StringCchCopy(exporter.wininet_cache_path, MAX_PATH_CHARS, profile.wininet_cache_path)))
+					{
+						console_print("The Internet Cache path is too long. This profile will be skipped.");
+						continue;
+					}
+
+					export_all_default_cache_locations(&exporter);
+
+					log_print_newline();
+				}
+			}
+			else
+			{
+				_ASSERT(exporter.external_locations == NULL);
+				export_all_default_cache_locations(&exporter);
+			}
 
 		} break;
 
@@ -818,7 +924,12 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 	get_full_path_name(exporter->cache_path);
 	get_full_path_name(exporter->output_path);
 	
-	PathCombine(exporter->output_copy_path, exporter->output_path, cache_identifier);
+	PathAppend(exporter->output_copy_path, exporter->output_path);
+	if(exporter->should_load_external_locations)
+	{
+		PathAppend(exporter->output_copy_path, exporter->current_profile_name);
+	}
+	PathAppend(exporter->output_copy_path, cache_identifier);
 	
 	// Don't use PathCombine() since we're just adding a file extension to the previous path.
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
@@ -1076,4 +1187,238 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 void terminate_cache_exporter(Exporter* exporter)
 {
 	safe_close_handle(&(exporter->csv_file_handle));
+}
+
+static void export_all_default_cache_locations(Exporter* exporter)
+{
+	export_specific_or_default_internet_explorer_cache(exporter);
+	log_print_newline();
+
+	export_specific_or_default_flash_plugin_cache(exporter);
+	log_print_newline();
+
+	export_specific_or_default_shockwave_plugin_cache(exporter);
+	log_print_newline();
+
+	export_specific_or_default_java_plugin_cache(exporter);
+}
+
+// Various keywords and delimiters for the external locations file syntax.
+static const char COMMENT = ';';
+static const char* LINE_DELIMITERS = "\r\n";
+static const char* TOKEN_DELIMITERS = " \t";
+static const char* BEGIN_PROFILE = "BEGIN_PROFILE";
+static const char* END_PROFILE = "END";
+static const char* NO_LOCATION = "<None>";
+static const char* LOCATION_WINDOWS = "WINDOWS";
+static const char* LOCATION_TEMPORARY = "TEMPORARY";
+static const char* LOCATION_USER_PROFILE = "USER_PROFILE";
+static const char* LOCATION_APPDATA = "APPDATA";
+static const char* LOCATION_LOCAL_APPDATA = "LOCAL_APPDATA";
+static const char* LOCATION_LOCAL_LOW_APPDATA = "LOCAL_LOW_APPDATA";
+static const char* LOCATION_INTERNET_CACHE = "INTERNET_CACHE";
+
+static size_t get_total_external_locations_size(Exporter* exporter, u32* result_num_profiles)
+{
+	HANDLE file_handle = INVALID_HANDLE_VALUE;
+	u64 file_size = 0;
+	char* file = (char*) memory_map_entire_file(exporter->external_locations_path, &file_handle, &file_size, false);
+
+	u32 num_profiles = 0;
+	size_t total_locations_size = 0;
+
+	if(file != NULL)
+	{
+		char* end_of_file = (char*) advance_bytes(file, file_size - 1);
+		*end_of_file = '\0';
+
+		char* remaining_lines = NULL;
+		char* line = strtok_s(file, LINE_DELIMITERS, &remaining_lines);
+
+		while(line != NULL)
+		{
+			line = skip_leading_whitespace(line);
+
+			if(*line == COMMENT || string_is_empty(line))
+			{
+				// Skip comments and empty lines.
+			}
+			else
+			{
+				// @TODO
+				total_locations_size += string_size(line);
+
+				char* name = NULL;
+				char* type = strtok_s(line, TOKEN_DELIMITERS, &name);
+				if(type != NULL && name != NULL)
+				{
+					if(strings_are_equal(type, BEGIN_PROFILE))
+					{
+						++num_profiles;
+					}
+				}
+			}
+
+			line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
+		}
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Get Total External Locations Size: Failed to load the external locations file '%s'.", exporter->external_locations_path);
+	}
+
+	safe_unmap_view_of_file((void**) &file);
+	safe_close_handle(&file_handle);
+
+	*result_num_profiles = num_profiles;
+	// Total Size = Size for the Profile array + Size for the string data.
+	return 	sizeof(External_Locations) + MAX(num_profiles - 1, 0) * sizeof(Profile)
+			+ total_locations_size * sizeof(TCHAR);
+}
+
+static void load_external_locations(Exporter* exporter, u32 num_profiles)
+{
+	if(num_profiles == 0)
+	{
+		log_print(LOG_WARNING, "Load External Locations: Attempted to load zero profiles. No external locations will be loaded.");
+		return;
+	}
+
+	// The relevant loaded group data will go to the permanent arena, and any intermediary data to the temporary one.
+	Arena* permanent_arena = &(exporter->permanent_arena);
+	Arena* temporary_arena = &(exporter->temporary_arena);
+
+	size_t external_locations_size = sizeof(External_Locations) + sizeof(Profile) * (num_profiles - 1);
+	External_Locations* external_locations = push_arena(permanent_arena, external_locations_size, External_Locations);
+	
+	HANDLE file_handle = INVALID_HANDLE_VALUE;
+	u64 file_size = 0;
+	char* file = (char*) memory_map_entire_file(exporter->external_locations_path, &file_handle, &file_size, false);
+
+	u32 num_processed_profiles = 0;
+
+	if(file != NULL)
+	{
+		char* end_of_file = (char*) advance_bytes(file, file_size - 1);
+		*end_of_file = '\0';
+
+		char* remaining_lines = NULL;
+		char* line = strtok_s(file, LINE_DELIMITERS, &remaining_lines);
+
+		bool seen_begin_profile = false;
+		Profile* profile_array = external_locations->profiles;
+		Profile* profile = NULL;
+
+		while(line != NULL)
+		{
+			line = skip_leading_whitespace(line);
+
+			if(*line == COMMENT || string_is_empty(line))
+			{
+				// Skip comments and empty lines.
+			}
+			else if(!seen_begin_profile)
+			{
+				char* name = NULL;
+				char* type = strtok_s(line, TOKEN_DELIMITERS, &name);
+				if(type != NULL && name != NULL)
+				{
+					if(strings_are_equal(line, BEGIN_PROFILE))
+					{
+						seen_begin_profile = true;
+						profile = &profile_array[num_processed_profiles];
+
+						profile->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, name);
+						log_print(LOG_INFO, "Load External Locations: Loading the profile '%s'...", profile->name);
+					}
+					else
+					{
+						log_print(LOG_ERROR, "Load External Locations: Unknown list type '%hs'.", type);
+					}
+				}
+			}
+			else if(seen_begin_profile)
+			{
+				if(strings_are_equal(line, END_PROFILE))
+				{
+					seen_begin_profile = false;
+					++num_processed_profiles;
+				}
+				else
+				{
+					char* path = NULL;
+					char* location = strtok_s(line, TOKEN_DELIMITERS, &path);
+					if(location != NULL && path != NULL)
+					{
+						path = skip_leading_whitespace(path);
+
+						if(strings_are_equal(path, NO_LOCATION))
+						{
+							path = "";
+						}
+
+						if(strings_are_equal(location, LOCATION_WINDOWS))
+						{
+							profile->windows_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else if(strings_are_equal(location, LOCATION_TEMPORARY))
+						{
+							profile->windows_temporary_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else if(strings_are_equal(location, LOCATION_USER_PROFILE))
+						{
+							profile->user_profile_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else if(strings_are_equal(location, LOCATION_APPDATA))
+						{
+							profile->appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else if(strings_are_equal(location, LOCATION_LOCAL_APPDATA))
+						{
+							profile->local_appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else if(strings_are_equal(location, LOCATION_LOCAL_LOW_APPDATA))
+						{
+							profile->local_low_appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else if(strings_are_equal(location, LOCATION_INTERNET_CACHE))
+						{
+							profile->wininet_cache_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						}
+						else
+						{
+							log_print(LOG_ERROR, "Load External Locations: Unknown location type '%hs'.", location);
+						}
+					}
+				}
+			}
+			else
+			{
+				_ASSERT(false);
+			}
+
+			line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
+		}
+
+		if(seen_begin_profile)
+		{
+			log_print(LOG_WARNING, "Load External Locations: Found unterminated profile list.");
+		}
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Load External Locations: Failed to load the external locations file '%s'.", exporter->external_locations_path);
+	}
+
+	safe_unmap_view_of_file((void**) &file);
+	safe_close_handle(&file_handle);
+
+	external_locations->num_profiles = num_processed_profiles;
+
+	if(num_processed_profiles != num_profiles)
+	{
+		log_print(LOG_ERROR, "Load External Locations: Loaded %I32u profiles when %I32u were expected.", num_processed_profiles, num_profiles);
+	}
+
+	exporter->external_locations = external_locations;
 }

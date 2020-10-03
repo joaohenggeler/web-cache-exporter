@@ -21,7 +21,7 @@ Groups files must always end in a newline. You can only use spaces and tabs
 as whitespace.
 
 ; This defines the beginning of a file group with the name "HTML".
-; Each group or list of attributes ends when you reach the "END" characters. 
+; Each group or list of attributes ends when it reaches the "END" keyword. 
 BEGIN_FILE_GROUP HTML
 
 	; This defines a list of file signatures. These are composed of one

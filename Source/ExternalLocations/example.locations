@@ -1,0 +1,81 @@
+; This is a comment.
+
+BEGIN_PROFILE All Users
+
+	; Abc
+	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
+	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Definições locais\Temp
+	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users
+
+	; Def
+	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Application Data
+	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Definições locais\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Definições locais\Temporary Internet Files
+
+END
+
+BEGIN_PROFILE Default User
+
+	; Abc
+	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
+	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Definições locais\Temp
+	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User
+
+	; Def
+	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Application Data
+	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Definições locais\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Definições locais\Temporary Internet Files
+
+END
+
+BEGIN_PROFILE HP
+
+	; Abc
+	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
+	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Definições locais\Temp
+	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP
+
+	; Def
+	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Application Data
+	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Definições locais\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Definições locais\Temporary Internet Files
+
+END
+
+BEGIN_PROFILE João
+
+	; Abc
+	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
+	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Definições locais\Temp
+	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João
+
+	; Def
+	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Application Data
+	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Definições locais\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Definições locais\Temporary Internet Files
+
+END
+
+BEGIN_PROFILE IC
+
+	; Abc
+	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
+	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Definições locais\Temp
+	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC
+
+	; Def
+	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Application Data
+	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Definições locais\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Definições locais\Temporary Internet Files
+
+END

@@ -285,6 +285,7 @@ BEGIN_URL_GROUP Yahoo!
 
 	BEGIN_DOMAINS
 		yahoo.*
+		yahooligans.com
 	END
 
 END

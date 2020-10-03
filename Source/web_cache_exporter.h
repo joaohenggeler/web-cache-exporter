@@ -160,14 +160,34 @@ const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 };
 
 #include "memory_and_file_io.h"
+
 struct Exporter;
 #include "custom_groups.h"
+
+struct Profile
+{
+	TCHAR* name;
+
+	TCHAR* windows_path;
+	TCHAR* windows_temporary_path;
+	TCHAR* user_profile_path;
+	TCHAR* appdata_path;
+	TCHAR* local_appdata_path;
+	TCHAR* local_low_appdata_path;
+	TCHAR* wininet_cache_path;
+};
+
+struct External_Locations
+{
+	u32 num_profiles;
+	Profile profiles[ANYSIZE_ARRAY];
+};
 
 // A structure that represents a cache exporter. 
 struct Exporter
 {
 	// WCE.exe [Optional Arguments] <Export Argument>
-	// Where <Export Argument> is: -export-<Cache Type> [Optional Cache path] [Optional Output Path]
+	// Where <Export Argument> is: <Export Option> [Optional Cache path] [Optional Output Path]
 
 	// The optional command line arguments.
 	bool should_copy_files;
@@ -179,9 +199,14 @@ struct Exporter
 	bool should_load_specific_groups_files;
 	size_t num_group_filenames_to_load;
 	TCHAR** group_filenames_to_load;
-	
+
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
+
+	// @TODO
+	bool should_load_external_locations;
+	TCHAR external_locations_path[MAX_PATH_CHARS];
+	TCHAR* current_profile_name;
 
 	// The export command line arguments.
 	Cache_Type cache_type;
@@ -202,12 +227,15 @@ struct Exporter
 	// The loaded group file data that is stored in the permanent memory arena.
 	Custom_Groups* custom_groups;
 
+	// @TODO
+	External_Locations* external_locations;
+
 	// The paths to relevant exporter locations.
 	TCHAR executable_path[MAX_PATH_CHARS];
 	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
 	bool was_temporary_exporter_directory_created;
 	
-	// The paths to relevant Windows locations. These are sometimes used to find cache directories.
+	// The paths to relevant Windows locations. These are used to find the default cache directories.
 	// @DefaultCacheLocations:
 	TCHAR windows_path[MAX_PATH_CHARS];
 	// - 98, ME, XP, Vista, 7, 8.1, 10 			C:\WINDOWS

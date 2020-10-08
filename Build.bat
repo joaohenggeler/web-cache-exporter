@@ -126,7 +126,7 @@ PUSHD "%~dp0"
 	SET "_7ZIP_EXE_PATH=_7za920\7za.exe"
 
 	REM The location of the README body template to add to the final release README.
-	SET "README_BODY_PATH=%SOURCE_PATH%\readme_body.txt"
+	SET "README_BODY_PATH==%~dp0readme_body.txt"
 	SET "RELEASE_README_PATH=%RELEASE_BUILD_PATH%\readme.txt"
 
 	REM The location of this batch file, the version file, and the license.

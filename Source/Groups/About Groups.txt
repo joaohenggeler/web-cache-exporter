@@ -133,3 +133,12 @@ specifies "example.*" will match the following:
 - "http://www.example.com/index.html"
 - "http://cdn.example.net/index.html"
 - "http://download.example.co.uk/index.html"
+
+Groups files use UTF-8 as their character encoding, meaning you can use
+any Unicode character in the various lists. In the Windows 98 and ME builds
+these values are converted into ANSI strings, meaning only a subset of Unicode
+characters may be used. Because of this, any offical group files that are
+bundled with this tool will always use ASCII characters to maintain compatibility
+with every Windows version. If you're making your own group files, and are
+only running this application on Windows 2000 or later, you can use any Unicode
+characters.

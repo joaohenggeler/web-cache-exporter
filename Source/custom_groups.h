@@ -6,9 +6,12 @@
 enum Group_Type
 {
 	GROUP_NONE = 0,
-	GROUP_FILE = 1,
-	GROUP_URL = 2,
-	NUM_GROUP_TYPES = 3
+	GROUP_INVALID = 1,
+
+	GROUP_FILE = 2,
+	GROUP_URL = 3,
+
+	NUM_GROUP_TYPES = 4
 };
 
 // The types of the various lists in a file or URL group.
@@ -16,21 +19,22 @@ enum Group_Type
 enum List_Type
 {
 	LIST_NONE = 0,
+	LIST_INVALID = 1,
 
-	LIST_FILE_SIGNATURES = 1,
-	LIST_MIME_TYPES = 2,
-	LIST_FILE_EXTENSIONS = 3,
+	LIST_FILE_SIGNATURES = 2,
+	LIST_MIME_TYPES = 3,
+	LIST_FILE_EXTENSIONS = 4,
 
-	LIST_DOMAINS = 4,
+	LIST_DOMAINS = 5,
 
-	NUM_LIST_TYPES = 5
+	NUM_LIST_TYPES = 6
 };
 
 // Two arrays that map the previous values to full names.
-const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {TEXT(""), TEXT("File"), TEXT("URL")};
+const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {TEXT(""), TEXT("Invalid"), TEXT("File"), TEXT("URL")};
 const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
 {
-	TEXT(""),
+	TEXT(""), TEXT("Invalid"),
 	TEXT("File Signatures"), TEXT("MIME Types"), TEXT("File Extensions"),
 	TEXT("Domains")
 };

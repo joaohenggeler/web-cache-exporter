@@ -50,10 +50,6 @@
 
 	@TODO:
 
-	- Add support for the Java Plugin. Document and refactor.
-
-	- Handle external locations.
-
 	- Update readme.
 	- Update command line help message (right below).
 */
@@ -505,9 +501,9 @@ static void clean_up(Exporter* exporter)
 	previous errors occur.
 */
 
-static void export_all_default_cache_locations(Exporter* exporter);
 static size_t get_total_external_locations_size(Exporter* exporter, u32* result_num_profiles);
 static void load_external_locations(Exporter* exporter, u32 num_profiles);
+static void export_all_default_or_specific_cache_locations(Exporter* exporter);
 
 int _tmain(int argc, TCHAR* argv[])
 {
@@ -649,7 +645,7 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 	#endif
 
-	if(GetWindowsDirectory(exporter.windows_path, MAX_PATH_CHARS) != (MAX_PATH_CHARS - 1))
+	if(GetWindowsDirectory(exporter.windows_path, MAX_PATH_CHARS) == 0)
 	{
 		log_print(LOG_ERROR, "Startup: Failed to get the Windows directory path with error code %lu.", GetLastError());
 	}
@@ -728,9 +724,9 @@ int _tmain(int argc, TCHAR* argv[])
 
 	log_print_newline();
 
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_INFO, "Exporter Options:");
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.cache_type]);
 	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
@@ -741,23 +737,23 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Number Of Groups To Load: %Iu", exporter.num_group_filenames_to_load);
 	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Should Load External Locations: %hs", (exporter.should_load_external_locations) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- External Locations Path: '%s'", exporter.external_locations_path);
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
 	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
 	
 	log_print_newline();
 
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_INFO, "Current Locations:");
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Executable Path: '%s'", exporter.executable_path);
 	log_print(LOG_NONE, "- Exporter Temporary Path: '%s'", exporter.exporter_temporary_path);
 	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", (exporter.was_temporary_exporter_directory_created) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "----------------------------------------");
+	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Windows Directory Path: '%s'", exporter.windows_path);
 	log_print(LOG_NONE, "- Windows Temporary Path: '%s'", exporter.windows_temporary_path);
 	log_print(LOG_NONE, "- User Profile Path: '%s'", exporter.user_profile_path);
@@ -795,78 +791,7 @@ int _tmain(int argc, TCHAR* argv[])
 			_ASSERT(exporter.is_exporting_from_default_locations);
 			_ASSERT(string_is_empty(exporter.cache_path));
 
-			if(exporter.should_load_external_locations)
-			{
-				External_Locations* external_locations = exporter.external_locations;
-				_ASSERT(external_locations != NULL);
-
-				console_print("Exporting the default cache from %I32u external locations...", external_locations->num_profiles);
-				log_print(LOG_INFO, "Startup: Exporting the default cache from %I32u external locations.", external_locations->num_profiles);
-				log_print_newline();
-
-				for(u32 i = 0; i < external_locations->num_profiles; ++i)
-				{
-					Profile profile = external_locations->profiles[i];
-					exporter.current_profile_name = profile.name;
-					console_print("- [%I32u of %I32u] Exporting from the profile '%s'...", i+1, external_locations->num_profiles, profile.name);
-					
-					log_print(LOG_NONE, "----------------------------------------");
-					log_print(LOG_INFO, "Exporting from the profile '%s' (%I32u).", profile.name, i);
-					log_print(LOG_NONE, "----------------------------------------");
-					log_print_newline();
-
-					if(FAILED(StringCchCopy(exporter.windows_path, MAX_PATH_CHARS, profile.windows_path)))
-					{
-						console_print("The Windows path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					if(FAILED(StringCchCopy(exporter.windows_temporary_path, MAX_PATH_CHARS, profile.windows_temporary_path)))
-					{
-						console_print("The Temporary path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					if(FAILED(StringCchCopy(exporter.user_profile_path, MAX_PATH_CHARS, profile.user_profile_path)))
-					{
-						console_print("The User Profile path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					if(FAILED(StringCchCopy(exporter.appdata_path, MAX_PATH_CHARS, profile.appdata_path)))
-					{
-						console_print("The Appdata path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					if(FAILED(StringCchCopy(exporter.local_appdata_path, MAX_PATH_CHARS, profile.local_appdata_path)))
-					{
-						console_print("The Local Appdata path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					if(FAILED(StringCchCopy(exporter.local_low_appdata_path, MAX_PATH_CHARS, profile.local_low_appdata_path)))
-					{
-						console_print("The Local Low Appdata path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					if(FAILED(StringCchCopy(exporter.wininet_cache_path, MAX_PATH_CHARS, profile.wininet_cache_path)))
-					{
-						console_print("The Internet Cache path is too long. This profile will be skipped.");
-						continue;
-					}
-
-					export_all_default_cache_locations(&exporter);
-
-					log_print_newline();
-				}
-			}
-			else
-			{
-				_ASSERT(exporter.external_locations == NULL);
-				export_all_default_cache_locations(&exporter);
-			}
+			export_all_default_or_specific_cache_locations(&exporter);
 
 		} break;
 
@@ -1189,19 +1114,67 @@ void terminate_cache_exporter(Exporter* exporter)
 	safe_close_handle(&(exporter->csv_file_handle));
 }
 
-static void export_all_default_cache_locations(Exporter* exporter)
-{
-	export_specific_or_default_internet_explorer_cache(exporter);
-	log_print_newline();
+/*
+	The following defines the necessary functions used to load the external locations file. This file contains zero or more profiles
+	which specify the absolute paths of key Windows locations, allowing you to export the cache from files that came from another
+	computer.
 
-	export_specific_or_default_flash_plugin_cache(exporter);
-	log_print_newline();
+	Here's an example of an external locations file which defines three profiles: Windows 98, Windows XP, and Windows 8.1. If a line
+	starts with a ';' character, then it's considered a comment and is not processed. The external locations file must end in a newline.
+	
+	If a location specifies "<None>", then the path is assumed to be empty. This is used when the Windows version of the computer where
+	the files originated didn't have that type of location. This application will create multiple subdirectories in the main output
+	directory with each profile's name. Because of this, any reserved Windows directory name characters may not be used.
 
-	export_specific_or_default_shockwave_plugin_cache(exporter);
-	log_print_newline();
+	; For Windows 98:
+	BEGIN_PROFILE Default User
 
-	export_specific_or_default_java_plugin_cache(exporter);
-}
+		WINDOWS				C:\My Old Drives\Windows 98\WINDOWS
+		TEMPORARY			C:\My Old Drives\Windows 98\WINDOWS\TEMP
+		USER_PROFILE		<None>
+
+		APPDATA				C:\My Old Drives\Windows 98\WINDOWS\Application Data
+		LOCAL_APPDATA		<None>
+		LOCAL_LOW_APPDATA	<None>
+
+		INTERNET_CACHE		C:\My Old Drives\Windows 98\WINDOWS\Temporary Internet Files
+	
+	END
+
+	; For Windows XP:
+	BEGIN_PROFILE <Username>
+
+		WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
+		TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Temp
+		USER_PROFILE		C:\My Old Drives\Windows XP\Documents and Settings\<Username>
+
+		APPDATA				C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Application Data
+		LOCAL_APPDATA		C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Application Data
+		LOCAL_LOW_APPDATA	<None>
+
+		INTERNET_CACHE		C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Temporary Internet Files
+	
+	END
+
+	; For Windows 8.1:
+	BEGIN_PROFILE <Username>
+
+		WINDOWS				C:\My Old Drives\Windows 8.1\Windows
+		TEMPORARY			C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local\Temp
+		USER_PROFILE		C:\My Old Drives\Windows 8.1\Users\<Username>
+
+		APPDATA				C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Roaming
+		LOCAL_APPDATA		C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local
+		LOCAL_LOW_APPDATA	C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\LocalLow
+
+		INTERNET_CACHE		C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local\Microsoft\Windows\INetCache
+	
+	END
+
+	External locations files use UTF-8 as their character encoding, meaning you can use any Unicode character in the various paths.
+	In the Windows 98 and ME builds, you must only use ASCII characters. However, since this feature is meant to export the cache
+	from an older computer's files in a modern machine, this situation is extremely unlikely to come up.
+*/
 
 // Various keywords and delimiters for the external locations file syntax.
 static const char COMMENT = ';';
@@ -1218,6 +1191,13 @@ static const char* LOCATION_LOCAL_APPDATA = "LOCAL_APPDATA";
 static const char* LOCATION_LOCAL_LOW_APPDATA = "LOCAL_LOW_APPDATA";
 static const char* LOCATION_INTERNET_CACHE = "INTERNET_CACHE";
 
+// Retrieves the number of profiles and how many bytes are (roughly) required to store them from the external locations file.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the path to the external locations file.
+// 2. result_num_profiles - The number of profiles found.
+//
+// @Returns: The total size in bytes required to store the profiles found.
 static size_t get_total_external_locations_size(Exporter* exporter, u32* result_num_profiles)
 {
 	HANDLE file_handle = INVALID_HANDLE_VALUE;
@@ -1229,6 +1209,9 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 
 	if(file != NULL)
 	{
+		// Replace the last character (which should be a newline according to the external locations file guidelines)
+		// with a null terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't
+		// the most common way to read a text file line by line, but it works in our case.
 		char* end_of_file = (char*) advance_bytes(file, file_size - 1);
 		*end_of_file = '\0';
 
@@ -1245,17 +1228,25 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 			}
 			else
 			{
-				// @TODO
+				// Keep track of the total group file string data. We're essentially getting a single byte character
+				// string's length plus the null terminator here. At the end, we'll multiply this value by sizeof(TCHAR).
+				// This should guarantee enough memory (in excess) for both types of build (char vs wchar_t).
 				total_locations_size += string_size(line);
 
 				char* name = NULL;
 				char* type = strtok_s(line, TOKEN_DELIMITERS, &name);
-				if(type != NULL && name != NULL)
+				if(type != NULL)
 				{
-					if(strings_are_equal(type, BEGIN_PROFILE))
+					name = skip_leading_whitespace(name);
+
+					if(strings_are_equal(type, BEGIN_PROFILE) && !string_is_empty(name))
 					{
 						++num_profiles;
 					}
+				}
+				else
+				{
+					_ASSERT(false);
 				}
 			}
 
@@ -1276,6 +1267,15 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 			+ total_locations_size * sizeof(TCHAR);
 }
 
+// Loads the external locations file on disk. This function should be called after get_total_external_locations_size() and with a
+// memory arena that is capable of holding the number of bytes it returned.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the path to the external locations file, and the permanent memory arena where
+// the profile data will be stored. After loading this data, this structure's 'external_locations' member will modified.
+// 2. num_profiles - The number of profiles found by an earlier call to get_total_external_locations_size().
+//
+// @Returns: Nothing.
 static void load_external_locations(Exporter* exporter, u32 num_profiles)
 {
 	if(num_profiles == 0)
@@ -1288,6 +1288,7 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 	Arena* permanent_arena = &(exporter->permanent_arena);
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
+	// The number of profiles is always greater than zero here.
 	size_t external_locations_size = sizeof(External_Locations) + sizeof(Profile) * (num_profiles - 1);
 	External_Locations* external_locations = push_arena(permanent_arena, external_locations_size, External_Locations);
 	
@@ -1299,13 +1300,18 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 
 	if(file != NULL)
 	{
+		// Replace the last character (which should be a newline according to the external locations file guidelines)
+		// with a null terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't
+		// the most common way to read a text file line by line, but it works in our case.
 		char* end_of_file = (char*) advance_bytes(file, file_size - 1);
 		*end_of_file = '\0';
 
 		char* remaining_lines = NULL;
 		char* line = strtok_s(file, LINE_DELIMITERS, &remaining_lines);
 
-		bool seen_begin_profile = false;
+		// Keep track of which profile we're loading data to.
+		bool seen_begin_list = false;
+		bool is_invalid = false;
 		Profile* profile_array = external_locations->profiles;
 		Profile* profile = NULL;
 
@@ -1317,38 +1323,55 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 			{
 				// Skip comments and empty lines.
 			}
-			else if(!seen_begin_profile)
+			// Begin a new profile or skip it if the keyword is incorrect.
+			else if(!seen_begin_list)
 			{
+				seen_begin_list = true;
+
 				char* name = NULL;
 				char* type = strtok_s(line, TOKEN_DELIMITERS, &name);
-				if(type != NULL && name != NULL)
+				if(type != NULL)
 				{
-					if(strings_are_equal(line, BEGIN_PROFILE))
+					if(strings_are_equal(type, BEGIN_PROFILE) && !string_is_empty(name))
 					{
-						seen_begin_profile = true;
 						profile = &profile_array[num_processed_profiles];
+						++num_processed_profiles;
 
+						name = skip_leading_whitespace(name);
 						profile->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, name);
 						log_print(LOG_INFO, "Load External Locations: Loading the profile '%s'...", profile->name);
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Load External Locations: Unknown list type '%hs'.", type);
+						is_invalid = true;
+						log_print(LOG_ERROR, "Load External Locations: Skipping invalid profile of type '%hs' and name '%hs'.", type, name);
 					}
-				}
-			}
-			else if(seen_begin_profile)
-			{
-				if(strings_are_equal(line, END_PROFILE))
-				{
-					seen_begin_profile = false;
-					++num_processed_profiles;
 				}
 				else
 				{
+					_ASSERT(false);
+				}
+			}
+			// While processing the current profile.
+			else if(seen_begin_list)
+			{
+				// End the current profile (regardless if it was valid or not).
+				if(strings_are_equal(line, END_PROFILE))
+				{
+					seen_begin_list = false;
+					is_invalid = false;
+				}
+				// Skip invalid path lists (unknown list type or missing a name).
+				else if(is_invalid)
+				{
+					// Do nothing until we reach the END keyword.
+				}
+				// Load the path list in the current profile.
+				else
+				{
 					char* path = NULL;
-					char* location = strtok_s(line, TOKEN_DELIMITERS, &path);
-					if(location != NULL && path != NULL)
+					char* location_type = strtok_s(line, TOKEN_DELIMITERS, &path);
+					if(location_type != NULL)
 					{
 						path = skip_leading_whitespace(path);
 
@@ -1357,38 +1380,42 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 							path = "";
 						}
 
-						if(strings_are_equal(location, LOCATION_WINDOWS))
+						if(strings_are_equal(location_type, LOCATION_WINDOWS))
 						{
 							profile->windows_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
-						else if(strings_are_equal(location, LOCATION_TEMPORARY))
+						else if(strings_are_equal(location_type, LOCATION_TEMPORARY))
 						{
 							profile->windows_temporary_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
-						else if(strings_are_equal(location, LOCATION_USER_PROFILE))
+						else if(strings_are_equal(location_type, LOCATION_USER_PROFILE))
 						{
 							profile->user_profile_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
-						else if(strings_are_equal(location, LOCATION_APPDATA))
+						else if(strings_are_equal(location_type, LOCATION_APPDATA))
 						{
 							profile->appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
-						else if(strings_are_equal(location, LOCATION_LOCAL_APPDATA))
+						else if(strings_are_equal(location_type, LOCATION_LOCAL_APPDATA))
 						{
 							profile->local_appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
-						else if(strings_are_equal(location, LOCATION_LOCAL_LOW_APPDATA))
+						else if(strings_are_equal(location_type, LOCATION_LOCAL_LOW_APPDATA))
 						{
 							profile->local_low_appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
-						else if(strings_are_equal(location, LOCATION_INTERNET_CACHE))
+						else if(strings_are_equal(location_type, LOCATION_INTERNET_CACHE))
 						{
 							profile->wininet_cache_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
 						}
 						else
 						{
-							log_print(LOG_ERROR, "Load External Locations: Unknown location type '%hs'.", location);
+							log_print(LOG_ERROR, "Load External Locations: Unknown location type '%hs'.", location_type);
 						}
+					}
+					else
+					{
+						_ASSERT(false);
 					}
 				}
 			}
@@ -1400,9 +1427,9 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 			line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
 		}
 
-		if(seen_begin_profile)
+		if(seen_begin_list)
 		{
-			log_print(LOG_WARNING, "Load External Locations: Found unterminated profile list.");
+			log_print(LOG_WARNING, "Load External Locations: Found unterminated profile location list.");
 		}
 	}
 	else
@@ -1414,11 +1441,116 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 	safe_close_handle(&file_handle);
 
 	external_locations->num_profiles = num_processed_profiles;
-
 	if(num_processed_profiles != num_profiles)
 	{
 		log_print(LOG_ERROR, "Load External Locations: Loaded %I32u profiles when %I32u were expected.", num_processed_profiles, num_profiles);
 	}
 
 	exporter->external_locations = external_locations;
+}
+
+// A helper function used by export_all_default_or_specific_cache_locations() that exports every supported cache type.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how every cache type should be exported.
+//
+// @Returns: Nothing.
+static void export_all_cache_locations(Exporter* exporter)
+{
+	export_specific_or_default_internet_explorer_cache(exporter);
+	log_print_newline();
+
+	export_specific_or_default_flash_plugin_cache(exporter);
+	log_print_newline();
+
+	export_specific_or_default_shockwave_plugin_cache(exporter);
+	log_print_newline();
+
+	export_specific_or_default_java_plugin_cache(exporter);
+}
+
+// Entry point for a cache exporter that handles every supported cache type. This function exports from a given number of locations if
+// the external locations file was previously loaded. Otherwise, it exports from each cache type's default location.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how every cache type should be exported.
+//
+// @Returns: Nothing.
+static void export_all_default_or_specific_cache_locations(Exporter* exporter)
+{
+	if(exporter->should_load_external_locations)
+	{
+		External_Locations* external_locations = exporter->external_locations;
+		_ASSERT(external_locations != NULL);
+
+		console_print("Exporting the default cache from %I32u default external locations...", external_locations->num_profiles);
+		log_print(LOG_INFO, "All Locations: Exporting the cache from %I32u default external locations.", external_locations->num_profiles);
+		log_print_newline();
+
+		for(u32 i = 0; i < external_locations->num_profiles; ++i)
+		{
+			Profile profile = external_locations->profiles[i];
+			exporter->current_profile_name = profile.name;
+			console_print("- [%I32u of %I32u] Exporting from the profile '%s'...", i+1, external_locations->num_profiles, profile.name);
+			
+			#define STRING_OR_DEFAULT(str) (str != NULL) ? (str) : (TEXT(""))
+
+			log_print(LOG_NONE, "------------------------------------------------------------");
+			log_print(LOG_INFO, "Exporting from the profile '%s' (%I32u).", profile.name, i);
+			log_print(LOG_NONE, "------------------------------------------------------------");
+			log_print(LOG_NONE, "- Windows Directory Path: '%s'", STRING_OR_DEFAULT(profile.windows_path));
+			log_print(LOG_NONE, "- Windows Temporary Path: '%s'", STRING_OR_DEFAULT(profile.windows_temporary_path));
+			log_print(LOG_NONE, "- User Profile Path: '%s'", STRING_OR_DEFAULT(profile.user_profile_path));
+			log_print(LOG_NONE, "- Roaming AppData Path: '%s'", STRING_OR_DEFAULT(profile.appdata_path));
+			log_print(LOG_NONE, "- Local AppData Path: '%s'", STRING_OR_DEFAULT(profile.local_appdata_path));
+			log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", STRING_OR_DEFAULT(profile.local_low_appdata_path));
+			log_print(LOG_NONE, "- WinINet Cache Path: '%s'", STRING_OR_DEFAULT(profile.wininet_cache_path));
+			log_print(LOG_NONE, "------------------------------------------------------------");
+			log_print_newline();
+
+			bool are_all_locations_valid = true;
+			// Helper macro function used to check if all paths don't exceed MAX_PATH_CHARS characters and if all
+			// types were specified. Empty paths are allowed (using an empty string or "<None>"), but every path
+			// type keyword must always appear.
+			#define CHECK_AND_COPY_LOCATION(member_name, location_name)\
+			do\
+			{\
+				if(profile.member_name == NULL)\
+				{\
+					are_all_locations_valid = false;\
+					console_print("This profile will be skipped since the %hs path was not found in the list.", location_name);\
+					log_print(LOG_WARNING, "All Locations: The profile '%s' (%I32u) will be skipped since the %hs path was not found in the list.", profile.name, i, location_name);\
+				}\
+				else if(FAILED(StringCchCopy(exporter->member_name, MAX_PATH_CHARS, profile.member_name)))\
+				{\
+					are_all_locations_valid = false;\
+					console_print("This profile will be skipped since the %hs path is too long.", location_name);\
+					log_print(LOG_WARNING, "All Locations: The profile '%s' (%I32u) will be skipped since the %hs path is too long.", profile.name, i, location_name);\
+				}\
+			} while(false, false)
+
+			CHECK_AND_COPY_LOCATION(windows_path, 			"Windows");
+			CHECK_AND_COPY_LOCATION(windows_temporary_path, "Temporary");
+			CHECK_AND_COPY_LOCATION(user_profile_path, 		"User Profile");
+			CHECK_AND_COPY_LOCATION(appdata_path, 			"Appdata");
+			CHECK_AND_COPY_LOCATION(local_appdata_path, 	"Local Appdata");
+			CHECK_AND_COPY_LOCATION(local_low_appdata_path, "Local Low Appdata");
+			CHECK_AND_COPY_LOCATION(wininet_cache_path, 	"Internet Cache");
+
+			if(!are_all_locations_valid)
+			{
+				log_print_newline();
+				continue;
+			}
+
+			export_all_cache_locations(exporter);
+
+			log_print_newline();
+		}
+	}
+	else
+	{
+		_ASSERT(exporter->external_locations == NULL);
+		export_all_cache_locations(exporter);
+	}
 }

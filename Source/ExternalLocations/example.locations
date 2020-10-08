@@ -1,81 +1,50 @@
-; This is a comment.
+; This external locations file lists some example profiles for exporting the cache
+; from files that came from another computer. This file includes three different
+; Windows versions: Windows 98, Windows XP, and Windows 8.1.
+;
+; Be sure to read the About External Locations help file first.
 
-BEGIN_PROFILE All Users
-
-	; Abc
-	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
-	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Definições locais\Temp
-	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users
-
-	; Def
-	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Application Data
-	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Definições locais\Application Data
-	LOCAL_LOW_APPDATA	<None>
-
-	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\All Users\Definições locais\Temporary Internet Files
-
-END
-
+; For Windows 98:
 BEGIN_PROFILE Default User
 
-	; Abc
-	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
-	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Definições locais\Temp
-	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User
+	WINDOWS				C:\My Old Drives\Windows 98\WINDOWS
+	TEMPORARY			C:\My Old Drives\Windows 98\WINDOWS\TEMP
+	USER_PROFILE		<None>
 
-	; Def
-	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Application Data
-	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Definições locais\Application Data
+	APPDATA				C:\My Old Drives\Windows 98\WINDOWS\Application Data
+	LOCAL_APPDATA		<None>
 	LOCAL_LOW_APPDATA	<None>
 
-	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\Default User\Definições locais\Temporary Internet Files
+	INTERNET_CACHE		C:\My Old Drives\Windows 98\WINDOWS\Temporary Internet Files
 
 END
 
-BEGIN_PROFILE HP
+; For Windows XP:
+BEGIN_PROFILE Username
 
-	; Abc
-	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
-	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Definições locais\Temp
-	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP
+	WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
+	TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Temp
+	USER_PROFILE		C:\My Old Drives\Windows XP\Documents and Settings\Username
 
-	; Def
-	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Application Data
-	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Definições locais\Application Data
+	APPDATA				C:\My Old Drives\Windows XP\Documents and Settings\Username\Application Data
+	LOCAL_APPDATA		C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Application Data
 	LOCAL_LOW_APPDATA	<None>
 
-	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\HP\Definições locais\Temporary Internet Files
+	INTERNET_CACHE		C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Temporary Internet Files
 
 END
 
-BEGIN_PROFILE João
+; For Windows 8.1:
+BEGIN_PROFILE Username
 
-	; Abc
-	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
-	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Definições locais\Temp
-	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João
+	WINDOWS				C:\My Old Drives\Windows 8.1\Windows
+	TEMPORARY			C:\My Old Drives\Windows 8.1\Users\Username\AppData\Local\Temp
+	USER_PROFILE		C:\My Old Drives\Windows 8.1\Users\Username
 
-	; Def
-	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Application Data
-	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Definições locais\Application Data
-	LOCAL_LOW_APPDATA	<None>
+	APPDATA				C:\My Old Drives\Windows 8.1\Users\Username\AppData\Roaming
+	LOCAL_APPDATA		C:\My Old Drives\Windows 8.1\Users\Username\AppData\Local
+	LOCAL_LOW_APPDATA	C:\My Old Drives\Windows 8.1\Users\Username\AppData\LocalLow
 
-	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\João\Definições locais\Temporary Internet Files
-
-END
-
-BEGIN_PROFILE IC
-
-	; Abc
-	WINDOWS				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\WINDOWS
-	TEMPORARY			C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Definições locais\Temp
-	USER_PROFILE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC
-
-	; Def
-	APPDATA				C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Application Data
-	LOCAL_APPDATA		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Definições locais\Application Data
-	LOCAL_LOW_APPDATA	<None>
-
-	INTERNET_CACHE		C:\NonASCIIHaven\Old Hard Drives\HP Pavilion zt3200\Local Disk\Documents and Settings\IC\Definições locais\Temporary Internet Files
+	INTERNET_CACHE		C:\My Old Drives\Windows 8.1\Users\Username\AppData\Local\Microsoft\Windows\INetCache
 
 END

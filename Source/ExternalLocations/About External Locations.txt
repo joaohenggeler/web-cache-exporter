@@ -1,0 +1,89 @@
+External locations files are text files that define zero or more profiles,
+each one specifying a list of absolute paths of key Windows locations. This
+allows you to export the cache from files that came from another computer.
+This includes any Windows version from 98 to 10.
+
+The following section will show you how to define profiles. Lines that start
+with a semicolon ";" are treated as comments and are not processed. External
+locations files must always end in a newline. You can only use spaces and tabs
+as whitespace.
+
+; This defines the beginning of a profile with the name "Username".
+; Each profile ends when it reaches the "END" keyword. 
+BEGIN_PROFILE Username
+
+	; This list represents a possible user profile in a Windows XP machine.
+	; Each different type of location is mapped to an absolute path on the
+	; current computer that's running the Web Cache Exporter.
+	;
+	; All of these locations must be specified. Otherwise, the profile will
+	; be skipped.
+
+	WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
+	TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Temp
+	USER_PROFILE		C:\My Old Drives\Windows XP\Documents and Settings\Username
+
+	APPDATA				C:\My Old Drives\Windows XP\Documents and Settings\Username\Application Data
+	LOCAL_APPDATA		C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Temporary Internet Files
+
+END
+
+To export the cache from every user profile, we'd need to define multiple
+lists and change any necessary paths. For the same Windows version, this
+usually just means changing the username.
+
+Notice how the LOCAL_LOW_APPDATA location uses the "<None>" keyword. This
+tells the application to assume that this path is empty, and is used when
+the Windows version of the computer where the files originated didn't have
+this type of location.
+
+The Web Cache Exporter will create multiple subfolders in the main output
+folder with each profile's name. Because of this, you shouldn't use any
+reserved Windows folder name characters.
+
+External locations files use UTF-8 as their character encoding, meaning you
+can use any Unicode character in the various paths. In the Windows 98 and ME
+builds, you must only use ASCII characters. However, since this feature is
+meant to export the cache from an older computer's files in a modern machine,
+this situation is extremely unlikely to come up.
+
+Below is a reference of where these default locations are found in every
+supported Windows version:
+
+1. WINDOWS
+- 98, ME, XP, Vista, 7, 8.1, 10 		C:\WINDOWS
+- 2000 									C:\WINNT
+
+2. TEMPORARY
+- 98, ME								C:\WINDOWS\TEMP
+- 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Temp
+- Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Local\Temp
+
+3. USER_PROFILE
+- 98, ME 								<None>
+- 2000, XP	 							C:\Documents and Settings\<Username>
+- Vista, 7, 8.1, 10						C:\Users\<Username>
+
+4. APPDATA
+- 98, ME 								C:\WINDOWS\Application Data
+- 2000, XP	 							C:\Documents and Settings\<Username>\Application Data
+- Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Roaming
+
+5. LOCAL_APPDATA
+- 98, ME 								<None>
+- 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Application Data
+- Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Local
+
+6. LOCAL_LOW_APPDATA
+- 98, ME 								<None>
+- 2000, XP	 							<None>
+- Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\LocalLow
+
+7. INTERNET_CACHE
+- 98, ME 								C:\WINDOWS\Temporary Internet Files
+- 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Temporary Internet Files
+- Vista, 7								C:\Users\<Username>\AppData\Local\Microsoft\Windows\Temporary Internet Files
+- 8.1, 10								C:\Users\<Username>\AppData\Local\Microsoft\Windows\INetCache

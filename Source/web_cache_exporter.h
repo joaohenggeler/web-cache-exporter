@@ -203,9 +203,11 @@ struct Exporter
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
-	// @TODO
+	// Whether or not the path to the external locations file was specified in the CACHE_ALL export option,
+	// along with the path itself.
 	bool should_load_external_locations;
 	TCHAR external_locations_path[MAX_PATH_CHARS];
+	// The name of the profile whose cache is current being exported. 
 	TCHAR* current_profile_name;
 
 	// The export command line arguments.
@@ -227,7 +229,7 @@ struct Exporter
 	// The loaded group file data that is stored in the permanent memory arena.
 	Custom_Groups* custom_groups;
 
-	// @TODO
+	// The loaded external locations file data that is stored in the permanent memory arena.
 	External_Locations* external_locations;
 
 	// The paths to relevant exporter locations.

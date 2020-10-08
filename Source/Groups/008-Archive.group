@@ -46,6 +46,7 @@ BEGIN_FILE_GROUP GZIP
 
 	BEGIN_MIME_TYPES
 		application/gzip
+		application/x-gzip
 	END
 
 	BEGIN_FILE_EXTENSIONS

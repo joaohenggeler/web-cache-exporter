@@ -50,6 +50,11 @@
 		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = (void*) 0x50000000;
 		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 0x01000000;
 	#endif
+
+	// In the debug builds, we'll set the arena's memory to specific values so it's easier to keep track of allocations
+	// in the debugger's Memory Window.
+	// These are set to 0xDE in create_arena() and clear_arena(), and to zero in the push_arena() functions.
+	static const u8 DEBUG_ARENA_BYTE_VALUE = 0xDE;
 #endif
 
 // Creates an arena and allocates enough memory to read/write a given number of bytes.
@@ -77,7 +82,7 @@ bool create_arena(Arena* arena, size_t total_size)
 	#ifdef DEBUG
 		if(success)
 		{
-			FillMemory(arena->available_memory, arena->total_size, 0xFF);
+			FillMemory(arena->available_memory, arena->total_size, DEBUG_ARENA_BYTE_VALUE);
 		}
 	#endif
 
@@ -145,8 +150,6 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 		return NULL;
 	}
 
-	// Set the requested bytes to FF so it's easier to keep track of in the debugger's Memory Window.
-	// These are initially set to zero in create_arena().
 	#ifdef DEBUG
 		ZeroMemory(aligned_address, aligned_push_size);
 	#endif
@@ -234,10 +237,8 @@ void clear_arena(Arena* arena)
 	}
 
 	arena->available_memory = retreat_bytes(arena->available_memory, arena->used_size);
-	// Set all the bytes to zero so it's easier to keep track of in the debugger's Memory Window.
-	// These are initially set to zero in create_arena() and to FF in the push_arena() functions.
 	#ifdef DEBUG
-		FillMemory(arena->available_memory, arena->used_size, 0xFF);
+		FillMemory(arena->available_memory, arena->used_size, DEBUG_ARENA_BYTE_VALUE);
 	#endif
 	arena->used_size = 0;
 }
@@ -3094,7 +3095,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 				SYSTEM_INFO system_info = {};
 				GetSystemInfo(&system_info);
 
-				const u32 DESIRED_FILE_BUFFER_SIZE = 32768;
+				const u32 DESIRED_FILE_BUFFER_SIZE = 65536;
 				_STATIC_ASSERT(IS_POWER_OF_TWO(DESIRED_FILE_BUFFER_SIZE));
 
 				u32 file_buffer_size = ALIGN_UP(DESIRED_FILE_BUFFER_SIZE, system_info.dwPageSize);
@@ -3185,7 +3186,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 						_ASSERT(num_bytes_read == 0);
 					}
 
-				} while(!reached_end_of_file && num_read_retry_attempts <= NUM_READ_RETRY_LIMIT);
+				} while(!reached_end_of_file && num_read_retry_attempts < NUM_READ_RETRY_LIMIT);
 
 				clear_arena(arena);
 

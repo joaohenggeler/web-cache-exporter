@@ -4,9 +4,8 @@
 /*
 	This file defines the necessary functions used to load groups files, and match their contents to cache entries. Each group file
 	contains zero or more groups which label cache entries based on their file types and URLs. Only files which have a .group extension
-	are loaded. Group files use UTF-8 as their character encoding but only comments may use any Unicode characters for now. Any remaining
-	text is limited to ASCII characters. The following comparisons are done for each cache entry, for each group, in the following order.
-	All string comparisons are case insensitive.
+	are loaded. The following comparisons are done for each cache entry, for each group, in the following order. All string comparisons
+	are case insensitive.
 
 	For file groups:
 	1. Check if the file's contents begin with any of the group's file signatures.
@@ -33,11 +32,10 @@
 	1c. If a group specifies "example.*", it will match any top or second level domain, like "example.com", "example.net", "example.org",
 	"example.co.uk", etc.
 
-
 	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
 	starts with a ';' character, then it's considered a comment and is not processed. All group files must end in a newline.
 
-	; This is a comment. 
+	; This is a comment.
 	BEGIN_FILE_GROUP Flash
 
 		BEGIN_FILE_SIGNATURES
@@ -53,10 +51,14 @@
 			application/x-shockwave-flash
 			application/vnd.adobe.flash-movie
 			application/futuresplash
+
+			application/x-swz
 		END
 
 		BEGIN_FILE_EXTENSIONS
 			swf spl
+			fla
+			swz
 		END
 
 	END
@@ -71,6 +73,11 @@
 
 	END
 
+	Groups files use UTF-8 as their character encoding, meaning you can use any Unicode character in the various lists. In the
+	Windows 98 and ME builds these values are converted into ANSI strings, meaning only a subset of Unicode characters may be
+	used. Because of this, any offical group files that are bundled with this tool will always use ASCII characters to maintain
+	compatibility with every Windows version. If you're making your own group files, and are only running this application on
+	Windows 2000 or later, you can use any Unicode characters.
 */
 
 static const TCHAR* GROUP_FILES_DIRECTORY_NAME = TEXT("Groups");
@@ -182,23 +189,27 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 			}
 			else
 			{
-				// Keep track of the total group file string data:
-				// Any characters outside of comments are limited to ASCII characters (for now).
-				// We're essentially getting a single byte character string's length plus the null terminator here.
-				// At the end, we'll multiply this by sizeof(TCHAR). For the Windows 2000 to 10 builds, this includes
-				// an extra null terminator (since this size is two).
+				// Keep track of the total group file string data. We're essentially getting a single byte character
+				// string's length plus the null terminator here. At the end, we'll multiply this value by sizeof(TCHAR).
+				// This should guarantee enough memory (in excess) for both types of build (char vs wchar_t).
 				result->total_group_size += string_size(line);
 
 				char* group_name = NULL;
 				char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
-				if(group_type != NULL && group_name != NULL)
+				if(group_type != NULL)
 				{
 					// Keep track of the total amount of groups across multiple files.
-					if(strings_are_equal(group_type, BEGIN_FILE_GROUP)
-					|| strings_are_equal(group_type, BEGIN_URL_GROUP))
+					group_name = skip_leading_whitespace(group_name);
+
+					if( (strings_are_equal(group_type, BEGIN_FILE_GROUP) || strings_are_equal(group_type, BEGIN_URL_GROUP))
+						&& !string_is_empty(group_name) )
 					{
 						++(result->total_num_groups);
 					}
+				}
+				else
+				{
+					_ASSERT(false);
 				}
 			}
 
@@ -212,13 +223,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 	return true;
 }
 
-// Finds each group file on disk and retrieves the number of groups and many bytes are (roughly) required to store them.
+// Finds each group file on disk and retrieves the number of groups and how many bytes are (roughly) required to store them.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the path to the executable, which is used to resolve the group files directory.
 // 2. result_num_groups - The number of groups found.
 //
-// @Returns: The total size in bytes to store the groups found.
+// @Returns: The total size in bytes required to store the groups found.
 size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 {
 	TCHAR group_files_directory_path[MAX_PATH_CHARS] = TEXT("");
@@ -376,6 +387,11 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 		{
 			switch(current_list_type)
 			{
+				case(LIST_INVALID):
+				{
+					// Do nothing.
+				} break;
+
 				// Aggregate the group's file signatures.
 				case(LIST_FILE_SIGNATURES):
 				{
@@ -540,7 +556,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 				{
 					char* group_name = NULL;
 					char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
-					if(group_type != NULL && group_name != NULL)
+					if(group_type != NULL)
 					{
 						// Find the group's type.
 						if(strings_are_equal(group_type, BEGIN_FILE_GROUP))
@@ -552,12 +568,10 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						{
 							current_group_type = GROUP_URL;
 						}
-						else
-						{
-							log_print(LOG_ERROR, "Load Group File: Unknown group type '%hs'.", group_type);
-						}
 
-						if(current_group_type != GROUP_NONE)
+						group_name = skip_leading_whitespace(group_name);
+
+						if(current_group_type != GROUP_NONE && !string_is_empty(group_name))
 						{
 							// Get this group's index in the global custom groups array.
 							// This will allow us to use this group's preallocated Group structure.
@@ -565,25 +579,31 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							++(*num_processed_groups);
 							group = &group_array[group_idx];
 
+							// @Assert: Make sure we handle each group type.
+							_ASSERT( (current_group_type == GROUP_FILE) || (current_group_type == GROUP_URL) );
+
 							group->type = current_group_type;
 							group->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
-
-							// Clear the data for each group type.
-							if(current_group_type == GROUP_FILE)
-							{
-								ZeroMemory(&(group->file_info), sizeof(group->file_info));
-							}
-							else if(current_group_type == GROUP_URL)
-							{
-								ZeroMemory(&(group->url_info), sizeof(group->url_info));
-							}
-							else
-							{
-								// @Assert: Make sure we handle each group type.
-								_ASSERT(false);
-							}
+						}
+						else
+						{
+							// Set it to a type different than GROUP_NONE so we can handle it properly when we reach the END keyword.
+							// Nothing else will be done for this invalid group.
+							current_group_type = GROUP_INVALID;
+							log_print(LOG_ERROR, "Load Group Files: Skipping invalid group of type '%hs' and name '%hs'.", group_type, group_name);
 						}
 					}
+					else
+					{
+						_ASSERT(false);
+					}
+				} break;
+
+				case(GROUP_INVALID):
+				{
+					// Set it to a type different than LIST_NONE so we can handle it properly when we reach the END keyword.
+					// No lists will be loaded for this invalid group.
+					current_list_type = LIST_INVALID;
 				} break;
 
 				// Add the lists from a file group.
@@ -675,13 +695,11 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 
 	if(current_list_type != LIST_NONE)
 	{
-		console_print("Load Group File: Found unterminated list of type '%s' in the group file '%s'.", LIST_TYPE_TO_STRING[current_list_type], group_filename);
 		log_print(LOG_WARNING, "Load Group File: Found unterminated list of type '%s' in the group file '%s'.", LIST_TYPE_TO_STRING[current_list_type], group_filename);
 	}
 
 	if(current_group_type != GROUP_NONE)
 	{
-		console_print("Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 		log_print(LOG_WARNING, "Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 	}
 

@@ -139,7 +139,7 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 		Find_Shockwave_Files_Params params = {};
 		params.exporter = exporter;
 
-		params.location_identifier = TEXT("Cache");
+		params.location_identifier = TEXT("<Cache>");
 		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
 
 		params.is_xtra = false;
@@ -188,9 +188,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 
 	TCHAR* director_file_type = (params->is_xtra) ? (TEXT("Xtra")) : (get_director_file_type_from_file_signature(full_file_path));
 
-	TCHAR* directory_name = PathFindFileName(directory_path);
-	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(short_file_path, params->location_identifier, directory_name);
+	TCHAR* short_file_path = params->location_identifier;
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{

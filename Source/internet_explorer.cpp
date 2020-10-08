@@ -1521,7 +1521,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			// ...or forcibily copy it if it's being used by another process.
 			// In practice, this will be used for the" WebCache<base>.dat" and "<base>.log" files, where <base> is
 			// the ESE prefix passed to the exporter function (e.g. "V01").
-			if(GetLastError() == ERROR_SHARING_VIOLATION)
+			DWORD error_code = GetLastError();
+			if(error_code == ERROR_SHARING_VIOLATION)
 			{
 				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", find_data->cFileName);
 
@@ -1536,7 +1537,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", find_data->cFileName, GetLastError());
+				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", find_data->cFileName, error_code);
 			}
 		}
 

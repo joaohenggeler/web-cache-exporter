@@ -180,6 +180,7 @@ BEGIN_FILE_GROUP Configuration
 
 	BEGIN_FILE_EXTENSIONS
 		ini
+		inf
 	END
 
 END

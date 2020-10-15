@@ -558,6 +558,9 @@ size_t string_size(const wchar_t* str)
 
 // Gets the length of a string in characters, excluding the null terminator.
 //
+// This is used to determine the number of elements in a TCHAR (char or wchar_t) array, and might not necessarily represent the
+// number of characters in a UTF-16 string.
+//
 // @Parameters:
 // 1. str - The string.
 //
@@ -1260,6 +1263,51 @@ TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period, bool op
 	return file_extension;
 }
 
+// Finds the beginning of a substring in a path that contains a given number of components, where each one is delimited by a backslash.
+// This search is done by starting at the end of the path and going backwards.
+//
+// This function is used to get a shortened version of the full path of a cached file, where only the file's name and one or two
+// directories are relevant. If you just want to find the filename in a path (the number of components is one), use PathFindFileName()
+// instead.
+//
+// An example where the path is "C:\DirectoryA\DirectoryB\File.ext", and the number of components is:
+// 1 -> File.ext
+// 2 -> DirectoryB\File.ext
+// 3 -> DirectoryA\DirectoryB\File.ext
+// 4 -> C:\DirectoryA\DirectoryB\File.ext
+// 5 -> C:\DirectoryA\DirectoryB\File.ext
+//
+// @Parameters:
+// 1. path - The path to be searched for components.
+// 2. desired_num_components - The number of components to find. This value must be greater than zero.
+//
+// @Returns: The beginning of the substring in the path that contains the components. If the path is NULL, this function returns NULL.
+TCHAR* find_last_path_components(TCHAR* path, u32 desired_num_components)
+{
+	_ASSERT(desired_num_components > 0);
+
+	if(path == NULL) return NULL;
+
+	size_t num_chars = string_length(path);
+	u32 current_num_components = 0;
+	TCHAR* components_begin = path;
+	
+	for(size_t i = num_chars; i-- > 0;)
+	{
+		if(path[i] == TEXT('\\'))
+		{
+			++current_num_components;
+			if(current_num_components == desired_num_components)
+			{
+				components_begin = path + i + 1;
+				break;
+			}
+		}
+	}
+
+	return components_begin;
+}
+
 // Retrieves the absolute version of a specified path. The path may be relative or absolute. This function has two overloads: 
 // - get_full_path_name(2 or 3), which copies the output to another buffer.
 // - get_full_path_name(1), which copies the output to the same buffer.
@@ -1885,6 +1933,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_temporary_directories_callback)
 {
 	TCHAR full_directory_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_directory_path, directory_path, find_data->cFileName);
+	log_print(LOG_INFO, "Find Temporary Directories Callback: Deleting the temporary directory in '%s'.", full_directory_path);
 	delete_directory_and_contents(full_directory_path);
 	return true;
 }
@@ -3043,7 +3092,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 	// trying to read a file that is being used by another process.
 	//
 	// You should use the CopyFile() function from the Windows API first, and only use this one if CopyFile() fails with the error
-	// code ERROR_SHARING_VIOLATION.
+	// code ERROR_SHARING_VIOLATION. This function should be used very sparingly.
 	//
 	// Note that this function will clear the supplied memory arena before returning.
 	//
@@ -3055,7 +3104,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 	// 
 	// @Returns: True if the file was copied sucessfully. Otherwise, false. The copy operation is considered successfully if all
 	// of the following conditions are true:
-	// 1. The file specified in copy_source_path exists and is currently open in another process.
+	// 1. The file specified in copy_source_path exists and is currently open by another process.
 	// 2. The number of bytes written to disk matches the number of bytes read using the duplicated file handle.
 	// 3. The number of bytes written to disk matches the source file's real size.
 	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
@@ -3108,8 +3157,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 				OVERLAPPED overlapped = {};
 				
 				bool reached_end_of_file = false;
-				const u32 NUM_READ_RETRY_LIMIT = 10;
 				u32 num_read_retry_attempts = 0;
+				const u32 MAX_READ_RETRY_ATTEMPTS = 10;
 
 				do
 				{
@@ -3137,13 +3186,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 								else if(overlapped_result_error_code == WAIT_TIMEOUT)
 								{
 									++num_read_retry_attempts;
-									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u).", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written, num_read_retry_attempts);
+									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
 									continue;
 								}
 								else
 								{
 									++num_read_retry_attempts;
-									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u).", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts);
+									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
 									continue;
 								}
 							}
@@ -3156,7 +3205,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 						else
 						{
 							++num_read_retry_attempts;
-							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u).", copy_source_path, read_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts);
+							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", copy_source_path, read_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
 							continue;
 						}
 					}
@@ -3186,7 +3235,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 						_ASSERT(num_bytes_read == 0);
 					}
 
-				} while(!reached_end_of_file && num_read_retry_attempts < NUM_READ_RETRY_LIMIT);
+				} while(!reached_end_of_file && num_read_retry_attempts < MAX_READ_RETRY_ATTEMPTS);
 
 				clear_arena(arena);
 
@@ -3194,7 +3243,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values
 				{
 					if(reached_end_of_file)
 					{
-						log_print(LOG_INFO, "Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
+						log_print(LOG_WARNING, "Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
 					}
 					else
 					{

@@ -163,19 +163,12 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 {
 	TCHAR* filename = find_data->cFileName;
 
-	TCHAR* directory_name = PathFindFileName(directory_path);
-	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(previous_directory_path, directory_path, TEXT(".."));
-	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
-
-	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(short_file_path, previous_directory_name, directory_name);
-	PathAppend(short_file_path, filename);
-
-	TCHAR* cache_version = TEXT("AppletStore");
-
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, filename);
+
+	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
+
+	TCHAR* cache_version = TEXT("AppletStore");
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
@@ -385,11 +378,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
 
 	Location_Type location_type = LOCATION_ALL;
-	if(string_starts_with(directory_name, TEXT("file"), true) || string_starts_with(previous_directory_name, TEXT("file"), true))
+	if(strings_are_equal(directory_name, TEXT("file"), true) || strings_are_equal(previous_directory_name, TEXT("file"), true))
 	{
 		location_type = LOCATION_FILES;
 	}
-	else if(string_starts_with(directory_name, TEXT("jar"), true) || string_starts_with(previous_directory_name, TEXT("jar"), true))
+	else if(strings_are_equal(directory_name, TEXT("jar"), true) || strings_are_equal(previous_directory_name, TEXT("jar"), true))
 	{
 		location_type = LOCATION_ARCHIVES;
 	}
@@ -411,7 +404,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		filename = PathFindFileName(url_parts.path);
 	}
 	
-	// Note that the time information is stored in milliseconds while time_t is measured in seconds.
+	// @Format: The time information is stored in milliseconds while time_t is measured in seconds.
 	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	format_time64_t_date_time(index.last_modified_time / 1000, last_modified_time);
 
@@ -505,9 +498,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		}
 	}
 
-	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(short_file_path, previous_directory_name, directory_name);
-	PathAppend(short_file_path, cached_filename);
+	TCHAR cached_file_path[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(cached_file_path, directory_path, cached_filename);
+	TCHAR* short_file_path = find_last_path_components(cached_file_path, 3);
 	
 	TCHAR* cache_version = NULL;
 	TCHAR cache_version_buffer[MAX_INT32_CHARS] = TEXT("");

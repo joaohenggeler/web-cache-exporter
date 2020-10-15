@@ -246,6 +246,9 @@ BEGIN_FILE_GROUP Shockwave
 		; "XFIR____CDGF" (Shockwave Cast - Little Endian)
 		58 46 49 52 __ __ __ __ 43 44 47 46
 
+		; "RIFF____PCK2" (Xtra-Package)
+		52 49 46 46 __ __ __ __ 50 43 4B 32
+
 	END
 
 	BEGIN_MIME_TYPES

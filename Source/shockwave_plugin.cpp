@@ -54,19 +54,25 @@ struct Partial_Director_Rifx_Chunk
 // Possible values for the 'id' member of this structure.
 static const u32 RIFX_BIG_ENDIAN = 0x52494658; // "RIFX"
 static const u32 RIFX_LITTLE_ENDIAN = 0x58464952; // "XFIR"
+static const u32 RIFF_BIG_ENDIAN = 0x52494646; // "RIFF"
 
 // Possible values for the 'codec' member of this structure.
 enum Director_Codec
 {
 	// DIR, CST, DXR, or CXT files.
-	DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN = 0x4D563933, // "MV93"
-	DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN = 0x3339564D, // "39VM"
+	CODEC_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN = 0x4D563933, // "MV93"
+	CODEC_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN = 0x3339564D, // "39VM"
+	
 	// DCR files.
-	SHOCKWAVE_MOVIE_BIG_ENDIAN = 0x4647444D, // "FGDM"
-	SHOCKWAVE_MOVIE_LITTLE_ENDIAN = 0x4D444746, // "MDGF"
+	CODEC_SHOCKWAVE_MOVIE_BIG_ENDIAN = 0x4647444D, // "FGDM"
+	CODEC_SHOCKWAVE_MOVIE_LITTLE_ENDIAN = 0x4D444746, // "MDGF"
+	
 	// CCT files.
-	SHOCKWAVE_CAST_BIG_ENDIAN = 0x46474443, // "FGDC"
-	SHOCKWAVE_CAST_LITTLE_ENDIAN = 0x43444746 // "CDGF"
+	CODEC_SHOCKWAVE_CAST_BIG_ENDIAN = 0x46474443, // "FGDC"
+	CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN = 0x43444746, // "CDGF"
+	
+	// W32 files.
+	CODEC_XTRA_PACKAGE = 0x50434B32 // "PCK2"
 };
 
 // Retrieves the type of a Director file from its first bytes.
@@ -83,25 +89,29 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 	{
 		if(chunk.id == RIFX_BIG_ENDIAN || chunk.id == RIFX_LITTLE_ENDIAN)
 		{
+			// This works because we check both big and little endian format signatures.
+			// @ByteOrder: Big or Little Endian.
 			switch(chunk.codec)
 			{
-				case(DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN):
-				case(DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN):
-				{
-					return TEXT("DIR / CST / DXR / CXT");
-				} break;
+				case(CODEC_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN):
+				case(CODEC_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN):	return TEXT("DIR / CST / DXR / CXT");
 
-				case(SHOCKWAVE_MOVIE_BIG_ENDIAN):
-				case(SHOCKWAVE_MOVIE_LITTLE_ENDIAN):
-				{
-					return TEXT("DCR");
-				} break;
+				case(CODEC_SHOCKWAVE_MOVIE_BIG_ENDIAN):
+				case(CODEC_SHOCKWAVE_MOVIE_LITTLE_ENDIAN):			return TEXT("DCR");
 
-				case(SHOCKWAVE_CAST_BIG_ENDIAN):
-				case(SHOCKWAVE_CAST_LITTLE_ENDIAN):
-				{
-					return TEXT("CCT");
-				} break;
+				case(CODEC_SHOCKWAVE_CAST_BIG_ENDIAN):
+				case(CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN):			return TEXT("CCT");
+			}
+		}
+		else
+		{
+			// @ByteOrder: Big Endian.
+			chunk.id = swap_byte_order(chunk.id);
+			chunk.codec = swap_byte_order(chunk.codec);
+
+			if(chunk.id == RIFF_BIG_ENDIAN && chunk.codec == CODEC_XTRA_PACKAGE)
+			{
+				return TEXT("W32");
 			}
 		}
 	}
@@ -139,7 +149,7 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 		Find_Shockwave_Files_Params params = {};
 		params.exporter = exporter;
 
-		params.location_identifier = TEXT("<Cache>");
+		params.location_identifier = TEXT("<Temporary>");
 		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
 
 		params.is_xtra = false;
@@ -164,7 +174,7 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 			} while(false, false)
 
 			TRAVERSE_APPDATA_XTRA_FILES(exporter->appdata_path, TEXT("<AppData>"));
-			TRAVERSE_APPDATA_XTRA_FILES(exporter->local_low_appdata_path, TEXT("<AppData LocalLow>"));
+			TRAVERSE_APPDATA_XTRA_FILES(exporter->local_low_appdata_path, TEXT("<Local Low AppData>"));
 		}
 
 		log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");	
@@ -188,7 +198,17 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 
 	TCHAR* director_file_type = (params->is_xtra) ? (TEXT("Xtra")) : (get_director_file_type_from_file_signature(full_file_path));
 
-	TCHAR* short_file_path = params->location_identifier;
+	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+
+	if(params->is_xtra)
+	{
+		PathCombine(short_file_path, params->location_identifier, TEXT("[...]"));
+		PathAppend(short_file_path, find_last_path_components(full_file_path, 3));
+	}
+	else
+	{
+		StringCchCopy(short_file_path, MAX_PATH_CHARS, params->location_identifier);
+	}
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{

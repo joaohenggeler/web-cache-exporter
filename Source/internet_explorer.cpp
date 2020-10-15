@@ -23,7 +23,8 @@
 /*
 	This file defines how the exporter processes Internet Explorer (IE)'s cache. Although we use the term "Internet Explorer",
 	this actually represents the WinINet (Windows Internet)'s cache database, which will contain more files than the ones cached
-	by the IE browser. This database also holds the cache for other web browsers (like Microsoft Edge) and web plugins (like 3DVIA).
+	by the IE browser. This database also holds the cache for other web browsers (like Microsoft Edge, before being Chromium based)
+	and web plugins (like the 3DVIA Player).
 
 	This cache container is the most important one when it comes to recovering lost web media (games, animations, 3D virtual worlds,
 	etc) for a few reasons:
@@ -607,12 +608,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	if(strings_are_equal(filename, TEXT("index.dat"), true)) return true;
 
 	// Despite not using the index.dat file, we can find out where we're located on the cache.
-	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
-	TCHAR* directory_name = PathFindFileName(directory_path);
-	PathCombine(short_file_path, directory_name, filename);
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, filename);
+
+	TCHAR* short_file_path = find_last_path_components(full_file_path, 2);
 
 	Csv_Entry csv_row[RAW_CSV_NUM_COLUMNS] =
 	{
@@ -652,24 +652,28 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 		else if(error_code == ERROR_SHARING_VIOLATION)
 		{
-			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a copy and opening that one...");
+			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a temporary copy.");
 		
 			TCHAR temporary_index_path[MAX_PATH_CHARS] = TEXT("");
 			if(copy_to_temporary_file(exporter->index_path, exporter->exporter_temporary_path, temporary_index_path, &index_handle))
 			{
-				log_print(LOG_INFO, "Internet Explorer 4 to 9: Copied the index file to '%s'.", temporary_index_path);
+				log_print(LOG_INFO, "Internet Explorer 4 to 9: Copied the index file to the temporary file in '%s'.", temporary_index_path);
 				index_file = memory_map_entire_file(index_handle, &index_file_size);
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to create a copy of the index file.");
+				log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to create a temporary copy of the index file.");
 			}
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to open the index file with the error code %lu.", error_code);
 		}
 	}
 
 	if(index_file == NULL)
 	{
-		log_print(LOG_ERROR, "Internet Explorer 4 to 9: Failed to open the index file correctly. No files will be exported from this cache.");
+		log_print(LOG_ERROR, "Internet Explorer 4 to 9: The index file could not be opened correctly. No files will be exported from this cache.");
 		safe_close_handle(&index_handle);
 		return;
 	}
@@ -719,7 +723,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	if( (major_version == '4' && minor_version == '7') || (major_version == '5' && minor_version == '2') )
 	{
-		log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %s) was opened successfully. Starting the export process.", cache_version);
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: The index file (version %s) was opened successfully.", cache_version);
 	}
 	else
 	{
@@ -728,11 +732,23 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		safe_close_handle(&index_handle);
 		return;
 	}
-	
+
 	// Go through each bit to check if a particular block was allocated. If so, we'll skip to that block and handle
 	// that specific entry type. If not, we'll ignore it and move to the next one.
 	unsigned char* allocation_bitmap = (unsigned char*) advance_bytes(header, sizeof(Ie_Index_Header));
 	void* blocks = advance_bytes(allocation_bitmap, ALLOCATION_BITMAP_SIZE);
+
+	u32 num_url_entries = 0;
+	u32 num_leak_entries = 0;
+
+	u32 num_redirect_entries = 0;
+	u32 num_hash_entries = 0;
+	u32 num_updated_entries = 0;
+	u32 num_deleted_entries = 0;
+	u32 num_newly_allocated_entries = 0;
+
+	u32 num_deallocated_entries = 0;
+	u32 num_unknown_entries = 0;
 
 	for(u32 i = 0; i < header->num_blocks; ++i)
 	{
@@ -987,23 +1003,60 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 
-				} // Intentional fallthrough.
+					if(entry->signature == ENTRY_URL)
+					{
+						++num_url_entries;
+					}
+					else if(entry->signature == ENTRY_LEAK)
+					{
+						++num_leak_entries;
+					}
+					else
+					{
+						_ASSERT(false);
+					}
 
-				// We won't handle these specific entry types, so we'll always skip them.
-				case(ENTRY_REDIRECT):
-				case(ENTRY_HASH):
-				case(ENTRY_DELETED):
-				case(ENTRY_UPDATED):
-				case(ENTRY_NEWLY_ALLOCATED):
-				{
 					// Skip to the last allocated block so we move to a new entry on the next iteration.
 					i += entry->num_allocated_blocks - 1;
 				} break;
 
-				// The ENTRY_DEALLOCATED type shouldn't be handled above since its 'num_allocated_blocks' member will
-				// contain a garbage value.
+				// We won't handle these specific entry types, so we'll always skip them.
+
+				case(ENTRY_REDIRECT):
+				{
+					++num_redirect_entries;
+					i += entry->num_allocated_blocks - 1;;
+				} break;
+
+				case(ENTRY_HASH):
+				{
+					++num_hash_entries;
+					i += entry->num_allocated_blocks - 1;;
+				} break;
+
+				case(ENTRY_UPDATED):
+				{
+					++num_updated_entries;
+					i += entry->num_allocated_blocks - 1;;
+				} break;
+
+				case(ENTRY_DELETED):
+				{
+					++num_deleted_entries;
+					i += entry->num_allocated_blocks - 1;;
+				} break;
+
+				case(ENTRY_NEWLY_ALLOCATED):
+				{
+					++num_newly_allocated_entries;
+					i += entry->num_allocated_blocks - 1;;
+				} break;
+
+				// The ENTRY_DEALLOCATED type shouldn't be handled like the above since its 'num_allocated_blocks' member
+				// will contain a garbage value.
 				case(ENTRY_DEALLOCATED):
 				{
+					++num_deallocated_entries;
 					// Do nothing and move to the next block on the next iteration.
 				} break;
 
@@ -1016,12 +1069,16 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					CopyMemory(signature_string, &(entry->signature), NUM_ENTRY_SIGNATURE_CHARS);
 					signature_string[NUM_ENTRY_SIGNATURE_CHARS] = '\0';
 					log_print(LOG_WARNING, "Internet Explorer 4 to 9: Found unknown entry signature at (%Iu, %Iu): 0x%08X ('%hs') with %I32u block(s) allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);
+				
+					++num_unknown_entries;
+					// Move to the next block on the next iteration.
 				} break;
-
 			}
-
 		}
 	}
+
+	log_print(LOG_INFO, "Internet Explorer 4 to 9: Found the following entries: URL = %I32u, Leak = %I32u, Redirect = %I32u, Hash = %I32u, Updated = %I32u, Deleted = %I32u, Newly Allocated = %I32u, Deallocated = %I32u, Unknown = %I32u.",
+						num_url_entries, num_leak_entries, num_redirect_entries, num_hash_entries, num_updated_entries, num_deleted_entries, num_newly_allocated_entries, num_deallocated_entries, num_unknown_entries);
 
 	safe_unmap_view_of_file((void**) &index_file);
 	safe_close_handle(&index_handle);
@@ -1524,7 +1581,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			DWORD error_code = GetLastError();
 			if(error_code == ERROR_SHARING_VIOLATION)
 			{
-				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", find_data->cFileName);
+				log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", find_data->cFileName);
 
 				if(windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
 				{
@@ -1631,7 +1688,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		wchar_t cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
 		if(error_code == JET_errSuccess)
 		{
-			StringCchPrintfW(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("ESE-v%Xu%X"), database_info.ulVersion, database_info.ulUpdate);
+			StringCchPrintfW(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("ESE-v%X-u%X"), database_info.ulVersion, database_info.ulUpdate);
 			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's version is '%ls' and the state is '%ls'.", cache_version, windows_nt_get_database_state_string(database_info.dbstate));
 		}
 

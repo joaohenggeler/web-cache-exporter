@@ -37,6 +37,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_LOCATION_ON_CACHE,
 	CSV_CUSTOM_FILE_GROUP
 };
 
@@ -81,10 +82,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_files_callback)
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, filename);
 
+	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
+
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
+		{short_file_path},
 		{/* Custom File Group */}
 	};
 

@@ -177,6 +177,7 @@ const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 
 TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
+TCHAR* find_last_path_components(TCHAR* path, u32 desired_num_components);
 bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_result_path_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);

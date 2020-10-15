@@ -485,17 +485,18 @@ static void clean_up(Exporter* exporter)
 	
 	>>>> 1. Create the log file.
 	>>>> 2. Find the current Windows version, Internet Explorer version, and ANSI code page.
-	>>>> 3. Check if any command line options were passed. If not, terminate.
-	>>>> 4. Create the temporary memory arena based on the current Windows version. On error, terminate.
+	>>>> 3. Create the temporary memory arena based on the current Windows version. On error, terminate.
+	>>>> 4. Check if any command line options were passed. If not, terminate.
 	>>>> 5. Parse the command line options. If an option is incorrect, terminate.
 	>>>> 6. Find the current executable's directory path.
-	>>>> 7. Find the number of groups defined in the group files located on the executable's directory path,
-	and how much memory is roughly required.
-	>>>> 8. Create the permanent memory arena based on the number of group files. On error, terminate.
+	>>>> 7. Find how much memory is roughly required to store the information in the group and external
+	locations files.
+	>>>> 8. Create the permanent memory arena based on this previous information. On error, terminate.
 	>>>> 9. Dynamically load any necessary functions.
-	>>>> 10. Find the paths to relevant locations like the Temporary Files and Application Data directories.
-	>>>> 11. Delete any previous temporary exporter directories in this last location.
-	>>>> 12. Delete the previous output directory if requested in the command line options.
+	>>>> 10. Find the paths to relevant locations like the Application Data and Temporary Files directories.
+	>>>> 11. Delete any previous temporary exporter directories in this last location, then create a new
+	one for the current execution.
+	>>>> 12. Delete the previous output directory if requested by the command line options.
 	>>>> 13. Start exporting the cache based on the command line options.
 	>>>> 14. Perform any clean up operations after finishing exporting. These are also done when any of the
 	previous errors occur.
@@ -860,11 +861,47 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
 	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
 
-	if(exporter->should_create_csv && create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle)))
+	if(exporter->should_create_csv)
 	{
-		++(exporter->num_csv_files_created);
-		csv_print_header(temporary_arena, exporter->csv_file_handle, column_types, num_columns);
-		clear_arena(temporary_arena);
+		bool create_csv_success = false;
+		u32 num_retry_attempts = 0;
+		const u32 MAX_RETRY_ATTEMPTS = 10;
+
+		do
+		{
+			create_csv_success = create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle));
+
+			if(create_csv_success)
+			{
+				++(exporter->num_csv_files_created);
+				csv_print_header(temporary_arena, exporter->csv_file_handle, column_types, num_columns);
+				clear_arena(temporary_arena);
+			}
+			else
+			{
+				const DWORD SLEEP_TIME_IN_SECONDS = 3;
+				const DWORD SLEEP_TIME_IN_MILLISECONDS = SLEEP_TIME_IN_SECONDS * 1000;
+
+				++num_retry_attempts;
+				log_print(LOG_ERROR, "Initialize Cache Exporter: Failed to create the CSV file '%s' with the error code %lu. Waiting %lu seconds and retrying this operation (attempt %I32u of %I32u).", exporter->output_csv_path, GetLastError(), SLEEP_TIME_IN_SECONDS, num_retry_attempts, MAX_RETRY_ATTEMPTS);
+
+				Sleep(SLEEP_TIME_IN_MILLISECONDS);
+			}
+
+		} while(!create_csv_success && num_retry_attempts < MAX_RETRY_ATTEMPTS);
+
+		if(num_retry_attempts > 0)
+		{
+			if(create_csv_success)
+			{
+				log_print(LOG_WARNING, "Initialize Cache Exporter: Reached %I32u retry attempts before creating the CSV file '%s'.", num_retry_attempts, exporter->output_csv_path);
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Initialize Cache Exporter: Failed to create the CSV file '%s' after %I32u retry attempts.", exporter->output_csv_path, num_retry_attempts);
+			}
+		}
+
 	}
 
 	exporter->num_csv_columns = num_columns;
@@ -1532,9 +1569,9 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 			CHECK_AND_COPY_LOCATION(windows_path, 			"Windows");
 			CHECK_AND_COPY_LOCATION(windows_temporary_path, "Temporary");
 			CHECK_AND_COPY_LOCATION(user_profile_path, 		"User Profile");
-			CHECK_AND_COPY_LOCATION(appdata_path, 			"Appdata");
-			CHECK_AND_COPY_LOCATION(local_appdata_path, 	"Local Appdata");
-			CHECK_AND_COPY_LOCATION(local_low_appdata_path, "Local Low Appdata");
+			CHECK_AND_COPY_LOCATION(appdata_path, 			"AppData");
+			CHECK_AND_COPY_LOCATION(local_appdata_path, 	"Local AppData");
+			CHECK_AND_COPY_LOCATION(local_low_appdata_path, "Local Low AppData");
 			CHECK_AND_COPY_LOCATION(wininet_cache_path, 	"Internet Cache");
 
 			if(!are_all_locations_valid)

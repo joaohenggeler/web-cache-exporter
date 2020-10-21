@@ -508,15 +508,17 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
 	console_print("Exporting Internet Explorer's cache...");
 	
-	if(exporter->is_exporting_from_default_locations)
-	{
-		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
-	}
-	log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 	bool ie_4_to_9_cache_exists = false;
 
 	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
+		if(exporter->is_exporting_from_default_locations)
+		{
+			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
+		}
+
+		log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
+
 		TCHAR* index_file_path = NULL;
 
 		index_file_path = TEXT("index.dat");
@@ -546,6 +548,7 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 			{
 				PathCombineW(exporter->cache_path, exporter->local_appdata_path, L"Microsoft\\Windows\\WebCache");
 			}
+
 			log_print_newline();
 			log_print(LOG_INFO, "Internet Explorer 10 to 11: Exporting the cache from '%s'.", exporter->cache_path);
 
@@ -558,21 +561,21 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 			windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
 			
 		#endif
-
 	}
 	terminate_cache_exporter(exporter);
 
 	if(ie_4_to_9_cache_exists)
 	{
-		if(exporter->is_exporting_from_default_locations)
-		{
-			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
-		}
-		log_print_newline();
-		log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
-
 		initialize_cache_exporter(exporter, RAW_OUTPUT_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
 		{
+			if(exporter->is_exporting_from_default_locations)
+			{
+				StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
+			}
+
+			log_print_newline();
+			log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
+
 			export_raw_internet_explorer_4_to_9_cache(exporter);		
 		}
 		terminate_cache_exporter(exporter);		
@@ -1532,7 +1535,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// @Parameters:
 	// 1. state - The value of the 'dbstate' member in the JET_DBINFOMISC database information structure.
 	//
-	// @Returns: The database state as a string.
+	// @Returns: The database state as a constant string.
 	static wchar_t* windows_nt_get_database_state_string(unsigned long state)
 	{
 		switch(state)

@@ -43,7 +43,7 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // stored on disk without a file extension, we'll make it easier to tell what kind of file was found in the generated CSV file.
 // This exists purely for convenience and does not represent any type of database that contains metadata about each cached file.
 #pragma pack(push, 1)
-struct Partial_Director_Rifx_Chunk
+struct Partial_Director_Chunk
 {
 	u32 id;
 	u32 size;
@@ -52,9 +52,15 @@ struct Partial_Director_Rifx_Chunk
 #pragma pack(pop)
 
 // Possible values for the 'id' member of this structure.
-static const u32 RIFX_BIG_ENDIAN = 0x52494658; // "RIFX"
-static const u32 RIFX_LITTLE_ENDIAN = 0x58464952; // "XFIR"
-static const u32 RIFF_BIG_ENDIAN = 0x52494646; // "RIFF"
+enum Chunk_Id
+{
+	CHUNK_RIFX_BIG_ENDIAN = 0x52494658, // "RIFX"
+	CHUNK_RIFX_LITTLE_ENDIAN = 0x58464952, // "XFIR"
+	CHUNK_RIFF_BIG_ENDIAN = 0x52494646, // "RIFF"
+
+	// W3D files.
+	CHUNK_SHOCKWAVE_3D_WORLD_BIG_ENDIAN = 0x49465800 // "IFX."
+};
 
 // Possible values for the 'codec' member of this structure.
 enum Director_Codec
@@ -72,7 +78,7 @@ enum Director_Codec
 	CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN = 0x43444746, // "CDGF"
 	
 	// W32 files.
-	CODEC_XTRA_PACKAGE = 0x50434B32 // "PCK2"
+	CODEC_XTRA_PACKAGE_BIG_ENDIAN = 0x50434B32 // "PCK2"
 };
 
 // Retrieves the type of a Director file from its first bytes.
@@ -80,27 +86,27 @@ enum Director_Codec
 // @Parameters:
 // 1. file_path - The path of the file to check.
 //
-// @Returns: The Director file type as a string. If this file doesn't match any known Director type, this function returns NULL.
+// @Returns: The Director file type as a constant string. If this file doesn't match any known Director type, this function returns NULL.
 static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 {
-	Partial_Director_Rifx_Chunk chunk = {};
+	Partial_Director_Chunk chunk = {};
 
 	if(read_first_file_bytes(file_path, &chunk, sizeof(chunk)))
 	{
-		if(chunk.id == RIFX_BIG_ENDIAN || chunk.id == RIFX_LITTLE_ENDIAN)
+		// This works without swapping the byte order because we check both big and little endian format signatures.
+		if(chunk.id == CHUNK_RIFX_BIG_ENDIAN || chunk.id == CHUNK_RIFX_LITTLE_ENDIAN)
 		{
-			// This works because we check both big and little endian format signatures.
 			// @ByteOrder: Big or Little Endian.
 			switch(chunk.codec)
 			{
 				case(CODEC_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN):
-				case(CODEC_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN):	return TEXT("DIR / CST / DXR / CXT");
+				case(CODEC_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN):	return TEXT("Director Movie or Cast");
 
 				case(CODEC_SHOCKWAVE_MOVIE_BIG_ENDIAN):
-				case(CODEC_SHOCKWAVE_MOVIE_LITTLE_ENDIAN):			return TEXT("DCR");
+				case(CODEC_SHOCKWAVE_MOVIE_LITTLE_ENDIAN):			return TEXT("Shockwave Movie");
 
 				case(CODEC_SHOCKWAVE_CAST_BIG_ENDIAN):
-				case(CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN):			return TEXT("CCT");
+				case(CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN):			return TEXT("Shockwave Cast");
 			}
 		}
 		else
@@ -109,9 +115,13 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 			chunk.id = swap_byte_order(chunk.id);
 			chunk.codec = swap_byte_order(chunk.codec);
 
-			if(chunk.id == RIFF_BIG_ENDIAN && chunk.codec == CODEC_XTRA_PACKAGE)
+			if(chunk.id == CHUNK_RIFF_BIG_ENDIAN && chunk.codec == CODEC_XTRA_PACKAGE_BIG_ENDIAN)
 			{
-				return TEXT("W32");
+				return TEXT("Xtra-Package");
+			}
+			else if(chunk.id == CHUNK_SHOCKWAVE_3D_WORLD_BIG_ENDIAN)
+			{
+				return TEXT("Shockwave 3D World");
 			}
 		}
 	}
@@ -139,23 +149,25 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Shockwave Plugin's cache...");
 
-	if(exporter->is_exporting_from_default_locations)
-	{
-		StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
-	}
-
 	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
-		Find_Shockwave_Files_Params params = {};
-		params.exporter = exporter;
+		if(exporter->is_exporting_from_default_locations)
+		{
+			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
+		}
 
-		params.location_identifier = TEXT("<Temporary>");
 		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
 
+		Find_Shockwave_Files_Params params = {};
+		params.exporter = exporter;
+		params.location_identifier = TEXT("<Temporary>");
+
 		params.is_xtra = false;
+		set_exporter_output_copy_subdirectory(exporter, TEXT("Cache"));
 		traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, &params);
 		
 		params.is_xtra = true;
+		set_exporter_output_copy_subdirectory(exporter, TEXT("Xtras"));
 		traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);
 
 		if(exporter->is_exporting_from_default_locations)

@@ -843,19 +843,18 @@ int _tmain(int argc, TCHAR* argv[])
 // 
 // @Returns: Nothing.
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-								const Csv_Type column_types[], size_t num_columns)
+								const Csv_Type* column_types, size_t num_columns)
 {
+	exporter->cache_identifier = cache_identifier;
+	exporter->csv_column_types = column_types;
+	exporter->num_csv_columns = num_columns;
+
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	get_full_path_name(exporter->cache_path);
 	get_full_path_name(exporter->output_path);
 	
-	PathAppend(exporter->output_copy_path, exporter->output_path);
-	if(exporter->should_load_external_locations)
-	{
-		PathAppend(exporter->output_copy_path, exporter->current_profile_name);
-	}
-	PathAppend(exporter->output_copy_path, cache_identifier);
+	set_exporter_output_copy_subdirectory(exporter, NULL);
 	
 	// Don't use PathCombine() since we're just adding a file extension to the previous path.
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
@@ -863,6 +862,8 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 
 	if(exporter->should_create_csv)
 	{
+		_ASSERT(exporter->csv_file_handle == INVALID_HANDLE_VALUE);
+
 		bool create_csv_success = false;
 		u32 num_retry_attempts = 0;
 		const u32 MAX_RETRY_ATTEMPTS = 10;
@@ -903,13 +904,41 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 		}
 
 	}
+}
 
-	exporter->num_csv_columns = num_columns;
-	exporter->csv_column_types = column_types;
+// Builds a cache exporter's output path for copying files and adds a given subdirectory's name to the end.
+//
+// This function is called by initialize_cache_exporter() to set the default output copy path for each cache exporter, and may be
+// optionally called later to create more specific subdirectories. This function should be called after initialize_cache_exporter()
+// and before terminate_cache_exporter().
+//
+// @Parameters:
+// 1. exporter - The Exporter structure where the resolved output path (for copying files) will be stored.
+// 2. subdirectory_name - The name of the output subdirectory (for copying files). This parameter may be NULL if this name shouldn't
+// be added to the path.
+// 
+// @Returns: Nothing.
+void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name)
+{
+	StringCchCopy(exporter->output_copy_path, MAX_PATH_CHARS, exporter->output_path);
+	
+	if(exporter->should_load_external_locations)
+	{
+		PathAppend(exporter->output_copy_path, exporter->current_profile_name);
+	}
+
+	PathAppend(exporter->output_copy_path, exporter->cache_identifier);
+
+	if(subdirectory_name != NULL)
+	{
+		PathAppend(exporter->output_copy_path, subdirectory_name);
+	}
 }
 
 // Exports a cache entry by copying its file to the output location using the original website's directory structure, and by adding a
 // new row to the CSV file. This function will also match the cache entry to any loaded group files.
+//
+// This function should be called after initialize_cache_exporter() and before terminate_cache_exporter().
 //
 // The following CSV columns are automatically handled by this function, and don't need to be set explicitly:
 //
@@ -948,7 +977,7 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 // defaults to NULL.
 // 
 // @Returns: Nothing.
-void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
+void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,
 						WIN32_FIND_DATA* optional_find_data)
 {
@@ -962,7 +991,6 @@ void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
 		++(exporter->num_nameless_files);
 		StringCchPrintf(unique_filename, MAX_PATH_CHARS, TEXT("__WCE-%Iu"), exporter->num_nameless_files);
 		entry_filename = unique_filename;
-
 	}
 
 	Arena* temporary_arena = &(exporter->temporary_arena);
@@ -1376,7 +1404,7 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 
 						name = skip_leading_whitespace(name);
 						profile->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, name);
-						log_print(LOG_INFO, "Load External Locations: Loading the profile '%s'...", profile->name);
+						log_print(LOG_INFO, "Load External Locations: Loading the profile '%s'.", profile->name);
 					}
 					else
 					{
@@ -1574,13 +1602,10 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 			CHECK_AND_COPY_LOCATION(local_low_appdata_path, "Local Low AppData");
 			CHECK_AND_COPY_LOCATION(wininet_cache_path, 	"Internet Cache");
 
-			if(!are_all_locations_valid)
+			if(are_all_locations_valid)
 			{
-				log_print_newline();
-				continue;
+				export_all_cache_locations(exporter);
 			}
-
-			export_all_cache_locations(exporter);
 
 			log_print_newline();
 		}

@@ -114,18 +114,18 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback);
 void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Java Plugin's cache...");
-	
-	TCHAR* appdata_path = NULL;
-	if(exporter->is_exporting_from_default_locations)
-	{
-		appdata_path = exporter->local_low_appdata_path;
-		if(string_is_empty(appdata_path)) appdata_path = exporter->appdata_path;
-
-		PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
-	}
 
 	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
+		TCHAR* appdata_path = NULL;
+		if(exporter->is_exporting_from_default_locations)
+		{
+			appdata_path = exporter->local_low_appdata_path;
+			if(string_is_empty(appdata_path)) appdata_path = exporter->appdata_path;
+
+			PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
+		}
+
 		log_print(LOG_INFO, "Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
 		
 		traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
@@ -134,10 +134,6 @@ void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 		{
 			TCHAR* user_home_path = exporter->user_profile_path;
 			if(string_is_empty(user_home_path)) user_home_path = exporter->windows_path;
-
-			PathCombine(exporter->cache_path, user_home_path, TEXT("java_plugin_AppletStore"));
-			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
-			traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
 		
 			PathCombine(exporter->cache_path, user_home_path, TEXT(".jpi_cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
@@ -147,6 +143,10 @@ void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 			log_print(LOG_INFO, "Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
+			PathCombine(exporter->cache_path, user_home_path, TEXT("java_plugin_AppletStore"));
+			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
+			set_exporter_output_copy_subdirectory(exporter, TEXT("AppletStore"));
+			traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
 		}
 
 		log_print(LOG_INFO, "Java Plugin: Finished exporting the cache.");
@@ -497,10 +497,6 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 			}
 		}
 	}
-
-	TCHAR cached_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(cached_file_path, directory_path, cached_filename);
-	TCHAR* short_file_path = find_last_path_components(cached_file_path, 3);
 	
 	TCHAR* cache_version = NULL;
 	TCHAR cache_version_buffer[MAX_INT32_CHARS] = TEXT("");
@@ -516,6 +512,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, directory_path, cached_filename);
+
+	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{

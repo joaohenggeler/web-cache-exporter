@@ -6,8 +6,8 @@ BEGIN_FILE_GROUP Video
 		; AVI - "RIFF____AVI "
 		52 49 46 46 __ __ __ __ 41 56 49 20
 
-		; FLV - "FLV."
-		46 4C 56 01
+		; FLV - "FLV"
+		46 4C 56
 	END
 
 	BEGIN_MIME_TYPES
@@ -15,7 +15,7 @@ BEGIN_FILE_GROUP Video
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		avi flv mkv ogv webm wmv
+		avi f4v flv mkv ogv webm wmv
 	END
 
 END

@@ -228,10 +228,10 @@ BEGIN_FILE_GROUP Shockwave
 
 	BEGIN_FILE_SIGNATURES
 			
-		; "RIFX____MV93" (Director/Protected Movie or Cast - Big Endian)
+		; "RIFX____MV93" (Director Movie or Cast - Big Endian)
 		52 49 46 58 __ __ __ __ 4D 56 39 33
 		
-		; "XFIR____39VM" (Director/Protected Movie or Cast - Little Endian)
+		; "XFIR____39VM" (Director Movie or Cast - Little Endian)
 		58 46 49 52 __ __ __ __ 33 39 56 4D
 
 		; "RIFX____FGDM" (Shockwave Movie - Big Endian)
@@ -248,6 +248,9 @@ BEGIN_FILE_GROUP Shockwave
 
 		; "RIFF____PCK2" (Xtra-Package)
 		52 49 46 46 __ __ __ __ 50 43 4B 32
+
+		; "IFX." (Shockwave 3D World)
+		49 46 58 00
 
 	END
 

@@ -72,6 +72,14 @@ BEGIN_URL_GROUP CompuServe
 
 END
 
+BEGIN_URL_GROUP Dailymotion
+
+	BEGIN_DOMAINS
+		dailymotion.com
+	END
+
+END
+
 BEGIN_URL_GROUP DeviantArt
 
 	BEGIN_DOMAINS
@@ -113,6 +121,14 @@ BEGIN_URL_GROUP Facebook
 
 END
 
+BEGIN_URL_GROUP Flickr
+
+	BEGIN_DOMAINS
+		flickr.com
+	END
+
+END
+
 BEGIN_URL_GROUP GeoCities
 
 	BEGIN_DOMAINS
@@ -125,6 +141,14 @@ BEGIN_URL_GROUP Google
 
 	BEGIN_DOMAINS
 		google.*
+	END
+
+END
+
+BEGIN_URL_GROUP Imgur
+
+	BEGIN_DOMAINS
+		imgur.com
 	END
 
 END
@@ -169,6 +193,14 @@ BEGIN_URL_GROUP Lego
 
 END
 
+BEGIN_URL_GROUP LiveLeak
+
+	BEGIN_DOMAINS
+		liveleak.com
+	END
+
+END
+
 BEGIN_URL_GROUP Angelfire
 
 	BEGIN_DOMAINS
@@ -195,6 +227,14 @@ BEGIN_URL_GROUP Lycos
 
 	BEGIN_DOMAINS
 		lycos.*
+	END
+
+END
+
+BEGIN_URL_GROUP Metacafe
+
+	BEGIN_DOMAINS
+		metacafe.com
 	END
 
 END
@@ -232,6 +272,22 @@ BEGIN_URL_GROUP Netscape
 
 END
 
+BEGIN_URL_GROUP Photobucket
+
+	BEGIN_DOMAINS
+		photobucket.com
+	END
+
+END
+
+BEGIN_URL_GROUP Pinterest
+
+	BEGIN_DOMAINS
+		pinterest.com
+	END
+
+END
+
 BEGIN_URL_GROUP Real.com
 
 	BEGIN_DOMAINS
@@ -244,6 +300,14 @@ BEGIN_URL_GROUP Reddit
 
 	BEGIN_DOMAINS
 		reddit.com
+	END
+
+END
+
+BEGIN_URL_GROUP TinyPic
+
+	BEGIN_DOMAINS
+		tinypic.com
 	END
 
 END
@@ -261,6 +325,14 @@ BEGIN_URL_GROUP Twitter
 
 	BEGIN_DOMAINS
 		twitter.com
+	END
+
+END
+
+BEGIN_URL_GROUP Vimeo
+
+	BEGIN_DOMAINS
+		vimeo.com
 	END
 
 END
@@ -302,14 +374,6 @@ BEGIN_URL_GROUP YouTube
 
 	BEGIN_DOMAINS
 		youtube.com
-	END
-
-END
-
-BEGIN_URL_GROUP The Go Network
-
-	BEGIN_DOMAINS
-		go.com
 	END
 
 END

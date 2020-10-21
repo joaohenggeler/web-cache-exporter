@@ -443,6 +443,11 @@ s64 swap_byte_order(s64 value)
 	return (s64) _byteswap_uint64((s64) value);
 }
 
+bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size)
+{
+	return memcmp(buffer_1, buffer_2, size) == 0;
+}
+
 /*
 	>>>>>>>>>>>>>>>>>>>>
 	>>>>>>>>>>>>>>>>>>>>
@@ -2055,9 +2060,6 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 {
 	if(string_is_empty(full_file_path)) return false;
 
-	// Leave space for the tilde character and the naming collision number (32-bit unsigned integer).
-	// Note that both of these already take into account the null terminator, which cancels out the extra tilde character.
-
 	// Copy Target = Base Destination Path
 	TCHAR full_copy_target_path[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
@@ -2656,7 +2658,7 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type column_types[], size_t num_columns)
+void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type* column_types, size_t num_columns)
 {
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
@@ -2707,7 +2709,7 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type colum
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values[], size_t num_columns)
+void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, size_t num_columns)
 {
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{

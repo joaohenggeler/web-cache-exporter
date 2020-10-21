@@ -331,7 +331,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 					 const TCHAR* file_path, Group* group_array, u32* num_processed_groups, u32* max_num_file_signature_bytes)
 {
 	TCHAR* group_filename = PathFindFileName(file_path);
-	log_print(LOG_INFO, "Load Group File: Loading the group file '%s'...", group_filename);
+	log_print(LOG_INFO, "Load Group File: Loading the group file '%s'.", group_filename);
 
 	HANDLE group_file_handle = INVALID_HANDLE_VALUE;
 	u64 group_file_size = 0;

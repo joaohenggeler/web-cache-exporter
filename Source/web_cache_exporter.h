@@ -237,7 +237,7 @@ struct Exporter
 	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
 	bool was_temporary_exporter_directory_created;
 	
-	// The paths to relevant Windows locations. These are used to find the default cache directories.
+	// The absolute paths to relevant Windows locations. These are used to find the default cache directories.
 	// @DefaultCacheLocations:
 	TCHAR windows_path[MAX_PATH_CHARS];
 	// - 98, ME, XP, Vista, 7, 8.1, 10 			C:\WINDOWS
@@ -272,12 +272,18 @@ struct Exporter
 	// - 98, ME, 2000, XP, Vista, 7, 8.1, 10	C:\Program Files
 
 	// General purpose variables that are freely changed by each cache exporter:
+	
 	// - The currently open CSV file.
 	HANDLE csv_file_handle;
-	// - The number of columns in the CSV file.
-	size_t num_csv_columns;
+
+	// - The identifier that's used to name the output directory.
+	// - Each cache exporter may use one or more identifiers.
+	const TCHAR* cache_identifier;
 	// - The types of each column as an array of length 'num_csv_columns'.
 	const Csv_Type* csv_column_types;
+	// - The number of columns in the CSV file.
+	size_t num_csv_columns;
+
 	// - The path to the base directory where the cached files will be copied to.
 	TCHAR output_copy_path[MAX_PATH_CHARS];
 	// - The path to the currently open CSV file.
@@ -286,7 +292,7 @@ struct Exporter
 	// - The contents of this path vary between different cache types and versions.
 	TCHAR index_path[MAX_PATH_CHARS];
 
-	// Used to count how many cache files were exported.
+	// Used to count how many cached files were exported.
 	size_t num_csv_files_created;
 	size_t num_processed_files;
 	size_t num_copied_files;
@@ -294,9 +300,11 @@ struct Exporter
 };
 
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-								const Csv_Type column_types[], size_t num_columns);
+								const Csv_Type* column_types, size_t num_columns);
 
-void export_cache_entry(Exporter* exporter, Csv_Entry column_values[],
+void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
+
+void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,
 						WIN32_FIND_DATA* optional_find_data = NULL);
 

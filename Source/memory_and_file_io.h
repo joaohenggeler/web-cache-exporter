@@ -71,6 +71,7 @@ u32 swap_byte_order(u32 value);
 s32 swap_byte_order(s32 value);
 u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
+bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -382,8 +383,8 @@ struct Csv_Entry
 };
 
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
-void csv_print_header(Arena* arena, HANDLE csv_file, const Csv_Type row_types[], size_t num_columns);
-void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry column_values[], size_t num_columns);
+void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type* column_types, size_t num_columns);
+void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, size_t num_columns);
 
 // Retrieves the address of a function from a loaded library and sets a given variable to this value.
 //

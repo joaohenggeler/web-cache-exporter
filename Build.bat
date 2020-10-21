@@ -231,7 +231,7 @@ PUSHD "%~dp0"
 	SETLOCAL
 		PUSHD "%BUILD_PATH_32%"
 
-			ECHO [%~nx0] Copying the source .group files...
+			ECHO [%~nx0] Copying the source group files...
 			ROBOCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
@@ -307,7 +307,7 @@ PUSHD "%~dp0"
 	SETLOCAL
 		PUSHD "%BUILD_PATH_64%"
 
-			ECHO [%~nx0] Copying the source .group files...
+			ECHO [%~nx0] Copying the source group files...
 			ROBOCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
@@ -390,7 +390,7 @@ PUSHD "%~dp0"
 	SETLOCAL
 		PUSHD "%BUILD_PATH_9X_32%"
 
-			ECHO [%~nx0] Copying the source .group files...
+			ECHO [%~nx0] Copying the source group files...
 			ROBOCOPY "%SOURCE_GROUP_FILES_DIR%" ".\%GROUP_FILES_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 

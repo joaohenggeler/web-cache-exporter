@@ -2,14 +2,14 @@
 
 This command line tool allows you to more easily view and obtain the contents of a web browser or web plugin's HTTP cache that's stored on disk. It runs on Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10, and supports the following cache formats:
 
-* The WinINet cache - Internet Explorer 4 to 11, Microsoft Edge.
-* The Flash Player's shared library (SWZ) cache.
+* The WinINet cache - Internet Explorer 4 to 11.
+* The Flash Player's shared library cache and temporary Flash videos.
 * The Shockwave Player's cache, including Xtras.
 * The Java Plugin's cache - Java 1.3 to 8.
 
 This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed/played when they were still available.
 
-[Here's a list of some previously lost browser games that were found by searching the web cache.](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache)
+For example, [here's a list of some previously lost browser games that were found by searching the web cache.](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache)
 
 ## Features
 
@@ -27,6 +27,8 @@ This tool was developed to aid the [recovery and preservation of lost web media]
 
 @TODO
 
+The CSV files in these screenshots were viewed using [NirSoft's CSVFileView](https://www.nirsoft.net/utils/csv_file_view.html).
+
 ## Command Line Arguments
 
 This utility includes three executables:
@@ -38,7 +40,7 @@ The command line arguments in the next subsections may be used. **WCE.exe** is u
 
 Usage:
 ```
-WCE.exe [Other Optional Arguments] &ltMandatory Export Argument&gt
+WCE.exe [Other Optional Arguments] &lt;Mandatory Export Argument&gt;
 ```
 Only one export argument may be used. All arguments after the first export option are ignored.
 
@@ -49,14 +51,14 @@ The following options can take two arguments:
 WCE.exe -export-option [Optional Cache Path] [Optional Output Path]
 ```
 
-If a path is empty or not specified, then the application will replace it with a default value. For the cache path, this includes several default locations that vary depending on the browser/plugin. For the output path, this value is set to "ExportedCache".
+If a path is empty or not specified, then the application will replace it with a default value. For the cache path, this includes several default locations that vary depending on the browser or plugin. For the output path, this value is set to "ExportedCache".
 
 You can use "." to refer to the current working directory's path.
 
 | Option            | Description                                                                        |
 |-------------------|------------------------------------------------------------------------------------|
-| -export-ie        | Exports the WinINet cache, including Internet Explorer 4 to 11 and Microsoft Edge. |
-| -export-flash     | Exports the Flash Player shared library (SWZ) cache.                               |
+| -export-ie        | Exports the WinINet cache, including Internet Explorer 4 to 11.                    |
+| -export-flash     | Exports the Flash Player's shared library cache and temporary Flash videos.        |
 | -export-shockwave | Exports the Shockwave Player's cache, including Xtras.                             |
 | -export-java      | Exports The Java Plugin's cache from Java 1.3 to 8.                                |
 
@@ -68,7 +70,7 @@ WCE.exe -export-shockwave "C:\PathToTheCache" "My Cache"
 WCE.exe -export-java "" "My Default Cache"
 ```
 
-Note that exporting the cache from Internet Explorer 10 to 11 and Microsoft Edge is only supported in Windows Vista and later.
+Note that exporting the cache from Internet Explorer 10 and 11 is only supported in Windows Vista and later.
 
 There are two other options that have a similar behavior but that take different arguments:
 
@@ -77,14 +79,26 @@ There are two other options that have a similar behavior but that take different
 | -find-and-export-all | Exports all of the above at once.                        |
 | -explore-files       | Exports any files in a directory and its subdirectories. |
 
-@TODO: -find-and-export-all
-
-The -explore-files option can take two arguments:
+The `-find-and-export-all` option can take two arguments:
 ```
-WCE.exe -explore-files &ltMandatory Cache Path&gt [Optional Output Path]
+WCE.exe -find-and-export-all [Optional Output Path] [Optional External Locations File Path]
 ```
 
-This option may be used to explore the files in an unsupported cache format (e.g. an obscure web plugin), meaning the first argument must always be passed. This feature is useful when combined with [group files](#group-files).
+This option is used to export every supported cache format from their default locations at the same time. The second optional argument specifies a text file that allows you to set these default locations and perform this operation multiple times. This is useful when you want to export the web cache from multiple user profiles located in an old computer's files. To learn how to use this feature, see the [About External Locations](Source/ExternalLocations/About%20External%20Locations.txt) help file.
+
+For example:
+```
+WCE.exe -find-and-export-all
+WCE.exe -find-and-export-all "My Default Cache"
+WCE.exe -find-and-export-all "My Default Cache" "C:\PathToExternalLocationsFile"
+```
+
+The `-explore-files` option can take two arguments:
+```
+WCE.exe -explore-files &lt;Mandatory Cache Path&gt; [Optional Output Path]
+```
+
+This option may be used to explore the files in an unsupported cache location (e.g. from an obscure web plugin), meaning the first argument must always be passed. This feature is useful when combined with [group files](#group-files).
 
 For example:
 ```
@@ -105,8 +119,8 @@ The following options don't require any additional arguments.
 | -overwrite       | Deletes the previous output folder of the same name before running.                   |
 | -show-full-paths | Replaces the "Location On Cache" CSV column with the cached file's full path on disk. |
 
-Using both -no-copy-files and -no-create-csv will result in an error and terminate the application.
-The -show-full-paths option does nothing if -no-create-csv is also used.
+Using both `-no-copy-files` and `-no-create-csv` will result in an error and terminate the application.
+The `-show-full-paths` option does nothing if `-no-create-csv`is also used.
 
 For example:
 ```
@@ -116,12 +130,12 @@ WCE.exe -no-create-csv -overwrite -export-option
 
 The following options change how [group files](#group-files) behave.
 
-| Option                              | Description                                      |
-|-------------------------------------|--------------------------------------------------|
-| -filter-by-groups                   | Only exports files that match any loaded groups. |
-| -load-group-files &ltGroup Files&gt | Only loads specific group files.                 |
+| Option                                | Description                                      |
+|---------------------------------------|--------------------------------------------------|
+| -filter-by-groups                     | Only exports files that match any loaded groups. |
+| -load-group-files &lt;Group Files&gt; | Only loads specific group files.                 |
 
-The &ltGroup Files&gt argument is mandatory and specifies a filename list, where each one is separated by spaces and without the .group file extension. All group files are loaded by default. This tool will always look for group files in the "Groups" subdirectory in the executable's directory (and not in the current working directory).
+The &lt;Group Files&gt; argument is mandatory and specifies a filename list, where each one is separated by spaces and without the .group file extension. All group files are loaded by default. This tool will always look for group files in the "Groups" subdirectory in the executable's directory (and not in the current working directory).
 
 For example:
 ```
@@ -133,10 +147,10 @@ The following options should only be used when exporting the WinINet cache using
 
 | Option                            | Description                                                                                         |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------|
-| -hint-ie &ltLocal AppData Path&gt | Specifies the absolute path to the Local AppData folder in the computer where the cache originated. |
+| -hint-ie &lt;Local AppData Path&gt; | Specifies the absolute path to the Local AppData folder in the computer where the cache originated. |
 
-The &ltLocal AppData Path&gt argument is mandatory. This option should only be used under the following circumstances:
-1. You're exporting the cache from Internet Explorer 10 to 11 or Microsoft Edge.
+The &lt;Local AppData Path&gt; argument is mandatory. This option should only be used under the following circumstances:
+1. You're exporting the cache from Internet Explorer 10 and 11.
 2. You're not exporting from a default location, i.e., if the cache database files were copied from another computer.
 
 If this is option is not used, the exporter will try to guess this location. You should rerun this application with this option if you meet the criteria above and you notice that some cached files were not exported.
@@ -191,9 +205,20 @@ To learn more about file and URL groups, see the [About Groups](Source/Groups/Ab
 
 ## Building
 
-This application is compiled using the (Build.bat)[./Build.bat] batch file. See the comments at the top of this file to learn how to use and set each basic build parameter. In order to target Windows 98 and ME, this program was compiled using Visual Studio 2005 Professional.
+This application is compiled using the **[Build.bat](Build.bat)** batch file. See the comments at the top of this file to learn how to use and set each basic build parameter. This file is executed using the following syntax: `Build.bat [Optional Compiler Arguments]`. For example:
 
-@TODO
+```
+Build.bat
+Build.bat /D EXPORT_EMPTY_FILES
+```
+
+In order to target Windows 98 and ME, this program is compiled using Visual Studio 2005. It's possible to use Visual Studio 2015 or later by doing the following:
+
+* Setting `VCVARSALL_PATH` to the path of the `vcvarsall.bat` batch file that is installed with Visual Studio.
+* Setting `WIN9X_BUILD` to `No`.
+* Setting `USE_VS_2005_OPTIONS` to `No`.
+
+Note that this application wasn't been thoroughly tested with modern Visual Studio versions.
 
 ## Resources And Tools
 
@@ -206,10 +231,11 @@ This section will list some resources and tools that were used to learn how to p
 * [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/)
 * [NirSoft - Improved solution for reading the history of Internet Explorer 10](https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/)
 
-See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.html), including [ChromeCacheView](https://www.nirsoft.net/utils/chrome_cache_view.html), [MZCacheView](https://www.nirsoft.net/utils/mozilla_cache_viewer.html), [OperaCacheView](https://www.nirsoft.net/utils/opera_cache_view.html), and [SafariCacheView](https://www.nirsoft.net/utils/safari_cache_view.html).
+See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.html), including [ChromeCacheView](https://www.nirsoft.net/utils/chrome_cache_view.html), [MZCacheView](https://www.nirsoft.net/utils/mozilla_cache_viewer.html), [OperaCacheView](https://www.nirsoft.net/utils/opera_cache_view.html), [SafariCacheView](https://www.nirsoft.net/utils/safari_cache_view.html), and [VideoCacheView](https://www.nirsoft.net/utils/video_cache_view.html).
 
 [Geoff Chappell's software analysis website](https://www.geoffchappell.com) was also used to check the minimum supported Windows version for some functions in the Windows API.
 
 ## Special Thanks
 
 * Special thanks to Computerdude77 for his general assistance and for helping me test this tool in older Windows versions.
+* Special thanks to [TOMYSSHADOW](https://github.com/tomysshadow) for his extensive Director and Shockwave knowledge.

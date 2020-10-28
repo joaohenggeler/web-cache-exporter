@@ -14,11 +14,11 @@
 	
 	A few general notes:
 
-	- This application is a digital forensics utility that allows you to convert a web browser or plugin's cache from a hard to
-	read format to a more easily viewable one. In this context, "exporting" means copying each cached file by recreating the
-	original website's directory structure and creating a CSV file which contains information on each one. It was written to help
-	recover lost web media like games, animations, virtual worlds, etc. The idea is that someone who has access to an old computer
-	where they used to play web games can easily check their web cache for lost game files.
+	- This application is a command line utility that allows you to convert a web browser or plugin's cache from a hard to read
+	format to a more easily viewable one. In this context, "exporting" means copying each cached file by recreating the original
+	website's directory structure and creating a CSV file which contains information about each one. It was written to help recover
+	lost web media like games, animations, virtual worlds, etc. The idea is that someone who has access to an old computer where
+	they used to play web games can easily check their web cache for lost game files.
 
 	- This application was written in C-style C++03 and built using Visual Studio 2005 Professional (version 8.0, _MSC_VER = 1400)
 	to target both Windows 98 and later 64-bit Windows versions. Because of this, we'll often use the TCHAR and TEXT() macros to
@@ -521,7 +521,14 @@ int _tmain(int argc, TCHAR* argv[])
 							EXPORTER_BUILD_TARGET, EXPORTER_BUILD_VERSION, EXPORTER_BUILD_MODE);
 
 	exporter.os_version.dwOSVersionInfoSize = sizeof(exporter.os_version);
+
+	// Disable the deprecation warnings for GetVersionExW() when building with Visual Studio 2015 or later.
+	// This project is always built using Visual Studio 2005, but we'll do this anyways in case someone wants
+	// to compile this application with a more modern version of Visual Studio.
+	#pragma warning(push)
+	#pragma warning(disable : 4996)
 	if(GetVersionEx(&exporter.os_version))
+	#pragma warning(pop)
 	{
 		log_print(LOG_INFO, "Startup: Running Windows version %lu.%lu '%s' build %lu in platform %lu.",
 								exporter.os_version.dwMajorVersion, exporter.os_version.dwMinorVersion,

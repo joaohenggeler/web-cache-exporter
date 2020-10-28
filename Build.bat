@@ -19,6 +19,11 @@ PUSHD "%~dp0"
 	
 	REM ---------------------------------------------------------------------------
 	REM Basic build parameters.
+	REM Any parameters where the value can be true or false are set to either "Yes" or "No". During development and when
+	REM packaging a new release, these are set to "Yes" and VCVARSALL_PATH is set to Visual Studio 2005 Professional:
+	REM "C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
+	REM Visual Studio 2009, for example, uses the following:
+	REM "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat"
 
 	REM The build mode.
 	REM - debug - turns off optimizations, enables run-time error checks, generates debug information, and defines
@@ -32,6 +37,10 @@ PUSHD "%~dp0"
 
 	REM Set to "Yes" to build the Windows 98 and ME version.
 	SET "WIN9X_BUILD=Yes"
+
+	REM Set to "Yes" to use certain compiler and linker options that were removed after Visual Studio 2005.
+	REM If this value is "No", it's assumed that a more modern of Visual Studio (2015 or later) is specified in VCVARSALL_PATH.
+	SET "USE_VS_2005_OPTIONS=Yes"
 
 	REM Set to "Yes" to compile and link the resource file. This will add an icon and version information to the executable.
 	SET "COMPILE_RESOURCES=Yes"
@@ -83,14 +92,12 @@ PUSHD "%~dp0"
 	SET "LIBRARIES_WIN_9X_ONLY="
 
 	REM Common linker options and any other ones that only apply to a specific build target or mode.
-	REM Note that the /OPT:WIN98 and /OPT:NOWIN98 options don't exist in modern MSVC versions since they dropped support
-	REM for Windows 95, 98, and ME.
 	REM We used to statically link to ESENT.lib in the Windows 2000 to 10 (NT) builds.
 	SET "LINKER_OPTIONS=/link /WX /NODEFAULTLIB"
 	SET "LINKER_OPTIONS_RELEASE_ONLY=/OPT:REF"
 	SET "LINKER_OPTIONS_DEBUG_ONLY="
-	SET "LINKER_OPTIONS_WIN_NT_ONLY=/OPT:NOWIN98"
-	SET "LINKER_OPTIONS_WIN_9X_ONLY=/OPT:WIN98"
+	SET "LINKER_OPTIONS_WIN_NT_ONLY="
+	SET "LINKER_OPTIONS_WIN_9X_ONLY="
 	SET "LINKER_OPTIONS_32_ONLY=/LIBPATH:"%THIRD_PARTY_LIBRARIES_PATH_32%""
 	SET "LINKER_OPTIONS_64_ONLY=/LIBPATH:"%THIRD_PARTY_LIBRARIES_PATH_64%"
 
@@ -137,6 +144,21 @@ PUSHD "%~dp0"
 	REM ---------------------------------------------------------------------------
 
 	CLS
+
+	REM Add any extra options that depend on the Visual Studio version.
+	IF "%USE_VS_2005_OPTIONS%" == "Yes" (
+		REM The /OPT:WIN98 and /OPT:NOWIN98 options don't exist in modern Visual Studio versions
+		REM since they dropped support for Windows 95, 98, and ME.
+		SET "LINKER_OPTIONS_WIN_NT_ONLY=%LINKER_OPTIONS_WIN_NT_ONLY% /OPT:NOWIN98"
+		SET "LINKER_OPTIONS_WIN_9X_ONLY=%LINKER_OPTIONS_WIN_9X_ONLY% /OPT:WIN98"
+	) ELSE (
+		ECHO [%~nx0] Using compiler and linker options for Visual Studio 2015 or later.
+		ECHO.
+
+		REM Starting in Visual Studio 2015, the C Run-time Library was refactored into new binaries
+		SET "LIBRARIES_RELEASE_ONLY=%LIBRARIES_RELEASE_ONLY% LIBUCRT.lib LIBVCRUNTIME.lib"
+		SET "LIBRARIES_DEBUG_ONLY=%LIBRARIES_DEBUG_ONLY% LIBUCRTD.lib LIBVCRUNTIMED.lib"
+	)
 
 	REM Get the build version from our file or default to an unknown one.
 	SET BUILD_VERSION=

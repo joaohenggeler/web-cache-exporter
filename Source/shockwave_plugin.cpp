@@ -6,7 +6,7 @@
 	For this type of cache, we'll work directly with the files stored on disk instead of parsing a database with metadata
 	on each file.
 
-	@SupportedFormats: Unknown, likely Shockwave Player 8 to 12.
+	@SupportedFormats: Unsure, likely Shockwave Player 7 to 12.
 
 	@DefaultCacheLocations: The Temporary Files directory. This location is specified in the TEMP or TMP environment variables.
 	- 98, ME 				C:\WINDOWS\TEMP

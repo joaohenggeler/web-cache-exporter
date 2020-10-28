@@ -71,7 +71,7 @@ u32 swap_byte_order(u32 value);
 s32 swap_byte_order(s32 value);
 u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
-bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size);
+bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_compare);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>

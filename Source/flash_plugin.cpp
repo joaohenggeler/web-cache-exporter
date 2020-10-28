@@ -78,8 +78,8 @@ void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 		
 		if(exporter->is_exporting_from_default_locations)
 		{
-			// This is currently only checked when using default locations since the previous traversal already
-			// includes these video files.
+			// This is currently only checked when using default locations since the previous
+			// traversal already includes these video files.
 			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
 			set_exporter_output_copy_subdirectory(exporter, TEXT("Videos"));
 			traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, false, find_flash_video_files_callback, exporter);

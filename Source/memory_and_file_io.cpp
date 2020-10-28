@@ -443,9 +443,17 @@ s64 swap_byte_order(s64 value)
 	return (s64) _byteswap_uint64((s64) value);
 }
 
-bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size)
+// Compares two buffers.
+//
+// @Parameters:
+// 1. buffer_1 - The first buffer.
+// 2. buffer_2 - The second buffer.
+// 3. size_to_compare - The number of bytes to compare.
+//
+// @Returns: True if the buffers are equal. Otherwise, false.
+bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_compare)
 {
-	return memcmp(buffer_1, buffer_2, size) == 0;
+	return memcmp(buffer_1, buffer_2, size_to_compare) == 0;
 }
 
 /*

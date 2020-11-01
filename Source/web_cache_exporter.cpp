@@ -47,11 +47,6 @@
 	user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
-
-	@TODO:
-
-	- Update readme.
-	- Update command line help message (right below).
 */
 
 /*
@@ -66,61 +61,44 @@ static const TCHAR* LOG_FILE_NAME = TEXT("WCE.log");
 static const TCHAR* DEFAULT_EXPORT_DIRECTORY_NAME = TEXT("ExportedCache");
 static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Arguments] <Export Argument>\n"
 												"\n"
-												"########## [1] AVAILABLE EXPORT ARGUMENTS: <Export Option> [Optional Cache Path] [Optional Output Path]\n"
+												"Below are some commonly used arguments. To see the full list of arguments, check the readme.txt file.\n"
 												"\n"
-												"-export-ie    to export the WinINet cache, including Internet Explorer 4 to 11 and Microsoft Edge.\n"
+												"########## [1] EXPORT ARGUMENTS: <Export Option> [Optional Cache Path] [Optional Output Path]\n"
 												"\n"
-												"-export-flash    to export the Flash Player cache.\n"
+												"If you specify an empty path, then a default location is used.\n"
 												"\n"
-												"-export-shockwave    to export the Shockwave Player cache.\n"
+												"-export-ie    exports the WinINet cache, including Internet Explorer 4 to 11.\n"
 												"\n"
-												"-export-java    to export the Java Plugin cache.\n"
+												"-export-flash    exports the Flash Player cache.\n"
 												"\n"
-												"-find-and-export-all    to export all of the above at once, in the following order: IE > Flash > Shockwave > Java. This option does not have an optional cache path argument.\n"
+												"-export-shockwave    exports the Shockwave Player cache.\n"
 												"\n"
-												"-explore-files    to export the files in a directory and its subdirectories. This option must have the cache path argument.\n"
+												"-export-java    exports the Java Plugin cache.\n"
 												"\n"
 												"########## [1] EXAMPLES:\n"
 												"\n"
 												"WCE.exe -export-ie\n"
 												"WCE.exe -export-ie \"C:\\PathToTheCache\"\n"
 												"WCE.exe -export-ie \"C:\\PathToTheCache\" \"My Cache\"\n"
-												"WCE.exe -export-ie \"\" \"My Cache\" (choose the output path but use the default cache path)\n"
-												"WCE.exe -export-ie \"C:\\PathToTheCache\" \"\" (choose the cache path but use the default output path)\n"
-												"WCE.exe -find-and-export-all\n"
-												"WCE.exe -find-and-export-all \"My Cache\"\n"
-												"WCE.exe -explore-files \"C:\\PathToExplore\"\n"
-												"WCE.exe -explore-files \"C:\\PathToExplore\" \"My Exploration\"\n"
+												"WCE.exe -export-ie \"\" \"My Cache\"    (choose the output path but use the default cache path)\n"
+												"WCE.exe -export-ie \"C:\\PathToTheCache\" \"\"    (choose the cache path but use the default output path)\n"
 												"\n"
 												"\n"
-												"########## [2] AVAILABLE OPTIONAL ARGUMENTS: Put them before the export option.\n"
+												"########## [2] OPTIONAL ARGUMENTS: Put them before the export option.\n"
 												"\n"
-												"-no-copy-files    to stop the exporter from copying files.\n"
+												"-no-copy-files    stops the exporter from copying files.\n"
 												"\n"
-												"-no-create-csv    to stop the exporter from creating CSV files.\n"
+												"-no-create-csv    stops the exporter from creating CSV files.\n"
 												"\n"
-												"-overwrite    to delete the previous output folder before running.\n"
+												"-overwrite    deletes the previous output folder before running.\n"
 												"\n"
-												"-show-full-paths    to replace the Location On Cache column with the cached file's full path on disk.\n"
-												"\n"
-												"-filter-by-groups    to only export files that match any loaded groups.\n"
-												"\n"
-												"-load-group-files \"<Group Files>\"    to only load specific group files, separated by spaces and without the .group extension. By default, this application will load all group files.\n"
-												"\n"
-												"-hint-ie <Local AppData Path>    Only for Internet Explorer 10 to 11 and Microsoft Edge (i.e. if -export-ie or -find-and-export-all are used on a modern Windows version), and if your not exporting from a default location (i.e. if the cache was copied from another computer).\n"
-												"    This is used to specify the absolute path to the Local AppData folder of the computer where the cache originated.\n"
-												"    If this is option is not used, the exporter will try to guess this location.\n"
-												"    You should rerun this application with this option if you notice that some cached files were not exported.\n"
+												"-filter-by-groups    only exports files that match any loaded groups.\n"
 												"\n"
 												"########## [2] EXAMPLES:\n"
 												"\n"
 												"WCE.exe -no-copy-files -export-flash\n"
-												"WCE.exe -overwrite -export-shockwave\n"
-												"WCE.exe -filter-by-groups -explore-files \"C:\\PathToExplore\"\n"
-												"WCE.exe -load-group-files \"FileA FileB\" -find-and-export-all\n"
-												"WCE.exe -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -export-ie \"C:\\PathToTheCache\"\n"
-												"\n"
-												"WCE.exe -overwrite -no-create-csv -filter-by-groups -load-group-files \"FileA FileB\" -hint-ie \"C:\\Users\\My Old PC\\AppData\\Local\" -find-and-export-all \"My Cache\""
+												"WCE.exe -overwrite -no-create-csv -export-shockwave\n"
+												"WCE.exe -filter-by-groups -export-java"
 												;
 
 // Skips to the second dash in a command line argument. For example, "-export-ie" -> "-ie".
@@ -559,7 +537,6 @@ int _tmain(int argc, TCHAR* argv[])
 
 	if(argc <= 1)
 	{
-		console_print("No command line options supplied.");
 		console_print("%hs", COMMAND_LINE_HELP_MESSAGE);
 
 		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and terminate.");
@@ -887,11 +864,11 @@ void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifie
 			}
 			else
 			{
-				const DWORD SLEEP_TIME_IN_SECONDS = 3;
-				const DWORD SLEEP_TIME_IN_MILLISECONDS = SLEEP_TIME_IN_SECONDS * 1000;
+				const u32 SLEEP_TIME_IN_SECONDS = 3;
+				const u32 SLEEP_TIME_IN_MILLISECONDS = SLEEP_TIME_IN_SECONDS * 1000;
 
 				++num_retry_attempts;
-				log_print(LOG_ERROR, "Initialize Cache Exporter: Failed to create the CSV file '%s' with the error code %lu. Waiting %lu seconds and retrying this operation (attempt %I32u of %I32u).", exporter->output_csv_path, GetLastError(), SLEEP_TIME_IN_SECONDS, num_retry_attempts, MAX_RETRY_ATTEMPTS);
+				log_print(LOG_ERROR, "Initialize Cache Exporter: Failed to create the CSV file '%s' with the error code %lu. Waiting %I32u seconds and retrying this operation (attempt %I32u of %I32u).", exporter->output_csv_path, GetLastError(), SLEEP_TIME_IN_SECONDS, num_retry_attempts, MAX_RETRY_ATTEMPTS);
 
 				Sleep(SLEEP_TIME_IN_MILLISECONDS);
 			}
@@ -1555,7 +1532,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 		External_Locations* external_locations = exporter->external_locations;
 		_ASSERT(external_locations != NULL);
 
-		console_print("Exporting the default cache from %I32u default external locations...", external_locations->num_profiles);
+		console_print("Exporting the cache from %I32u default external locations...", external_locations->num_profiles);
 		log_print(LOG_INFO, "All Locations: Exporting the cache from %I32u default external locations.", external_locations->num_profiles);
 		log_print_newline();
 

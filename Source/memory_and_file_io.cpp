@@ -965,8 +965,8 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 // - Authority = [userinfo@]host[:port]
 // The resulting Url_Parts structure will contain the pointer to a copy of these components or NULL if they don't exist.
 //
-// This syntax follows RFC 3986, although this function will accept empty path and host components in order to accommodate
-// certain URL structures that may show up in cache databases. For example:
+// Empty path and host components are accepted in order to accommodate certain URL structures that may show up in cache databases.
+// For example:
 // - No path: "http://www.example.com" or http://www.example.com/", where the server would serve "http://www.example.com/index.html".
 // - No Host: "file:///C:\Users\<Username>\Desktop", where the host is localhost.
 //
@@ -1111,7 +1111,6 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 	while(*url != TEXT('\0'))
 	{
 		// Decode percent-encoded characters.
-		// @Docs: https://tools.ietf.org/html/rfc3986#section-2.1
 		if(*url == TEXT('%'))
 		{
 			u8 decoded_char = 0;

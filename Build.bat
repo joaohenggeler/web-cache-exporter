@@ -22,7 +22,7 @@ PUSHD "%~dp0"
 	REM Any parameters where the value can be true or false are set to either "Yes" or "No". During development and when
 	REM packaging a new release, these are set to "Yes" and VCVARSALL_PATH is set to Visual Studio 2005 Professional:
 	REM "C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
-	REM Visual Studio 2009, for example, uses the following:
+	REM Visual Studio 2019, for example, uses the following:
 	REM "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat"
 
 	REM The build mode.
@@ -51,7 +51,8 @@ PUSHD "%~dp0"
 	SET "PACKAGE_BUILD=Yes"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
-	REM You can use this to change the compiler version, although this application hasn't been tested with newer versions.
+	REM You can use this to change the compiler version, although this application hasn't been thoroughly tested with more
+	REM modern Visual Studio versions.
 	SET "VCVARSALL_PATH=C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
 
 	REM ---------------------------------------------------------------------------

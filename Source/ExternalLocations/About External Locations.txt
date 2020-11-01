@@ -3,6 +3,9 @@ each one specifying a list of absolute paths of key Windows locations. This
 allows you to export the cache from files that came from another computer.
 This includes any Windows version from 98 to 10.
 
+This feature is only available for the -find-and-export-all command line
+option.
+
 The following section will show you how to define profiles. Lines that start
 with a semicolon ";" are treated as comments and are not processed. External
 locations files must always end in a newline. You can only use spaces and tabs
@@ -42,13 +45,20 @@ this type of location.
 
 The Web Cache Exporter will create multiple subfolders in the main output
 folder with each profile's name. Because of this, you shouldn't use any
-reserved Windows folder name characters.
+reserved Windows folder name characters. You can also use this feature to
+better organize the output. For example, if we were exporting from two
+different Windows XP machines, we could use the following profile names:
+
+Windows XP 1\Username A
+Windows XP 1\Username B
+Windows XP 2\Username C
+Windows XP 2\Username D
 
 External locations files use UTF-8 as their character encoding, meaning you
 can use any Unicode character in the various paths. In the Windows 98 and ME
 builds, you must only use ASCII characters. However, since this feature is
-meant to export the cache from an older computer's files in a modern machine,
-this situation is extremely unlikely to come up.
+meant to export the cache from an older computer's files while running in
+a modern machine, this situation is extremely unlikely to come up.
 
 Below is a reference of where these default locations are found in every
 supported Windows version:

@@ -59,14 +59,6 @@ BEGIN_URL_GROUP Faradise
 
 END
 
-BEGIN_URL_GROUP GameHouse
-
-	BEGIN_DOMAINS
-		ghstatic.com
-	END
-
-END
-
 BEGIN_URL_GROUP Game Show Network (GSN)
 
 	BEGIN_DOMAINS
@@ -96,14 +88,6 @@ BEGIN_URL_GROUP Jig Interactive
 	BEGIN_DOMAINS
 		jiginteractive.com
 		jigint.com
-	END
-
-END
-
-BEGIN_URL_GROUP Kewlbox
-
-	BEGIN_DOMAINS
-		kewlbox.com
 	END
 
 END

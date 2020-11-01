@@ -4,9 +4,9 @@
 /*
 	This file defines how the exporter processes the Adobe (previously Macromedia) Shockwave Player's web plugin cache.
 	For this type of cache, we'll work directly with the files stored on disk instead of parsing a database with metadata
-	on each file.
+	about each file.
 
-	@SupportedFormats: Unsure, likely Shockwave Player 7 to 12.
+	@SupportedFormats: Director 6 and later.
 
 	@DefaultCacheLocations: The Temporary Files directory. This location is specified in the TEMP or TMP environment variables.
 	- 98, ME 				C:\WINDOWS\TEMP
@@ -39,49 +39,58 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
-// A structure that defines the first 12 bytes of Director files (movies or external casts). Since cached Shockwave files can be
-// stored on disk without a file extension, we'll make it easier to tell what kind of file was found in the generated CSV file.
-// This exists purely for convenience and does not represent any type of database that contains metadata about each cached file.
-#pragma pack(push, 1)
-struct Partial_Director_Chunk
-{
-	u32 id;
-	u32 size;
-	u32 codec;
-};
-#pragma pack(pop)
+// Since cached Shockwave files can be stored on disk without a file extension, we'll make it easier to tell what kind of file was
+// found by reading and interpreting their first bytes.
 
-// Possible values for the 'id' member of this structure.
+/*
+	struct Partial_Rifx_Chunk
+	{
+		u32 id;
+		u32 size;
+		u32 format;
+	};
+*/
+
+static const u32 MIN_RIFX_CHUNK_READ_SIZE = 12;
+
+// Possible values for the first four bytes.
 enum Chunk_Id
 {
 	CHUNK_RIFX_BIG_ENDIAN = 0x52494658, // "RIFX"
 	CHUNK_RIFX_LITTLE_ENDIAN = 0x58464952, // "XFIR"
-	CHUNK_RIFF_BIG_ENDIAN = 0x52494646, // "RIFF"
-
-	// W3D files.
-	CHUNK_SHOCKWAVE_3D_WORLD_BIG_ENDIAN = 0x49465800 // "IFX."
+	
+	CHUNK_RIFF_BIG_ENDIAN = 0x52494646 // "RIFF"
 };
 
-// Possible values for the 'codec' member of this structure.
-enum Director_Codec
+// Possible values for the last four bytes.
+enum Chunk_Format
 {
-	// DIR, CST, DXR, or CXT files.
-	CODEC_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN = 0x4D563933, // "MV93"
-	CODEC_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN = 0x3339564D, // "39VM"
+	// Director Movie or Cast - DIR, CST, DXR, or CXT files.
+	FORMAT_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN = 0x4D563933, // "MV93"
+	FORMAT_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN = 0x3339564D, // "39VM"
 	
-	// DCR files.
-	CODEC_SHOCKWAVE_MOVIE_BIG_ENDIAN = 0x4647444D, // "FGDM"
-	CODEC_SHOCKWAVE_MOVIE_LITTLE_ENDIAN = 0x4D444746, // "MDGF"
+	// Shockwave Movie - DCR files.
+	FORMAT_SHOCKWAVE_MOVIE_BIG_ENDIAN = 0x4647444D, // "FGDM"
+	FORMAT_SHOCKWAVE_MOVIE_LITTLE_ENDIAN = 0x4D444746, // "MDGF"
 	
-	// CCT files.
-	CODEC_SHOCKWAVE_CAST_BIG_ENDIAN = 0x46474443, // "FGDC"
-	CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN = 0x43444746, // "CDGF"
+	// Shockwave Cast - CCT files.
+	FORMAT_SHOCKWAVE_CAST_BIG_ENDIAN = 0x46474443, // "FGDC"
+	FORMAT_SHOCKWAVE_CAST_LITTLE_ENDIAN = 0x43444746, // "CDGF"
 	
-	// W32 files.
-	CODEC_XTRA_PACKAGE_BIG_ENDIAN = 0x50434B32 // "PCK2"
+	// Xtra-Package - W32 files.
+	FORMAT_XTRA_PACKAGE_BIG_ENDIAN = 0x50434B32 // "PCK2"
 };
 
-// Retrieves the type of a Director file from its first bytes.
+// Shockwave 3D World - W3D files.
+static const u32 SHOCKWAVE_3D_WORLD_SIGNATURE = 0x49465800; // "IFX."
+
+// Shockwave Audio - SWA files. This signature follows a different structure, and appears at a certain offset in the file.
+static const u32 SHOCKWAVE_AUDIO_SIGNATURE_OFFSET = 0x24;
+static const char SHOCKWAVE_AUDIO_SIGNATURE[] = "MACR";
+static const u32 SHOCKWAVE_AUDIO_SIGNATURE_SIZE = sizeof(SHOCKWAVE_AUDIO_SIGNATURE) - 1;
+static const u32 MIN_SHOCKWAVE_AUDIO_READ_SIZE = SHOCKWAVE_AUDIO_SIGNATURE_OFFSET + SHOCKWAVE_AUDIO_SIGNATURE_SIZE;
+
+// Determines the type of a Director file from its first bytes.
 //
 // @Parameters:
 // 1. file_path - The path of the file to check.
@@ -89,44 +98,72 @@ enum Director_Codec
 // @Returns: The Director file type as a constant string. If this file doesn't match any known Director type, this function returns NULL.
 static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 {
-	Partial_Director_Chunk chunk = {};
+	TCHAR* file_type = NULL;
 
-	if(read_first_file_bytes(file_path, &chunk, sizeof(chunk)))
+	const u32 MAX_READ_SIZE = MAX(MIN_RIFX_CHUNK_READ_SIZE, MIN_SHOCKWAVE_AUDIO_READ_SIZE);
+	u8 file_buffer[MAX_READ_SIZE];
+
+	u32 num_bytes_read = 0;
+	if(read_first_file_bytes(file_path, file_buffer, MAX_READ_SIZE, true, &num_bytes_read))
 	{
-		// This works without swapping the byte order because we check both big and little endian format signatures.
-		if(chunk.id == CHUNK_RIFX_BIG_ENDIAN || chunk.id == CHUNK_RIFX_LITTLE_ENDIAN)
+		if(num_bytes_read >= MIN_RIFX_CHUNK_READ_SIZE)
 		{
-			// @ByteOrder: Big or Little Endian.
-			switch(chunk.codec)
+			u32 chunk_id = 0;
+			u32 chunk_format = 0;
+
+			CopyMemory(&chunk_id, &file_buffer[0], sizeof(chunk_id));
+			CopyMemory(&chunk_format, &file_buffer[8], sizeof(chunk_format));
+			
+			chunk_id = swap_byte_order(chunk_id);
+			chunk_format = swap_byte_order(chunk_format);
+
+			// This would work without swapping the byte order because we check both big and little endian format signatures.
+			// But it'll be useful for the other file types.
+			if(chunk_id == CHUNK_RIFX_BIG_ENDIAN || chunk_id == CHUNK_RIFX_LITTLE_ENDIAN)
 			{
-				case(CODEC_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN):
-				case(CODEC_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN):	return TEXT("Director Movie or Cast");
+				switch(chunk_format)
+				{
+					case(FORMAT_DIRECTOR_MOVIE_OR_CAST_BIG_ENDIAN):
+					case(FORMAT_DIRECTOR_MOVIE_OR_CAST_LITTLE_ENDIAN):
+					{
+						file_type = TEXT("Director Movie or Cast");
+					} break;
 
-				case(CODEC_SHOCKWAVE_MOVIE_BIG_ENDIAN):
-				case(CODEC_SHOCKWAVE_MOVIE_LITTLE_ENDIAN):			return TEXT("Shockwave Movie");
+					case(FORMAT_SHOCKWAVE_MOVIE_BIG_ENDIAN):
+					case(FORMAT_SHOCKWAVE_MOVIE_LITTLE_ENDIAN):
+					{
+						file_type = TEXT("Shockwave Movie");
+					} break;
 
-				case(CODEC_SHOCKWAVE_CAST_BIG_ENDIAN):
-				case(CODEC_SHOCKWAVE_CAST_LITTLE_ENDIAN):			return TEXT("Shockwave Cast");
+					case(FORMAT_SHOCKWAVE_CAST_BIG_ENDIAN):
+					case(FORMAT_SHOCKWAVE_CAST_LITTLE_ENDIAN):
+					{
+						file_type = TEXT("Shockwave Cast");
+					} break;
+				}				
+			}
+			else if(chunk_id == CHUNK_RIFF_BIG_ENDIAN && chunk_format == FORMAT_XTRA_PACKAGE_BIG_ENDIAN)
+			{
+				file_type = TEXT("Xtra-Package");
+			}
+			// This isn't a RIFF or RIFX container, but we'll take advantage of this structure to check this file signature.
+			else if(chunk_id == SHOCKWAVE_3D_WORLD_SIGNATURE)
+			{
+				file_type = TEXT("Shockwave 3D World");
 			}
 		}
-		else
-		{
-			// @ByteOrder: Big Endian.
-			chunk.id = swap_byte_order(chunk.id);
-			chunk.codec = swap_byte_order(chunk.codec);
 
-			if(chunk.id == CHUNK_RIFF_BIG_ENDIAN && chunk.codec == CODEC_XTRA_PACKAGE_BIG_ENDIAN)
+		if(file_type == NULL && num_bytes_read >= MIN_SHOCKWAVE_AUDIO_READ_SIZE)
+		{
+			if(memory_is_equal(	&file_buffer[SHOCKWAVE_AUDIO_SIGNATURE_OFFSET],
+								SHOCKWAVE_AUDIO_SIGNATURE, SHOCKWAVE_AUDIO_SIGNATURE_SIZE))
 			{
-				return TEXT("Xtra-Package");
-			}
-			else if(chunk.id == CHUNK_SHOCKWAVE_3D_WORLD_BIG_ENDIAN)
-			{
-				return TEXT("Shockwave 3D World");
+				file_type = TEXT("Shockwave Audio");
 			}
 		}
 	}
 
-	return NULL;
+	return file_type;
 }
 
 struct Find_Shockwave_Files_Params

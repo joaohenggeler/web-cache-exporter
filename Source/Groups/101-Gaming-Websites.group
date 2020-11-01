@@ -91,10 +91,27 @@ BEGIN_URL_GROUP FreeArcade
 
 END
 
+BEGIN_URL_GROUP GameHouse
+
+	BEGIN_DOMAINS
+		gamehouse.com
+		ghstatic.com
+	END
+
+END
+
 BEGIN_URL_GROUP Jay Is Games
 
 	BEGIN_DOMAINS
 		jayisgames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Kewlbox
+
+	BEGIN_DOMAINS
+		kewlbox.com
 	END
 
 END

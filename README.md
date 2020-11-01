@@ -9,7 +9,7 @@ This command line tool allows you to more easily view and obtain the contents of
 
 This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed/played when they were still available.
 
-For example, [here's a list of some previously lost browser games that were found by searching the web cache.](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache)
+For example, [here's a list of some previously lost browser games that were found by searching the web cache](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache).
 
 ## Features
 
@@ -40,7 +40,7 @@ The command line arguments in the next subsections may be used. **WCE.exe** is u
 
 Usage:
 ```
-WCE.exe [Other Optional Arguments] &lt;Mandatory Export Argument&gt;
+WCE.exe [Other Optional Arguments] <Mandatory Export Argument>
 ```
 Only one export argument may be used. All arguments after the first export option are ignored.
 
@@ -53,7 +53,7 @@ WCE.exe -export-option [Optional Cache Path] [Optional Output Path]
 
 If a path is empty or not specified, then the application will replace it with a default value. For the cache path, this includes several default locations that vary depending on the browser or plugin. For the output path, this value is set to "ExportedCache".
 
-You can use "." to refer to the current working directory's path.
+You can use "." to refer to the current working directory's path. Note that all paths passed to this application are limited to 260 characters.
 
 | Option            | Description                                                                        |
 |-------------------|------------------------------------------------------------------------------------|
@@ -95,15 +95,15 @@ WCE.exe -find-and-export-all "My Default Cache" "C:\PathToExternalLocationsFile"
 
 The `-explore-files` option can take two arguments:
 ```
-WCE.exe -explore-files &lt;Mandatory Cache Path&gt; [Optional Output Path]
+WCE.exe -explore-files <Mandatory Cache Path> [Optional Output Path]
 ```
 
-This option may be used to explore the files in an unsupported cache location (e.g. from an obscure web plugin), meaning the first argument must always be passed. This feature is useful when combined with [group files](#group-files).
+This option may be used to explore the files in an unsupported cache location (e.g. from an obscure web plugin), meaning the first argument must always be passed. This feature is useful when combined with [group files](#group-files). You can also use the `-no-copy-files` option to only create the CSV file and prevent a large number of files from being copied.
 
 For example:
 ```
 WCE.exe -explore-files "C:\PathToExplore"
-WCE.exe -explore-files "C:\PathToExplore" "My Exploration"
+WCE.exe -no-copy-files -explore-files "C:\PathToExplore" "My Exploration"
 ```
 
 ### Other Arguments
@@ -143,13 +143,13 @@ WCE.exe -filter-by-groups -load-group-files "006-Plugin 101-Gaming-Websites" -ex
 ```
 This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group", and would filter the output based on the groups that they define.
 
-The following options should only be used when exporting the WinINet cache using -export-ie.
+The following options should only be used when exporting the WinINet cache using `-export-ie` or `-find-and-export-all`.
 
 | Option                            | Description                                                                                         |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------|
 | -hint-ie &lt;Local AppData Path&gt; | Specifies the absolute path to the Local AppData folder in the computer where the cache originated. |
 
-The &lt;Local AppData Path&gt; argument is mandatory. This option should only be used under the following circumstances:
+The &lt;Local AppData Path&gt; argument is mandatory. This option should only be used if both of the following are true:
 1. You're exporting the cache from Internet Explorer 10 and 11.
 2. You're not exporting from a default location, i.e., if the cache database files were copied from another computer.
 
@@ -157,12 +157,12 @@ If this is option is not used, the exporter will try to guess this location. You
 
 For example:
 ```
-WCE.exe -hint-ie "C:\Users\My Old PC\AppData\Local" -export-ie "C:\Path To The Cache Files That Came From Another Computer"
+WCE.exe -hint-ie "C:\Users\My Old PC\AppData\Local" -export-ie "C:\Path To The Cache Database Files That Came From Another Computer"
 ```
 
 ## Group Files
 
-Group files are simple text files that tell the application how to label each cached file. Each file may be labelled based on its format or on its original URL. Below are two examples, one file group for Flash and one URL group for the Cartoon Network website:
+Group files are simple text files that tell the application how to label each cached file. Each file may be labelled based on its format or on its original URL. Below are two examples, one file group for Flash movies and one URL group for the Cartoon Network website:
 
 ```
 BEGIN_FILE_GROUP Flash
@@ -218,13 +218,17 @@ In order to target Windows 98 and ME, this program is compiled using Visual Stud
 * Setting `WIN9X_BUILD` to `No`.
 * Setting `USE_VS_2005_OPTIONS` to `No`.
 
-Note that this application wasn't been thoroughly tested with modern Visual Studio versions.
+Note that this application wasn't been thoroughly tested with more modern Visual Studio versions.
+
+### Dependencies
+
+This tool uses Microsoft's Extensible Storage Engine (ESE) API to export later versions of the WinINet cache. As such, the header file `esent.h` is required to build this application. For later versions of Visual Studio, this file is already part of the Windows SDK. For Visual Studio 2005, this file must be obtained from somewhere else and added to [this source directory](Source/ThirdParty/Include) before building. For this project, this file was taken from the [Windows Vista SDK](https://www.microsoft.com/en-eg/download/details.aspx?id=1919) and is not included in the repository.
 
 ## Resources And Tools
 
 This section will list some resources and tools that were used to learn how to process certain cache formats and to validate this application's output.
 
-* [The INDEX.DAT File Format](http://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm)
+* [The INDEX.DAT File Format](https://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm)
 * [MSIE Cache File (index.dat) format specification](https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20%28index.dat%29%20format.asciidoc)
 
 * [NirSoft - IECacheView v1.58 - Internet Explorer Cache Viewer](https://www.nirsoft.net/utils/ie_cache_viewer.html)

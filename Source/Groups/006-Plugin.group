@@ -252,6 +252,9 @@ BEGIN_FILE_GROUP Shockwave
 		; "IFX." (Shockwave 3D World)
 		49 46 58 00
 
+		; "MACR" at offset 0x24 = 36 (Shockwave Audio)
+		__ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ 4D 41 43 52
+
 	END
 
 	BEGIN_MIME_TYPES

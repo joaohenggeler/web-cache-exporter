@@ -834,13 +834,13 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 // 4. is_byte_wildcard - The wildcard byte array to used during this comparison.
 // 5. bytes_to_compare_size - The size of this signature and wildcard array in bytes.
 //
-// @Returns: True if the file signature matched 
+// @Returns: True if the file signature matched. Otherwise, false.
 static bool compare_file_bytes_using_wildcards(	u8* file_buffer, u32 file_buffer_size,
 												u8* bytes_to_compare, bool* is_byte_wildcard, u32 bytes_to_compare_size)
 {
-	u32 num_bytes = MIN(file_buffer_size, bytes_to_compare_size);
+	if(file_buffer_size < bytes_to_compare_size) return false;
 
-	for(u32 i = 0; i < num_bytes; ++i)
+	for(u32 i = 0; i < bytes_to_compare_size; ++i)
 	{
 		if(!is_byte_wildcard[i] && file_buffer[i] != bytes_to_compare[i])
 		{
@@ -849,6 +849,33 @@ static bool compare_file_bytes_using_wildcards(	u8* file_buffer, u32 file_buffer
 	}
 
 	return true;
+}
+
+// Checks if a URL's host ends with a given suffix. This comparison is case insensitive and takes into account the period separator
+// between labels.
+//
+// For example, if the suffix is "go.com", the following hosts match:
+// - "go.com"
+// - "www.go.com"
+// - "disney.go.com"
+//
+// But the following don't:
+// - "lego.com"
+// - "www.lego.com"
+//
+// @Returns: True if the host ends with that suffix. Otherwise, false.
+static bool url_host_ends_with(const TCHAR* host, const TCHAR* suffix)
+{
+	size_t host_length = string_length(host);
+	size_t suffix_length = string_length(suffix);
+	if(suffix_length > host_length) return false;
+
+	if(strings_are_equal(host, suffix, true)) return true;
+
+	const TCHAR* suffix_in_host = host + host_length - suffix_length;
+	bool host_has_period_before_suffix = (suffix_length + 1 <= host_length) && ( *(suffix_in_host - 1) == TEXT('.') );
+
+	return host_has_period_before_suffix && strings_are_equal(suffix_in_host, suffix, true);
 }
 
 // Attempts to match a cached file to any previously loaded groups.
@@ -965,7 +992,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 						}
 					}
 
-					bool urls_match = (host_to_match != NULL) && string_ends_with(host_to_match, domain->host, true);
+					bool urls_match = (host_to_match != NULL) && url_host_ends_with(host_to_match, domain->host);
 
 					// Put any removed top level domains back.
 					if(last_period != NULL)
@@ -978,7 +1005,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 					if(!urls_match && second_to_last_period != NULL)
 					{
 						*second_to_last_period = TEXT('\0');
-						urls_match = (host_to_match != NULL) && string_ends_with(host_to_match, domain->host, true);
+						urls_match = (host_to_match != NULL) && url_host_ends_with(host_to_match, domain->host);
 						// Put any removed second level domains back.
 						*second_to_last_period = TEXT('.');
 					}

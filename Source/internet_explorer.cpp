@@ -131,13 +131,16 @@ static const size_t RAW_CSV_NUM_COLUMNS = _countof(RAW_CSV_COLUMN_TYPES);
 
 // @ByteOrder: Little Endian.
 
-// @Format: Various constants for index.dat.
+// @Format: Various constants for the index.dat file.
 static const size_t NUM_SIGNATURE_CHARS = 28;
 static const size_t NUM_CACHE_DIRECTORY_NAME_CHARS = 8;
 static const size_t MAX_NUM_CACHE_DIRECTORIES = 32;
 static const size_t HEADER_DATA_LENGTH = 32;
 static const size_t BLOCK_SIZE = 128;
 static const size_t ALLOCATION_BITMAP_SIZE = 0x3DB0;
+
+// @Format: Deallocated blocks in index.dat are filled with this value.
+static const u32 DEALLOCATED_VALUE = 0x0BADF00D;
 
 // @Format: The signature that identifies each entry in index.dat.
 // We must be aware of all of them to properly traverse the allocated blocks.
@@ -152,8 +155,8 @@ enum Ie_Index_Entry_Signature
 	ENTRY_DELETED = 0x204C4544, // "DEL "
 	ENTRY_UPDATED = 0x20445055, // "UPD "
 
-	ENTRY_NEWLY_ALLOCATED = 0xDEADBEEF,
-	ENTRY_DEALLOCATED = 0x0BADF00D
+	ENTRY_NEWLY_ALLOCATED = 0xDEADBEEF
+	// The value in DEALLOCATED_VALUE can also appear in an entry's signature member.
 };
 
 // We'll tightly pack the structures that represent different parts of the index.dat file and then access each member directly after
@@ -781,21 +784,21 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					Ie_4_Index_Url_Entry* url_entry_4 			= (Ie_4_Index_Url_Entry*) 		url_entry;
 					Ie_5_To_9_Index_Url_Entry* url_entry_5_to_9 	= (Ie_5_To_9_Index_Url_Entry*) 	url_entry;
 
-					// Some entries may contain garbage values whose value is 0x0BADF00D (which is used to mark deallocated
-					// blocks). We'll use this macro to check if the low 32 bits of each member match this value. If so,
-					// we'll clear them to zero. Empty strings or NULL values will show up as missing values in the CSV files.
+					// Some entries may contain garbage fields whose value is DEALLOCATED_VALUE (which is used to fill deallocated
+					// blocks). We'll use this macro to check if the low 32 bits of each member match this value. If so, we'll
+					// clear them to zero. Empty strings or NULL values will show up as missing values in the CSV files.
 					// This won't work for the few u8 members, though we only use 'cache_directory_index' whose value is always
 					// strictly checked to see if it's within the correct bounds. Note that the low part of the cached file
 					// size may still exist even if the high part is garbage. For example:
 					// - low_cached_file_size = 1234
-					// - high_cached_file_size = 0x0BADF00D
+					// - high_cached_file_size = DEALLOCATED_VALUE
 					// Since these values are checked individually, we'll still keep the useful value and set the high part
 					// to zero.
 					bool was_deallocated = false;
 					#define CLEAR_DEALLOCATED_VALUE(variable_name)\
 					do\
 					{\
-						if( ((u32) (variable_name & 0xFFFFFFFF)) == ENTRY_DEALLOCATED )\
+						if( ((u32) (variable_name & 0xFFFFFFFF)) == DEALLOCATED_VALUE )\
 						{\
 							variable_name = 0;\
 							was_deallocated = true;\
@@ -804,7 +807,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					// Helper macro function used to access a given member in the two types of URL entries (versions 4 and 5).
 					// These two structs are very similar but still differ in how they're laid out. We'll use the previous
-					// macro to discard any garbage 0x0BADF00D values.
+					// macro to discard any garbage deallocated values.
 					#define GET_URL_ENTRY_MEMBER(variable_name, member_name)\
 					do\
 					{\
@@ -1001,7 +1004,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					if(was_deallocated)
 					{
-						log_print(LOG_WARNING, "Internet Explorer 4 to 9: The entry at (%Iu, %Iu) with %I32u block(s) allocated and the signature 0x%08X contained one or more garbage values (0x%08X). These will be cleared to zero. The filename is '%s' and the URL is '%s'.", block_index_in_byte, byte_index, entry->num_allocated_blocks, entry->signature, ENTRY_DEALLOCATED, filename, url);
+						log_print(LOG_WARNING, "Internet Explorer 4 to 9: The entry at (%Iu, %Iu) with %I32u block(s) allocated and the signature 0x%08X contained one or more garbage values (0x%08X). These will be cleared to zero. The filename is '%s' and the URL is '%s'.", block_index_in_byte, byte_index, entry->num_allocated_blocks, entry->signature, DEALLOCATED_VALUE, filename, url);
 					}
 
 					export_cache_entry(exporter, csv_row, full_file_path, url, filename);
@@ -1055,9 +1058,9 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					i += entry->num_allocated_blocks - 1;;
 				} break;
 
-				// The ENTRY_DEALLOCATED type shouldn't be handled like the above since its 'num_allocated_blocks' member
-				// will contain a garbage value.
-				case(ENTRY_DEALLOCATED):
+				// Deallocated entries whose signatures are set to DEALLOCATED_VALUE may appear, but they shouldn't be handled
+				// like the above since their 'num_allocated_blocks' members will contain a garbage value.
+				case(DEALLOCATED_VALUE):
 				{
 					++num_deallocated_entries;
 					// Do nothing and move to the next block on the next iteration.

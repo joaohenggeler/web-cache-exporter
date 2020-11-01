@@ -72,6 +72,14 @@ BEGIN_URL_GROUP CompuServe
 
 END
 
+BEGIN_URL_GROUP Craigslist
+
+	BEGIN_DOMAINS
+		craigslist.org
+	END
+
+END
+
 BEGIN_URL_GROUP Dailymotion
 
 	BEGIN_DOMAINS
@@ -88,11 +96,27 @@ BEGIN_URL_GROUP DeviantArt
 
 END
 
+BEGIN_URL_GROUP Digg
+
+	BEGIN_DOMAINS
+		digg.com
+	END
+
+END
+
 BEGIN_URL_GROUP Discord
 
 	BEGIN_DOMAINS
 		discordapp.com
 		discord.*
+	END
+
+END
+
+BEGIN_URL_GROUP DuckDuckGo
+
+	BEGIN_DOMAINS
+		duckduckgo.com
 	END
 
 END
@@ -133,6 +157,14 @@ BEGIN_URL_GROUP GeoCities
 
 	BEGIN_DOMAINS
 		geocities.*
+	END
+
+END
+
+BEGIN_URL_GROUP The Go Network
+
+	BEGIN_DOMAINS
+		go.com
 	END
 
 END
@@ -193,6 +225,14 @@ BEGIN_URL_GROUP Lego
 
 END
 
+BEGIN_URL_GROUP LiveJournal
+
+	BEGIN_DOMAINS
+		livejournal.com
+	END
+
+END
+
 BEGIN_URL_GROUP LiveLeak
 
 	BEGIN_DOMAINS
@@ -248,6 +288,14 @@ BEGIN_URL_GROUP Microsoft
 
 END
 
+BEGIN_URL_GROUP Mozilla
+
+	BEGIN_DOMAINS
+		mozilla.org
+	END
+
+END
+
 BEGIN_URL_GROUP MSN
 
 	BEGIN_DOMAINS
@@ -260,6 +308,14 @@ BEGIN_URL_GROUP Myspace
 
 	BEGIN_DOMAINS
 		myspace.com
+	END
+
+END
+
+BEGIN_URL_GROUP Netflix
+
+	BEGIN_DOMAINS
+		netflix.com
 	END
 
 END
@@ -304,10 +360,26 @@ BEGIN_URL_GROUP Reddit
 
 END
 
+BEGIN_URL_GROUP Snopes
+
+	BEGIN_DOMAINS
+		snopes.com
+	END
+
+END
+
 BEGIN_URL_GROUP TinyPic
 
 	BEGIN_DOMAINS
 		tinypic.com
+	END
+
+END
+
+BEGIN_URL_GROUP Tumblr
+
+	BEGIN_DOMAINS
+		tumblr.com
 	END
 
 END

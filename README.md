@@ -13,21 +13,17 @@ For example, [here's a list of some previously lost browser games that were foun
 
 ## Features
 
-* Finds and exports the cache by copying the cached files using their original URL's structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, etc).
+* Finds and exports the cache by copying the cached files using their original website's directory structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, etc).
 
-![Image 1](Images/screenshot_1.png)
+![Screenshot - Command Line](Images/screenshot_command_line.png)
 
-![Image 2](Images/screenshot_2.png)
+![Screenshot - CSV](Images/screenshot_csv.png)
 
 * Supports labelling cached files based on their file signatures, MIME types, file extensions, and URLs. Files can be grouped and filtered by their format or original domain.
 
-![Image 3](Images/screenshot_3.png)
+![Screenshot - Website Structure](Images/screenshot_website_structure.png)
 
-![Image 4](Images/screenshot_4.png)
-
-@TODO
-
-The CSV files in these screenshots were viewed using [NirSoft's CSVFileView](https://www.nirsoft.net/utils/csv_file_view.html).
+![Screenshot - Copied Files](Images/screenshot_copied_files.png)
 
 ## Command Line Arguments
 
@@ -75,7 +71,7 @@ WCE.exe -export-shockwave "C:\PathToTheCache" "My Cache"
 WCE.exe -export-java "" "My Default Cache"
 ```
 
-When exporting Internet Explorer 4 to 9's cache, this tool will also create a second output folder and CSV file called `IE-RAW`. This is done to copy files that might still exist on disk despite not being listed in the cache database. Note that exporting the cache from Internet Explorer 10 and 11 is only supported in Windows Vista and later.
+When exporting Internet Explorer 4 to 9's cache, this tool will also create a second output folder and CSV file called `IE-RAW`. This is done to copy files that might still exist on disk despite not being listed in the cache database. Exporting the cache from Internet Explorer 10 and 11 is only supported in Windows Vista and later.
 
 There are two other options that have a similar behavior but that take different arguments:
 
@@ -168,7 +164,7 @@ WCE.exe -hint-ie "C:\Users\My Old PC\AppData\Local" -export-ie "C:\Path To The C
 
 ## Group Files
 
-Group files are simple text files that tell the application how to label each cached file. Each file may be labelled based on its format or on its original URL. Below are two examples, one file group for Flash movies and one URL group for the Cartoon Network website:
+Group files are simple text files that tell the application how to label each cached file. Each file may be labelled based on its format or on its original domain. Below are two examples, one file group for Flash movies and one URL group for the Cartoon Network website:
 
 ```
 BEGIN_FILE_GROUP Flash
@@ -218,7 +214,7 @@ Build.bat
 Build.bat /D EXPORT_EMPTY_FILES
 ```
 
-In order to target Windows 98 and ME, this program is compiled using Visual Studio 2005. It's possible to use Visual Studio 2015 or later by doing the following:
+In order to target Windows 98 and ME, this program is compiled using Visual Studio 2005. It's possible to skip building `WCE9x32.exe` and use Visual Studio 2015 or later by doing the following:
 
 * Setting `VCVARSALL_PATH` to the path of the `vcvarsall.bat` batch file that is installed with Visual Studio.
 * Setting `WIN9X_BUILD` to `No`.

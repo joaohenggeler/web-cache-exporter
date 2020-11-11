@@ -30,7 +30,7 @@ PUSHD "%~dp0"
 	REM certain macros (like DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
-	SET "BUILD_MODE=debug"
+	SET "BUILD_MODE=release"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
@@ -185,10 +185,10 @@ PUSHD "%~dp0"
 	REM ...so we can pass them to the resource compiler.
 	SET "RESOURCE_VERSION_OPTIONS=/D MAJOR_VERSION=%MAJOR_VERSION% /D MINOR_VERSION=%MINOR_VERSION% /D PATCH_VERSION=%PATCH_VERSION% /D BUILD_NUMBER=%BUILD_NUMBER%"
 
-	REM Delete the build directories.
+	REM Delete the previous builds.
 	IF "%CLEAN_BUILD%"=="Yes" (
 
-		ECHO [%~nx0] Deleting "%MAIN_BUILD_PATH%"...
+		ECHO [%~nx0] Deleting the previous builds in "%MAIN_BUILD_PATH%"...
 		ECHO.
 
 		IF EXIST "%MAIN_BUILD_PATH%" (

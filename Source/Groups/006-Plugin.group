@@ -8,7 +8,7 @@ BEGIN_FILE_GROUP 3D Groove GX
 
 END
 
-; Virtools / 3D Life Player
+; NeMo Web Player / Virtools Player / 3D Life Player
 BEGIN_FILE_GROUP 3DVIA Player
 
 	BEGIN_FILE_SIGNATURES
@@ -129,6 +129,14 @@ BEGIN_FILE_GROUP Flash
 
 END
 
+BEGIN_FILE_GROUP GoBit Games Plugin
+
+	BEGIN_MIME_TYPES
+		application/x-gobitgamesplugin
+	END
+
+END
+
 BEGIN_FILE_GROUP Hypercosm
 
 	BEGIN_FILE_SIGNATURES
@@ -190,6 +198,14 @@ BEGIN_FILE_GROUP Java
 		jnlp
 		ser
 		djr
+	END
+
+END
+
+BEGIN_FILE_GROUP PopCap Plugin
+
+	BEGIN_MIME_TYPES
+		application/x-popcaploader
 	END
 
 END
@@ -264,7 +280,7 @@ BEGIN_FILE_GROUP Shockwave
 	BEGIN_FILE_EXTENSIONS
 		dir dxr dcr
 		cst cxt cct
-		swa w3d
+		w3d swa
 		x32 w32
 	END
 

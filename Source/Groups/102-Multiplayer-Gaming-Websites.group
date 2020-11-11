@@ -1,10 +1,18 @@
-; This file lists some popular online multiplayer game websites between 1995 and now.
+; This file lists some popular online multiplayer game websites, both old and new.
 ; Be sure to check the Lost Websites group file first before adding any others.
 
 BEGIN_URL_GROUP Club Penguin
 
 	BEGIN_DOMAINS
 		clubpenguin.com
+	END
+
+END
+
+BEGIN_URL_GROUP FlyOrDie
+
+	BEGIN_DOMAINS
+		flyordie.com
 	END
 
 END

@@ -10,13 +10,13 @@ WCE9x32
 WCE32
 WCE64
 
-# Java Plugin index files for testing.
-Source/Testing/JavaPlugin/*
-!Source/Testing/JavaPlugin/*.bat
-!Source/Testing/JavaPlugin/*.java
-
 # Third party source files.
 Source/ThirdParty/Include/esent.h
+
+# Java Plugin index and class files for testing.
+Source/Other/JavaPlugin/*
+!Source/Other/JavaPlugin/*.bat
+!Source/Other/JavaPlugin/*.java
 
 # Used by the Build.bat to package the releases.
 _7z920_extra

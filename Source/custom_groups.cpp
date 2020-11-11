@@ -81,7 +81,6 @@
 */
 
 static const TCHAR* GROUP_FILES_DIRECTORY_NAME = TEXT("Groups");
-static const TCHAR* GROUP_FILES_SEARCH_PATH = TEXT("Groups\\*.group");
 static const TCHAR* GROUP_FILES_SEARCH_QUERY = TEXT("*.group");
 
 // Various keywords and delimiters for the group file syntax.

@@ -1,4 +1,4 @@
-; This file lists some popular game portal websites between 1995 and now.
+; This file lists some popular game portal websites, both old and new.
 ; Be sure to check the Lost Websites group file first before adding any others.
 
 BEGIN_URL_GROUP Addicting Games
@@ -50,10 +50,42 @@ BEGIN_URL_GROUP Armor Games
 
 END
 
+BEGIN_URL_GROUP Big Fish Games
+
+	BEGIN_DOMAINS
+		bigfishgames.com
+	END
+
+END
+
 BEGIN_URL_GROUP Bonus.com
 
 	BEGIN_DOMAINS
 		bonus.com
+	END
+
+END
+
+BEGIN_URL_GROUP Box10
+
+	BEGIN_DOMAINS
+		box10.com
+	END
+
+END
+
+BEGIN_URL_GROUP BubbleBox
+
+	BEGIN_DOMAINS
+		bubblebox.com
+	END
+
+END
+
+BEGIN_URL_GROUP CleverMedia
+
+	BEGIN_DOMAINS
+		clevermedia.com
 	END
 
 END
@@ -82,11 +114,27 @@ BEGIN_URL_GROUP Crazy Monkey Games
 
 END
 
+BEGIN_URL_GROUP Ezone
+
+	BEGIN_DOMAINS
+		ezone.com
+	END
+
+END
+
 BEGIN_URL_GROUP FreeArcade
 
 	BEGIN_DOMAINS
 		javaarcade.com
 		freearcade.com
+	END
+
+END
+
+BEGIN_URL_GROUP Funschool
+
+	BEGIN_DOMAINS
+		funschool.com
 	END
 
 END
@@ -100,10 +148,51 @@ BEGIN_URL_GROUP GameHouse
 
 END
 
+BEGIN_URL_GROUP Gamelet
+
+	BEGIN_DOMAINS
+		gamelet.com
+	END
+
+END
+
+BEGIN_URL_GROUP GlobalFun
+
+	BEGIN_DOMAINS
+		globalfun.com
+	END
+
+END
+
+BEGIN_URL_GROUP Java On The Brain
+
+	BEGIN_DOMAINS
+		javaonthebrain.com
+		tdb.uu.se/~karl
+	END
+
+END
+
+BEGIN_URL_GROUP JavaGamePlay.com
+
+	BEGIN_DOMAINS
+		javagameplay.com
+	END
+
+END
+
 BEGIN_URL_GROUP Jay Is Games
 
 	BEGIN_DOMAINS
 		jayisgames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Kaboose
+
+	BEGIN_DOMAINS
+		kaboose.com
 	END
 
 END
@@ -120,6 +209,14 @@ BEGIN_URL_GROUP Kongregate
 
 	BEGIN_DOMAINS
 		kongregate.com
+	END
+
+END
+
+BEGIN_URL_GROUP MaMaMedia
+
+	BEGIN_DOMAINS
+		mamamedia.com
 	END
 
 END
@@ -144,6 +241,7 @@ BEGIN_URL_GROUP Newgrounds
 
 	BEGIN_DOMAINS
 		newgrounds.com
+		ungrounded.net
 	END
 
 END
@@ -160,6 +258,14 @@ BEGIN_URL_GROUP Not Doppler
 
 	BEGIN_DOMAINS
 		notdoppler.com
+	END
+
+END
+
+BEGIN_URL_GROUP OneMoreLevel
+
+	BEGIN_DOMAINS
+		onemorelevel.com
 	END
 
 END
@@ -181,10 +287,26 @@ BEGIN_URL_GROUP Shockwave.com
 
 END
 
+BEGIN_URL_GROUP WildTangent
+
+	BEGIN_DOMAINS
+		wildtangent.com
+	END
+
+END
+
 BEGIN_URL_GROUP Y8
 
 	BEGIN_DOMAINS
 		y8.com
+	END
+
+END
+
+BEGIN_URL_GROUP Zeeks
+
+	BEGIN_DOMAINS
+		zeeks.com
 	END
 
 END

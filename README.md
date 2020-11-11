@@ -42,7 +42,10 @@ Usage:
 ```
 WCE.exe [Other Optional Arguments] <Mandatory Export Argument>
 ```
+
 Only one export argument may be used. All arguments after the first export option are ignored.
+
+When executed, this tool will create a log file called `WCE.log` in the current working directory. The generated log and CSV files use UTF-8 as their character encoding.
 
 ### Export Arguments
 
@@ -55,12 +58,14 @@ If a path is empty or not specified, then the application will replace it with a
 
 You can use "." to refer to the current working directory's path. Note that all paths passed to this application are limited to 260 characters.
 
-| Option            | Description                                                                        |
-|-------------------|------------------------------------------------------------------------------------|
-| -export-ie        | Exports the WinINet cache, including Internet Explorer 4 to 11.                    |
-| -export-flash     | Exports the Flash Player's shared library cache and temporary Flash videos.        |
-| -export-shockwave | Exports the Shockwave Player's cache, including Xtras.                             |
-| -export-java      | Exports The Java Plugin's cache from Java 1.3 to 8.                                |
+The names of the output folder and CSV file depend on the export option (see the "Output Name" columns below). For example, using `-export-ie` would create a directory called `IE` and a CSV file called `IE.csv` in the output path.
+
+| Option            | Description                                                                        | Output Name |
+|-------------------|------------------------------------------------------------------------------------|-------------|
+| -export-ie        | Exports the WinINet cache, including Internet Explorer 4 to 11.                    | IE          |
+| -export-flash     | Exports the Flash Player's shared library cache and temporary Flash videos.        | FL          |
+| -export-shockwave | Exports the Shockwave Player's cache, including Xtras.                             | SW          |
+| -export-java      | Exports the Java Plugin's cache from Java 1.3 to 8.                                | JV          |
 
 For example:
 ```
@@ -70,14 +75,14 @@ WCE.exe -export-shockwave "C:\PathToTheCache" "My Cache"
 WCE.exe -export-java "" "My Default Cache"
 ```
 
-Note that exporting the cache from Internet Explorer 10 and 11 is only supported in Windows Vista and later.
+When exporting Internet Explorer 4 to 9's cache, this tool will also create a second output folder and CSV file called `IE-RAW`. This is done to copy files that might still exist on disk despite not being listed in the cache database. Note that exporting the cache from Internet Explorer 10 and 11 is only supported in Windows Vista and later.
 
 There are two other options that have a similar behavior but that take different arguments:
 
-| Option               | Description                                              |
-|----------------------|----------------------------------------------------------|
-| -find-and-export-all | Exports all of the above at once.                        |
-| -explore-files       | Exports any files in a directory and its subdirectories. |
+| Option               | Description                                              | Output Name       |
+|----------------------|----------------------------------------------------------|-------------------|
+| -find-and-export-all | Exports all of the above at once.                        | &lt;See Above&gt; |
+| -explore-files       | Exports any files in a directory and its subdirectories. | EXPLORE           |
 
 The `-find-and-export-all` option can take two arguments:
 ```
@@ -141,6 +146,7 @@ For example:
 ```
 WCE.exe -filter-by-groups -load-group-files "006-Plugin 101-Gaming-Websites" -export-option
 ```
+
 This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group", and would filter the output based on the groups that they define.
 
 The following options should only be used when exporting the WinINet cache using `-export-ie` or `-find-and-export-all`.
@@ -218,15 +224,17 @@ In order to target Windows 98 and ME, this program is compiled using Visual Stud
 * Setting `WIN9X_BUILD` to `No`.
 * Setting `USE_VS_2005_OPTIONS` to `No`.
 
-Note that this application wasn't been thoroughly tested with more modern Visual Studio versions.
+Note that this application hasn't been thoroughly tested with modern versions of Visual Studio.
 
 ### Dependencies
 
-This tool uses Microsoft's Extensible Storage Engine (ESE) API to export later versions of the WinINet cache. As such, the header file `esent.h` is required to build this application. For later versions of Visual Studio, this file is already part of the Windows SDK. For Visual Studio 2005, this file must be obtained from somewhere else and added to [this source directory](Source/ThirdParty/Include) before building. For this project, this file was taken from the [Windows Vista SDK](https://www.microsoft.com/en-eg/download/details.aspx?id=1919) and is not included in the repository.
+This tool uses Microsoft's Extensible Storage Engine (ESE) API to export later versions of the WinINet cache. As such, the header file `esent.h` is required to build this application. For later versions of Visual Studio, this file is already part of the Windows SDK. For Visual Studio 2005, this file must be obtained from somewhere else and added to [this source directory](Source/ThirdParty/Include) before building. For this project, this file was taken from the [Windows Vista SDK](https://www.microsoft.com/en-eg/download/details.aspx?id=1919) and is not included in this repository.
 
 ## Resources And Tools
 
 This section will list some resources and tools that were used to learn how to process certain cache formats and to validate this application's output.
+
+### Internet Explorer
 
 * [The INDEX.DAT File Format](https://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm)
 * [MSIE Cache File (index.dat) format specification](https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20%28index.dat%29%20format.asciidoc)
@@ -235,9 +243,13 @@ This section will list some resources and tools that were used to learn how to p
 * [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/)
 * [NirSoft - Improved solution for reading the history of Internet Explorer 10](https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/)
 
-See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.html), including [ChromeCacheView](https://www.nirsoft.net/utils/chrome_cache_view.html), [MZCacheView](https://www.nirsoft.net/utils/mozilla_cache_viewer.html), [OperaCacheView](https://www.nirsoft.net/utils/opera_cache_view.html), [SafariCacheView](https://www.nirsoft.net/utils/safari_cache_view.html), and [VideoCacheView](https://www.nirsoft.net/utils/video_cache_view.html).
+### Other
 
-[Geoff Chappell's software analysis website](https://www.geoffchappell.com) was also used to check the minimum supported Windows version for some functions in the Windows API.
+* [Geoff Chappell's software analysis website](https://www.geoffchappell.com) was also used to check the minimum supported Windows version for some functions in the Windows API.
+
+* [NirSoft's CSVFileView](https://www.nirsoft.net/utils/csv_file_view.html) is a useful lightweight tool for viewing the resulting CSV files.
+
+* See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.html), including [ChromeCacheView](https://www.nirsoft.net/utils/chrome_cache_view.html), [MZCacheView](https://www.nirsoft.net/utils/mozilla_cache_viewer.html), [OperaCacheView](https://www.nirsoft.net/utils/opera_cache_view.html), [SafariCacheView](https://www.nirsoft.net/utils/safari_cache_view.html), and [VideoCacheView](https://www.nirsoft.net/utils/video_cache_view.html).
 
 ## Special Thanks
 

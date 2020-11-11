@@ -25,8 +25,8 @@ as whitespace.
 BEGIN_FILE_GROUP HTML
 
 	; This defines a list of file signatures. These are composed of one
-	or more bytes represented in hexadecimal. Each value ranges from 00
-	to FF. Only one file signature is allowed per line.
+	; or more bytes represented in hexadecimal. Each value ranges from 00
+	; to FF. Only one file signature is allowed per line.
 
 	; You can also use "__" as wildcards that match any byte.
 
@@ -42,7 +42,7 @@ BEGIN_FILE_GROUP HTML
 	END
 
 	; This defines a list of MIME types. You can add multiple values in
-	each line.
+	; each line.
 
 	BEGIN_MIME_TYPES
 		text/html
@@ -50,7 +50,7 @@ BEGIN_FILE_GROUP HTML
 	END
 
 	; This defines a list of file extensions. You can add multiple values
-	in each line.
+	; in each line.
 
 	BEGIN_FILE_EXTENSIONS
 		htm html
@@ -72,7 +72,7 @@ Matching Rules:
 
 1. File signatures are matched exactly, taking into account any wildcard
 bytes. If the file's size is smaller than the file signature, it will never
-match it.
+match it. Each file signature can specify at most 1024 bytes.
 
 2. MIME types match the beginning of the text. For example, a group that specifies
 "text/java" will match "text/javascript" and "text/javascript; charset=UTF-8".
@@ -86,8 +86,8 @@ URL groups are very similar:
 BEGIN_URL_GROUP Cartoon Network
 
 	; This defines a list of domains. You can use the forward slash "/"
-	character to separate the host segment from the path. Only one domain
-	is allowed per line.
+	; character to separate the host segment from the path. Only one domain
+	; is allowed per line.
 
 	; You can also add ".*" to the end of a host to match any top or second
 	; level domain.

@@ -205,14 +205,6 @@ BEGIN_URL_GROUP Webkinz
 
 END
 
-BEGIN_URL_GROUP Yahoo! Games
-
-	BEGIN_DOMAINS
-		yimg.com/os/en_us/Games
-	END
-
-END
-
 BEGIN_URL_GROUP Zylom
 
 	BEGIN_DOMAINS

@@ -56,10 +56,26 @@ BEGIN_URL_GROUP Baidu
 
 END
 
+BEGIN_URL_GROUP Bandcamp
+
+	BEGIN_DOMAINS
+		bandcamp.com
+	END
+
+END
+
 BEGIN_URL_GROUP Bing
 
 	BEGIN_DOMAINS
 		bing.com
+	END
+
+END
+
+BEGIN_URL_GROUP Blogger
+
+	BEGIN_DOMAINS
+		blogspot.com
 	END
 
 END
@@ -408,6 +424,14 @@ BEGIN_URL_GROUP Snopes
 
 END
 
+BEGIN_URL_GROUP SoundCloud
+
+	BEGIN_DOMAINS
+		soundcloud.com
+	END
+
+END
+
 BEGIN_URL_GROUP Spotify
 
 	BEGIN_DOMAINS
@@ -469,6 +493,14 @@ BEGIN_URL_GROUP Windows Live
 
 	BEGIN_DOMAINS
 		live.com
+	END
+
+END
+
+BEGIN_URL_GROUP WordPress
+
+	BEGIN_DOMAINS
+		wordpress.com
 	END
 
 END

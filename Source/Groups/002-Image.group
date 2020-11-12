@@ -31,8 +31,7 @@ BEGIN_FILE_GROUP Image
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		bmp gif jpg jpeg png svg tiff tif webp
-		cur ico
+		apng avif bmp cur gif ico jfif jpg jpeg pjpeg pjp png svg tif tiff webp
 	END
 
 END

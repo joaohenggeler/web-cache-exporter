@@ -15,15 +15,15 @@ For example, [here's a list of some previously lost browser games that were foun
 
 * Finds and exports the cache by copying the cached files using their original website's directory structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, etc).
 
-![Screenshot - Command Line](Images/screenshot_command_line.png)
+<img alt="Command Line Screenshot" src="Images/screenshot_command_line.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
 
-![Screenshot - CSV](Images/screenshot_csv.png)
+<img alt="CSV File Screenshot" src="Images/screenshot_csv_file.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
 
 * Supports labelling cached files based on their file signatures, MIME types, file extensions, and URLs. Files can be grouped and filtered by their format or original domain.
 
-![Screenshot - Website Structure](Images/screenshot_website_structure.png)
+<img alt="Website Structure Screenshot" src="Images/screenshot_website_structure.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
 
-![Screenshot - Copied Files](Images/screenshot_copied_files.png)
+<img alt="Exported Files Screenshot" src="Images/screenshot_exported_files.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
 
 ## Command Line Arguments
 
@@ -207,7 +207,7 @@ To learn more about file and URL groups, see the [About Groups](Source/Groups/Ab
 
 ## Building
 
-This application is compiled using the **[Build.bat](Build.bat)** batch file. See the comments at the top of this file to learn how to use and set each basic build parameter. This file is executed using the following syntax: `Build.bat [Optional Compiler Arguments]`. For example:
+This application is written in C-style C++03 and is compiled using the **[Build.bat](Build.bat)** batch file. See the comments at the top of this file to learn how to use and set each basic build parameter. This file is executed using the following syntax: `Build.bat [Optional Compiler Arguments]`. For example:
 
 ```
 Build.bat

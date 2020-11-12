@@ -15,15 +15,15 @@ For example, [here's a list of some previously lost browser games that were foun
 
 * Finds and exports the cache by copying the cached files using their original website's directory structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, etc).
 
-<img alt="Command Line Screenshot" src="Images/screenshot_command_line.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
+![Command Line Screenshot](Images/screenshot_command_line.png)
 
-<img alt="CSV File Screenshot" src="Images/screenshot_csv_file.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
+![CSV File Screenshot](Images/screenshot_csv_file.png)
 
 * Supports labelling cached files based on their file signatures, MIME types, file extensions, and URLs. Files can be grouped and filtered by their format or original domain.
 
-<img alt="Website Structure Screenshot" src="Images/screenshot_website_structure.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
+![Website Structure Screenshot](Images/screenshot_website_structure.png)
 
-<img alt="Exported Files Screenshot" src="Images/screenshot_exported_files.png" style="width:50%; display:block; margin-left:auto; margin-right:auto">
+<img alt="Exported Files Screenshot" src="Images/screenshot_exported_files.png" width="545" height="362">
 
 ## Command Line Arguments
 

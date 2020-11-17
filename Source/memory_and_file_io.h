@@ -261,7 +261,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 //
 // @Parameters:
 // 1. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
-// strings (ANSI or Wide depending on the build target).
+// strings (narrow ANSI or wide UTF-16 depending on the build target).
 // 2. ... - Zero or more arguments to be inserted in the format string.
 #define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n\n"), __VA_ARGS__)
 
@@ -373,7 +373,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Version"
 };
 
-// A helper structure used to write values to the CSV file. The 'value' member is the ANSI or Wide string to write, and
+// A helper structure used to write values to the CSV file. The 'value' member is the ANSI or UTF-16 string to write, and
 // 'utf_16_value' an intermediary variable that is used to convert the string to UTF-8.
 // See: csv_print_row().
 struct Csv_Entry

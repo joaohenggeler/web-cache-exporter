@@ -36,7 +36,7 @@
 	extensions, file signatures, and URLs. These are useful to identify files that belong to web plugins like Flash or Shockwave,
 	or that came from certain websites like gaming portals.
 
-	- When working with intermediary strings, this application will use narrow ANSI strings on Windows 98 and ME, and wide UTF-16
+	- When working with intermediary strings, this application will use narrow ANSI strings on Windows 98 and ME, and wide UTF-16 LE
 	strings on Windows 2000 to 10. Any files that are stored on disk use UTF-8 as the character encoding. This includes source
 	files, READMEs, group files, CSV files, the log file, etc.
 
@@ -381,7 +381,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 }
 
 // Retrieves the size of the temporary memory in bytes, based on the current Windows version. This size is twice as large for the
-// Windows 2000 through 10 builds in order to store wide UTF-16 strings.
+// Windows 2000 through 10 builds in order to store UTF-16 strings.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the current Windows version. The 'os_version' member must be set before calling
@@ -488,7 +488,7 @@ int _tmain(int argc, TCHAR* argv[])
 {
 	console_print("Web Cache Exporter v%hs", EXPORTER_BUILD_VERSION);
 
-	Exporter exporter = {};	
+	Exporter exporter = {};
 
 	if(!create_log_file(LOG_FILE_NAME))
 	{
@@ -1311,8 +1311,10 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 	safe_close_handle(&file_handle);
 
 	*result_num_profiles = num_profiles;
+	
+	int remaining_num_profiles = num_profiles - 1;
 	// Total Size = Size for the Profile array + Size for the string data.
-	return 	sizeof(External_Locations) + MAX(num_profiles - 1, 0) * sizeof(Profile)
+	return 	sizeof(External_Locations) + MAX(remaining_num_profiles, 0) * sizeof(Profile)
 			+ total_locations_size * sizeof(TCHAR);
 }
 

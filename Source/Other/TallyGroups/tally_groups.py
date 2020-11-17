@@ -71,7 +71,7 @@ for i, csv_file_path in enumerate(csv_file_path_list):
 	print()
 
 if not csv_file_path_list:
-	print('No CSV files found in the current working directory.')
+	print(f'No CSV files found in: "{base_path}"')
 	print()
 
 print('Finished running.')

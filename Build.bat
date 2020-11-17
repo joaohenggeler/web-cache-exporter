@@ -30,7 +30,7 @@ PUSHD "%~dp0"
 	REM certain macros (like DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
-	SET "BUILD_MODE=release"
+	SET "BUILD_MODE=debug"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
@@ -95,8 +95,8 @@ PUSHD "%~dp0"
 	REM Common linker options and any other ones that only apply to a specific build target or mode.
 	REM We used to statically link to ESENT.lib in the Windows 2000 to 10 (NT) builds.
 	SET "LINKER_OPTIONS=/link /WX /NODEFAULTLIB"
-	SET "LINKER_OPTIONS_RELEASE_ONLY=/OPT:REF"
-	SET "LINKER_OPTIONS_DEBUG_ONLY="
+	SET "LINKER_OPTIONS_RELEASE_ONLY=/LTCG /OPT:REF,ICF"
+	SET "LINKER_OPTIONS_DEBUG_ONLY=/DEBUG"
 	SET "LINKER_OPTIONS_WIN_NT_ONLY="
 	SET "LINKER_OPTIONS_WIN_9X_ONLY="
 	SET "LINKER_OPTIONS_32_ONLY=/LIBPATH:"%THIRD_PARTY_LIBRARIES_PATH_32%""

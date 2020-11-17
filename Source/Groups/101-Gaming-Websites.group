@@ -114,6 +114,14 @@ BEGIN_URL_GROUP Crazy Monkey Games
 
 END
 
+BEGIN_URL_GROUP DAN-BALL
+
+	BEGIN_DOMAINS
+		dan-ball.jp
+	END
+
+END
+
 BEGIN_URL_GROUP Ezone
 
 	BEGIN_DOMAINS
@@ -156,10 +164,26 @@ BEGIN_URL_GROUP Gamelet
 
 END
 
+BEGIN_URL_GROUP Global Freeplay
+
+	BEGIN_DOMAINS
+		globalfreeplay.com
+	END
+
+END
+
 BEGIN_URL_GROUP GlobalFun
 
 	BEGIN_DOMAINS
 		globalfun.com
+	END
+
+END
+
+BEGIN_URL_GROUP iWin
+
+	BEGIN_DOMAINS
+		iwin.com
 	END
 
 END
@@ -189,6 +213,14 @@ BEGIN_URL_GROUP Jay Is Games
 
 END
 
+BEGIN_URL_GROUP Jippii
+
+	BEGIN_DOMAINS
+		jippii.com
+	END
+
+END
+
 BEGIN_URL_GROUP Kaboose
 
 	BEGIN_DOMAINS
@@ -213,6 +245,14 @@ BEGIN_URL_GROUP Kongregate
 
 END
 
+BEGIN_URL_GROUP Lego Mindstorms
+
+	BEGIN_DOMAINS
+		mindstorms.lego.com
+	END
+
+END
+
 BEGIN_URL_GROUP MaMaMedia
 
 	BEGIN_DOMAINS
@@ -233,6 +273,14 @@ BEGIN_URL_GROUP Miniclip
 
 	BEGIN_DOMAINS
 		miniclip.com
+	END
+
+END
+
+BEGIN_URL_GROUP MoFunZone
+
+	BEGIN_DOMAINS
+		mofunzone.com
 	END
 
 END
@@ -270,10 +318,29 @@ BEGIN_URL_GROUP OneMoreLevel
 
 END
 
+BEGIN_URL_GROUP Playforia / Aapeli / Playray / Apaja
+
+	BEGIN_DOMAINS
+		playforia.net
+		aapeli.com
+		playray.com
+		apaja.com
+	END
+
+END
+
 BEGIN_URL_GROUP PopCap
 
 	BEGIN_DOMAINS
 		popcap.com
+	END
+
+END
+
+BEGIN_URL_GROUP Radical Play
+
+	BEGIN_DOMAINS
+		radicalplay.com
 	END
 
 END
@@ -295,6 +362,22 @@ BEGIN_URL_GROUP WildTangent
 
 END
 
+BEGIN_URL_GROUP WorldWinner
+
+	BEGIN_DOMAINS
+		worldwinner.com
+	END
+
+END
+
+BEGIN_URL_GROUP XGen Studios
+
+	BEGIN_DOMAINS
+		xgenstudios.com
+	END
+
+END
+
 BEGIN_URL_GROUP Y8
 
 	BEGIN_DOMAINS
@@ -307,6 +390,14 @@ BEGIN_URL_GROUP Zeeks
 
 	BEGIN_DOMAINS
 		zeeks.com
+	END
+
+END
+
+BEGIN_URL_GROUP Zylom
+
+	BEGIN_DOMAINS
+		zylom.com
 	END
 
 END

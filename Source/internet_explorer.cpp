@@ -377,12 +377,12 @@ static void undecorate_path(TCHAR* path)
 	}
 }
 
-// 
+// Parses specific cache related fields from HTTP headers.
 //
-// This function is used when processing both index.dat and the ESE databases.
+// This function is used when processing both index.dat and the ESE databases for Internet Explorer 4 to 11's cache formats.
 //
 // @Parameters:
-// 1. arena -  The Arena structure that receives the various headers' values as TCHAR (ANSI or Wide) strings.
+// 1. arena -  The Arena structure that receives the various headers' values as strings.
 // 2. headers_to_copy - A narrow string that contains the HTTP headers. This string isn't necessarily null terminated.
 // 3. headers_size - The size of the headers string in bytes.
 // The remaining parameters contain the address of the string in the Arena structure that contains the value of their respective
@@ -767,6 +767,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		{
 			void* current_block = advance_bytes(blocks, i * BLOCK_SIZE);
 			Ie_Index_File_Map_Entry* entry = (Ie_Index_File_Map_Entry*) current_block;
+			_ASSERT(entry->num_allocated_blocks > 0);
 
 			switch(entry->signature)
 			{
@@ -1031,31 +1032,31 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				case(ENTRY_REDIRECT):
 				{
 					++num_redirect_entries;
-					i += entry->num_allocated_blocks - 1;;
+					i += entry->num_allocated_blocks - 1;
 				} break;
 
 				case(ENTRY_HASH):
 				{
 					++num_hash_entries;
-					i += entry->num_allocated_blocks - 1;;
+					i += entry->num_allocated_blocks - 1;
 				} break;
 
 				case(ENTRY_UPDATED):
 				{
 					++num_updated_entries;
-					i += entry->num_allocated_blocks - 1;;
+					i += entry->num_allocated_blocks - 1;
 				} break;
 
 				case(ENTRY_DELETED):
 				{
 					++num_deleted_entries;
-					i += entry->num_allocated_blocks - 1;;
+					i += entry->num_allocated_blocks - 1;
 				} break;
 
 				case(ENTRY_NEWLY_ALLOCATED):
 				{
 					++num_newly_allocated_entries;
-					i += entry->num_allocated_blocks - 1;;
+					i += entry->num_allocated_blocks - 1;
 				} break;
 
 				// Deallocated entries whose signatures are set to DEALLOCATED_VALUE may appear, but they shouldn't be handled

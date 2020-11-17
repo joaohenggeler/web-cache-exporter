@@ -23,7 +23,7 @@ For example, [here's a list of some previously lost browser games that were foun
 
 ![Website Structure Screenshot](Images/screenshot_website_structure.png)
 
-<img alt="Exported Files Screenshot" src="Images/screenshot_exported_files.png" width="545" height="362">
+<img alt="Exported Files Screenshot" src="Images/screenshot_exported_files.png" width="622" height="414">
 
 ## Command Line Arguments
 
@@ -232,8 +232,8 @@ This section will list some resources and tools that were used to learn how to p
 
 ### Internet Explorer
 
-* [The INDEX.DAT File Format](https://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm)
-* [MSIE Cache File (index.dat) format specification](https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20%28index.dat%29%20format.asciidoc)
+* [Geoff Chappell - The INDEX.DAT File Format](https://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm)
+* [libmsiecf - MSIE Cache File (index.dat) format specification](https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20%28index.dat%29%20format.asciidoc)
 
 * [NirSoft - IECacheView v1.58 - Internet Explorer Cache Viewer](https://www.nirsoft.net/utils/ie_cache_viewer.html)
 * [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/)

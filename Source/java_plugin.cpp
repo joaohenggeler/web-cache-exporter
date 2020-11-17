@@ -578,13 +578,13 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second byte (0x%08X) does not match the pattern.", modified_utf_8_string, b);
+					log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second byte (0x%08X) does not match the pattern.", modified_utf_8_string, b);
 					return NULL;
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second byte in the group.", modified_utf_8_string);
+				log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second byte in the group.", modified_utf_8_string);
 				return NULL;
 			}
 		}
@@ -605,19 +605,19 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second (0x%08X) or third byte (0x%08X) does not match the pattern.", modified_utf_8_string, b, c);
+					log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second (0x%08X) or third byte (0x%08X) does not match the pattern.", modified_utf_8_string, b, c);
 					return NULL;
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second or third byte in the group.", modified_utf_8_string);
+				log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second or third byte in the group.", modified_utf_8_string);
 				return NULL;
 			}
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The first byte (0x%08X) does not match any pattern.", modified_utf_8_string, a);
+			log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The first byte (0x%08X) does not match any pattern.", modified_utf_8_string, a);
 			return NULL;
 		}
 
@@ -631,14 +631,14 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
 		if(size_required_ansi == 0)
 		{
-			log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Failed to find the number of bytes necessary to represent the intermediate UTF-16 '%ls' as an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Failed to determine the size required to convert the intermediate UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
 			return NULL;
 		}
 
 		char* ansi_string = push_arena(arena, size_required_ansi, char);
 		if(WideCharToMultiByte(CP_UTF8, 0, utf_16_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
 		{
-			log_print(LOG_ERROR, "Copy Modified Utf-8 String To Tchar: Failed to convert the intermediate UTF-16 string '%ls' to an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Failed to convert the intermediate UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
 			return NULL;
 		}
 
@@ -823,7 +823,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		u32 expected_total_bytes_read = VERSION_6_HEADER_SIZE + index->section_2_length;\
 		if(total_bytes_read < expected_total_bytes_read)\
 		{\
-			log_print(LOG_WARNING, "Read Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but got %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
+			log_print(LOG_WARNING, "Read Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but found only %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
 		}\
 	} while(false, false)
 

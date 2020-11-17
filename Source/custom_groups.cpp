@@ -240,8 +240,10 @@ size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
 								find_total_group_size_callback, &result);
 
 	*result_num_groups = result.total_num_groups;
+	
+	int remaining_num_groups = result.total_num_groups - 1;
 	// Total Size = Size for the Group array + Size for the string data + Size for the file signature buffer.
-	return 	sizeof(Custom_Groups) + MAX(result.total_num_groups - 1, 0) * sizeof(Group)
+	return 	sizeof(Custom_Groups) + MAX(remaining_num_groups, 0) * sizeof(Group)
 			+ result.total_group_size * sizeof(TCHAR)
 			+ MAX_FILE_SIGNATURE_BUFFER_SIZE;
 }

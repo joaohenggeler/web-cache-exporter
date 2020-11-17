@@ -54,7 +54,7 @@
 	// In the debug builds, we'll set the arena's memory to specific values so it's easier to keep track of allocations
 	// in the debugger's Memory Window.
 	// These are set to 0xDE in create_arena() and clear_arena(), and to zero in the push_arena() functions.
-	static const u8 DEBUG_ARENA_BYTE_VALUE = 0xDE;
+	static const u8 DEBUG_ARENA_DEALLOCATED_VALUE = 0xDE;
 #endif
 
 // Creates an arena and allocates enough memory to read/write a given number of bytes.
@@ -82,7 +82,7 @@ bool create_arena(Arena* arena, size_t total_size)
 	#ifdef DEBUG
 		if(success)
 		{
-			FillMemory(arena->available_memory, arena->total_size, DEBUG_ARENA_BYTE_VALUE);
+			FillMemory(arena->available_memory, arena->total_size, DEBUG_ARENA_DEALLOCATED_VALUE);
 		}
 	#endif
 
@@ -238,7 +238,7 @@ void clear_arena(Arena* arena)
 
 	arena->available_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	#ifdef DEBUG
-		FillMemory(arena->available_memory, arena->used_size, DEBUG_ARENA_BYTE_VALUE);
+		FillMemory(arena->available_memory, arena->used_size, DEBUG_ARENA_DEALLOCATED_VALUE);
 	#endif
 	arena->used_size = 0;
 }
@@ -832,20 +832,20 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 
 		if(num_chars_required == 0)
 		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to find the number of characters necessary to represent '%hs' as a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
+			log_print(LOG_ERROR, "Convert Ansi String To Tchar: Failed to determine the size required to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
 			return NULL;
 		}
 
 		int size_required = num_chars_required * sizeof(wchar_t);
-		wchar_t* wide_string = push_arena(arena, size_required, wchar_t);
+		wchar_t* utf_16_string = push_arena(arena, size_required, wchar_t);
 
-		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, wide_string, num_chars_required) == 0)
+		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, utf_16_string, num_chars_required) == 0)
 		{
-			log_print(LOG_ERROR, "Copy Ansi String To Tchar: Failed to convert '%hs' to a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
+			log_print(LOG_ERROR, "Convert Ansi String To Tchar: Failed to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
 			return NULL;
 		}
 
-		return wide_string;
+		return utf_16_string;
 	#endif
 }
 
@@ -868,42 +868,42 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_are
 	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
 	if(num_chars_required_wide == 0)
 	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of characters necessary to represent the string as a UTF-16 string with the error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to determine the size required to convert the UTF-8 string '%hs' into a UTF-16 string with the error code %lu.", utf_8_string, GetLastError());
 		return NULL;
 	}
 
 	#ifdef BUILD_9X
-		Arena* wide_string_arena = intermediary_arena;
+		Arena* utf_16_string_arena = intermediary_arena;
 	#else
-		Arena* wide_string_arena = final_arena;
+		Arena* utf_16_string_arena = final_arena;
 	#endif
 
 	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
-	wchar_t* wide_string = push_arena(wide_string_arena, size_required_wide, wchar_t);
-	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, wide_string, num_chars_required_wide) == 0)
+	wchar_t* utf_16_string = push_arena(utf_16_string_arena, size_required_wide, wchar_t);
+	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, utf_16_string, num_chars_required_wide) == 0)
 	{
-		log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the string to a UTF-16 string with the error code %lu.", GetLastError());
+		log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to convert the UTF-8 string '%hs' into a UTF-16 string with the error code %lu.", utf_8_string, GetLastError());
 		return NULL;
 	}
 
 	#ifdef BUILD_9X
-		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, wide_string, -1, NULL, 0, NULL, NULL);
+		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
 		if(size_required_ansi == 0)
 		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to find the number of bytes necessary to represent the intermediate Wide '%ls' as an ANSI string with the error code %lu.", wide_string, GetLastError());
+			log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to determine the size required to convert the intermediate UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
 			return NULL;
 		}
 
 		char* ansi_string = push_arena(final_arena, size_required_ansi, char);
-		if(WideCharToMultiByte(CP_UTF8, 0, wide_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
+		if(WideCharToMultiByte(CP_UTF8, 0, utf_16_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
 		{
-			log_print(LOG_ERROR, "Copy Utf-8 String To Tchar: Failed to convert the intermediate UTF-16 string '%ls' to an ANSI string with the error code %lu.", wide_string, GetLastError());
+			log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
 			return NULL;
 		}
 
 		return ansi_string;
 	#else
-		return wide_string;
+		return utf_16_string;
 	#endif
 }
 
@@ -1304,6 +1304,7 @@ TCHAR* find_last_path_components(TCHAR* path, u32 desired_num_components)
 	u32 current_num_components = 0;
 	TCHAR* components_begin = path;
 	
+	// Traverse the path backwards.
 	for(size_t i = num_chars; i-- > 0;)
 	{
 		if(path[i] == TEXT('\\'))
@@ -1500,17 +1501,20 @@ static void correct_url_path_characters(TCHAR* path)
 // @Parameters:
 // 1. path - The path to modify.
 //
-// @Returns: True if any components were truncated. Otherwise, false.
+// @Returns: Nothing.
+static DWORD MAXIMUM_COMPONENT_LENGTH = 0;
 static void truncate_path_components(TCHAR* path)
 {
 	TCHAR* component_begin = path;
 	bool is_first_char = true;
 
-	DWORD maximum_component_length = 0;
-	if(!GetVolumeInformationA(NULL, NULL, 0, NULL, &maximum_component_length, NULL, NULL, 0))
+	if(MAXIMUM_COMPONENT_LENGTH == 0)
 	{
-		maximum_component_length = 255;
-		log_print(LOG_WARNING, "Truncate Path Segments: Failed to get the maximum component length with the error code %lu. This value will default to %lu.", GetLastError(), maximum_component_length);
+		if(!GetVolumeInformationA(NULL, NULL, 0, NULL, &MAXIMUM_COMPONENT_LENGTH, NULL, NULL, 0))
+		{
+			MAXIMUM_COMPONENT_LENGTH = 255;
+			log_print(LOG_WARNING, "Truncate Path Components: Failed to get the maximum component length with the error code %lu. This value will be set to %lu.", GetLastError(), MAXIMUM_COMPONENT_LENGTH);	
+		}
 	}
 
 	WHILE_TRUE()
@@ -1528,13 +1532,13 @@ static void truncate_path_components(TCHAR* path)
 
 			component_begin = component_end + 1;
 
-			if(num_component_chars > maximum_component_length)
+			if(num_component_chars > MAXIMUM_COMPONENT_LENGTH)
 			{
 				// "C:\Path\<255 chars>123\ABC" -> "C:\Path\<255 chars>\ABC"
 				//          ^ begin       ^ end
 				// "C:\Path\ABC\<255 chars>123" -> "C:\Path\ABC\<255 chars>"
 				//              ^ begin       ^ end
-				size_t num_chars_over_limit = num_component_chars - maximum_component_length;
+				size_t num_chars_over_limit = num_component_chars - MAXIMUM_COMPONENT_LENGTH;
 				MoveMemory(component_end - num_chars_over_limit, component_end, string_size(component_end));
 				component_begin -= num_chars_over_limit;
 			}
@@ -1654,17 +1658,17 @@ bool does_file_exist(const TCHAR* file_path)
 // 1. file_handle - The handle of the file whose size is of interest.
 // 2. result_file_size - The resulting file size in bytes.
 //
-// @Returns: True if the function succeeds. Otherwise, it returns false and the resulting file size is undefined.
+// @Returns: True if the function succeeds. Otherwise, it returns false and the file size is not modified.
 bool get_file_size(HANDLE file_handle, u64* result_file_size)
 {
 	#ifdef BUILD_9X
-		DWORD file_size_high;
+		DWORD file_size_high = 0;
 		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
 		bool success = !( (file_size_low == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR) );
 		if(success) *result_file_size = combine_high_and_low_u32s_into_u64(file_size_high, file_size_low);
 		return success;
 	#else
-		LARGE_INTEGER file_size;
+		LARGE_INTEGER file_size = {};
 		bool success = GetFileSizeEx(file_handle, &file_size) != FALSE;
 		if(success) *result_file_size = file_size.QuadPart;
 		return success;
@@ -1682,8 +1686,9 @@ void safe_close_handle(HANDLE* handle)
 	if(*handle != INVALID_HANDLE_VALUE && *handle != NULL)
 	{
 		CloseHandle(*handle);
-		*handle = INVALID_HANDLE_VALUE;
 	}
+
+	*handle = INVALID_HANDLE_VALUE;
 }
 
 // Closes a file search handle and sets its value to INVALID_HANDLE_VALUE.
@@ -1697,8 +1702,9 @@ void safe_find_close(HANDLE* search_handle)
 	if(*search_handle != INVALID_HANDLE_VALUE && *search_handle != NULL)
 	{
 		FindClose(*search_handle);
-		*search_handle = INVALID_HANDLE_VALUE;
 	}
+
+	*search_handle = INVALID_HANDLE_VALUE;
 }
 
 // Unmaps a mapped view of a file and sets its value to NULL.
@@ -1770,7 +1776,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 	WIN32_FIND_DATA find_data = {};
 	HANDLE search_handle = FindFirstFile(search_path, &find_data);
 	
-	bool found_object = search_handle != INVALID_HANDLE_VALUE;
+	bool found_object = (search_handle != INVALID_HANDLE_VALUE);
 	while(found_object)
 	{
 		TCHAR* filename = find_data.cFileName;
@@ -2349,7 +2355,7 @@ bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_b
 // 3. value_name - The name of the registry value to query.
 // 4. value_data - The buffer that receives the resulting string read from the registry value.
 // 5. value_data_size - The size of the buffer in bytes. Be sure that this includes the null terminator and is able to hold
-// strings of the desired type (ANSI or Wide).
+// strings of the desired type (ANSI or UTF-16).
 // 
 // @Returns: True if the value was retrieved successfully. Otherwise, false.
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size)
@@ -2363,7 +2369,7 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Query Registry: Failed to open the registry key '%s' with the error code.", key_name, error_code);
+		log_print(LOG_ERROR, "Query Registry: Failed to open the registry key '%s' with the error code %lu.", key_name, error_code);
 		// These registry functions only return this value, they don't set the last error code.
 		// We'll do it ourselves for consistent error handling when calling our function.
 		SetLastError(error_code);
@@ -2378,6 +2384,8 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 	success = (error_code == ERROR_SUCCESS);
 	RegCloseKey(opened_key);
 
+	_ASSERT(actual_value_data_size > 0);
+
 	// For now, we'll only handle simple string. Strings with expandable environment variables are skipped (REG_EXPAND_SZ).
 	if(success && (value_data_type != REG_SZ))
 	{
@@ -2386,10 +2394,10 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 		success = false;
 	}
 
-	// According to the documentation, we need to ensure that string values null terminated. Whoever calls this function should
-	// always guarantee that the buffer is able to hold whatever the possible string values are plus a null terminator.
+	// According to the documentation, we need to ensure that string values are null terminated. Whoever calls this function should
+	// always guarantee that the buffer is able to hold whatever the possible string values are, including the null terminator.
 	size_t num_value_data_chars = actual_value_data_size / sizeof(TCHAR);
-	if( success && (value_data[num_value_data_chars - 1] != TEXT('\0')) )
+	if(success)
 	{	
 		value_data[num_value_data_chars] = TEXT('\0');
 	}
@@ -2444,7 +2452,7 @@ void close_log_file(void)
 }
 
 // Appends a formatted TCHAR string to the global log file. This file must have been previously created using create_log_file().
-// This ANSI or Wide UTF-16 string is converted to UTF-8 before being written to the log file.
+// This ANSI or UTF-16 string is converted to UTF-8 before being written to the log file.
 //
 // This function is usually called by using the macro log_print(log_type, string_format, ...), which takes the same arguments but
 // where string_format is an ANSI string (for convenience).
@@ -2461,7 +2469,7 @@ void close_log_file(void)
 // For LOG_DEBUG, use debug_log_print() instead. LOG_NONE is usually used when calling log_print_newline(), though it may be used
 // directly with log_print() in certain cases.
 // 2. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
-// strings (ANSI or Wide depending on the build target).
+// strings (narrow ANSI or wide UTF-16 depending on the build target).
 // 3. ... - Zero or more arguments to be inserted in the format string.
 //
 // @Returns: Nothing.
@@ -2494,12 +2502,13 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 		wchar_t utf_16_log_buffer[MAX_CHARS_PER_LOG_WRITE] = L"";
 		MultiByteToWideChar(CP_ACP, 0, log_buffer, -1, utf_16_log_buffer, MAX_CHARS_PER_LOG_WRITE);
 
-		char utf_8_log_buffer[MAX_CHARS_PER_LOG_WRITE] = "";
-		WideCharToMultiByte(CP_UTF8, 0, utf_16_log_buffer, -1, utf_8_log_buffer, sizeof(utf_8_log_buffer), NULL, NULL);
+		wchar_t* utf_16_log_buffer_pointer = utf_16_log_buffer;
 	#else
-		char utf_8_log_buffer[MAX_CHARS_PER_LOG_WRITE] = "";
-		WideCharToMultiByte(CP_UTF8, 0, log_buffer, -1, utf_8_log_buffer, sizeof(utf_8_log_buffer), NULL, NULL);
+		wchar_t* utf_16_log_buffer_pointer = log_buffer;
 	#endif
+
+	char utf_8_log_buffer[MAX_CHARS_PER_LOG_WRITE] = "";
+	WideCharToMultiByte(CP_UTF8, 0, utf_16_log_buffer_pointer, -1, utf_8_log_buffer, sizeof(utf_8_log_buffer), NULL, NULL);
 
 	size_t num_bytes_to_write = 0;
 	StringCbLengthA(utf_8_log_buffer, sizeof(utf_8_log_buffer), &num_bytes_to_write);
@@ -2696,7 +2705,7 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type* colu
 		}
 	}
 
-	// @Note: This assumes that sizeof(char) is one, meaning no alignment took place in the previous push_arena() calls.
+	// @Note: Since sizeof(char) is always one, this means that no alignment took place in the previous push_arena() calls.
 	// Otherwise, we'd write some garbage (NUL bytes) into the file.
 	ptrdiff_t csv_header_size = pointer_difference(arena->available_memory, csv_header);
 	_ASSERT(csv_header_size > 0);
@@ -2718,14 +2727,16 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type* colu
 // @Returns: Nothing.
 void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, size_t num_columns)
 {
+	_ASSERT(num_columns > 0);
+
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
 		log_print(LOG_ERROR, "Csv Print Row: Attempted to add the header to a CSV file that wasn't been opened yet.");
 		return;
 	}
 
-	// First pass: escape values that require it and convert every value to UTF-16. This is only necessary for ANSI strings
-	// in Windows 98 and ME.
+	// First pass: escape values that require it and convert every value to UTF-16 (only necessary for ANSI strings
+	// in Windows 98 and ME).
 	for(size_t i = 0; i < num_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
@@ -2742,11 +2753,24 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 		// Convert the values to UTF-16.
 		#ifdef BUILD_9X
+			wchar_t* utf_16_value = L"";
+
 			int num_chars_required_utf_16 = MultiByteToWideChar(CP_ACP, 0, value, -1, NULL, 0);
-			int size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
-			
-			wchar_t* utf_16_value = push_arena(arena, size_required_utf_16, wchar_t);
-			MultiByteToWideChar(CP_ACP, 0, value, -1, utf_16_value, num_chars_required_utf_16);
+			if(num_chars_required_utf_16 != 0)
+			{
+				int size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
+				utf_16_value = push_arena(arena, size_required_utf_16, wchar_t);
+				
+				if(MultiByteToWideChar(CP_ACP, 0, value, -1, utf_16_value, num_chars_required_utf_16) == 0)
+				{
+					log_print(LOG_ERROR, "Csv Print Row: Failed to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+					utf_16_value = L"";
+				}
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Csv Print Row: Failed to determine the size required to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+			}
 
 			column_values[i].utf_16_value = utf_16_value;
 			column_values[i].value = NULL;
@@ -2764,24 +2788,47 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 		int size_required_utf_8 = WideCharToMultiByte(CP_UTF8, 0, value, -1, NULL, 0, NULL, NULL);
 
+		if(size_required_utf_8 == 0)
+		{
+			log_print(LOG_ERROR, "Csv Print Row: Failed to determine the size required to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+			value = L"";
+			size_required_utf_8 = (int) string_size(value);
+		}
+
 		// Add a newline to the last value.
 		if(i == num_columns - 1)
 		{
 			char* csv_row_value = push_arena(arena, size_required_utf_8 + 1, char);
-			WideCharToMultiByte(CP_UTF8, 0, value, -1, csv_row_value, size_required_utf_8, NULL, NULL);
-			csv_row_value[size_required_utf_8 - 1] = '\r';
-			csv_row_value[size_required_utf_8] = '\n';
+			if(WideCharToMultiByte(CP_UTF8, 0, value, -1, csv_row_value, size_required_utf_8, NULL, NULL) != 0)
+			{
+				csv_row_value[size_required_utf_8 - 1] = '\r';
+				csv_row_value[size_required_utf_8] = '\n';
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Csv Print Row: Failed to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+				csv_row_value[0] = '\r';
+				csv_row_value[1] = '\n';
+			}
+
 		}
 		// Separate each value before the last one with a comma.
 		else
 		{
 			char* csv_row_value = push_arena(arena, size_required_utf_8, char);
-			WideCharToMultiByte(CP_UTF8, 0, value, -1, csv_row_value, size_required_utf_8, NULL, NULL);
-			csv_row_value[size_required_utf_8 - 1] = ',';
+			if(WideCharToMultiByte(CP_UTF8, 0, value, -1, csv_row_value, size_required_utf_8, NULL, NULL) != 0)
+			{
+				csv_row_value[size_required_utf_8 - 1] = ',';
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Csv Print Row: Failed to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+				csv_row_value[0] = ',';
+			}
 		}
 	}
 
-	// @Note: This assumes that sizeof(char) is one, meaning no alignment took place in the previous push_arena() calls.
+	// @Note: Since sizeof(char) is always one, this means that no alignment took place in the previous push_arena() calls.
 	// Otherwise, we'd write some garbage (NUL bytes) into the file.
 	ptrdiff_t csv_row_size = pointer_difference(arena->available_memory, csv_row);
 	_ASSERT(csv_row_size > 0);

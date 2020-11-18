@@ -116,12 +116,12 @@ The following options don't require any additional arguments.
 | Option           | Description                                                                           |
 |------------------|---------------------------------------------------------------------------------------|
 | -no-copy-files   | Stops the exporter from copying files.                                                |
-| -no-create-csv   | Stops the exporter from creating CSV files                                            |
+| -no-create-csv   | Stops the exporter from creating CSV files.                                           |
 | -overwrite       | Deletes the previous output folder of the same name before running.                   |
 | -show-full-paths | Replaces the "Location On Cache" CSV column with the cached file's full path on disk. |
 
 Using both `-no-copy-files` and `-no-create-csv` will result in an error and terminate the application.
-The `-show-full-paths` option does nothing if `-no-create-csv`is also used.
+The `-show-full-paths` option does nothing if `-no-create-csv` is also used.
 
 For example:
 ```
@@ -232,12 +232,16 @@ This section will list some resources and tools that were used to learn how to p
 
 ### Internet Explorer
 
-* [Geoff Chappell - The INDEX.DAT File Format](https://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm)
-* [libmsiecf - MSIE Cache File (index.dat) format specification](https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20%28index.dat%29%20format.asciidoc)
+* [Geoff Chappell - The INDEX.DAT File Format](https://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm).
+* [libmsiecf - MSIE Cache File (index.dat) format specification](https://github.com/libyal/libmsiecf/blob/master/documentation/MSIE%20Cache%20File%20%28index.dat%29%20format.asciidoc).
 
-* [NirSoft - IECacheView v1.58 - Internet Explorer Cache Viewer](https://www.nirsoft.net/utils/ie_cache_viewer.html)
-* [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/)
-* [NirSoft - Improved solution for reading the history of Internet Explorer 10](https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/)
+* [NirSoft - IECacheView v1.58 - Internet Explorer Cache Viewer](https://www.nirsoft.net/utils/ie_cache_viewer.html).
+* [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/).
+* [NirSoft - Improved solution for reading the history of Internet Explorer 10](https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/).
+
+### Shockwave Plugin
+
+* [TOMYSSHADOW's Movie Restorer Xtra](https://github.com/tomysshadow/Movie-Restorer-Xtra) allows you to open Shockwave movies in Director. This is useful when trying to find out the name of a Shockwave game (e.g. by looking at the game's menu screen) since the plugin's cache does not store the original filename or URL.
 
 ### Other
 

@@ -43,26 +43,10 @@ BEGIN_URL_GROUP Cartoon Network
 
 END
 
-BEGIN_URL_GROUP Disney
-
-	BEGIN_DOMAINS
-		disney.go.com
-	END
-
-END
-
 BEGIN_URL_GROUP Faradise
 
 	BEGIN_DOMAINS
 		faradise.com
-	END
-
-END
-
-BEGIN_URL_GROUP Game Show Network (GSN)
-
-	BEGIN_DOMAINS
-		gsn.com
 	END
 
 END
@@ -92,18 +76,6 @@ BEGIN_URL_GROUP Jig Interactive
 
 END
 
-BEGIN_URL_GROUP King.com / Royal Games
-
-	BEGIN_DOMAINS
-		king.com
-		king.gamesgames.com
-		king.games.co.uk
-		midas.games.yahoo.net
-		royalgames.com
-	END
-
-END
-
 BEGIN_URL_GROUP Millsberry
 
 	BEGIN_DOMAINS
@@ -112,7 +84,7 @@ BEGIN_URL_GROUP Millsberry
 
 END
 
-BEGIN_URL_GROUP Nabiscoworld
+BEGIN_URL_GROUP NabiscoWorld
 
 	BEGIN_DOMAINS
 		nabiscoworld.com

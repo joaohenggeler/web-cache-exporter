@@ -68,6 +68,8 @@ BEGIN_FILE_GROUP Burster
 
 END
 
+; This archive format is here and not in the Archive group file in order
+; to detect ActiveX controls.
 BEGIN_FILE_GROUP Cabinet
 
 	BEGIN_FILE_SIGNATURES
@@ -175,9 +177,14 @@ END
 
 BEGIN_FILE_GROUP Java
 
+	; ☕
+
 	BEGIN_FILE_SIGNATURES
-		; ☕
+		; For class files.
 		CA FE BA BE
+
+		; For pack200 archives.
+		CA FE D0 0D
 	END
 
 	; Be careful not to shorten these MIME types in a way that includes JavaScript files.
@@ -189,14 +196,20 @@ BEGIN_FILE_GROUP Java
 		application/java-archive
 
 		application/x-java-jnlp-file
-
 		application/java-serialized-object
+		application/x-java-pack200
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		class jar
+		class
+		jar
+
 		jnlp
 		ser
+		pack200
+
+		; Shockwave movie compiled to Java.
+		; Created using Macromedia Director's Java Export Xtra (removed in Director 8).
 		djr
 	END
 

@@ -59,6 +59,9 @@
 
 // Creates an arena and allocates enough memory to read/write a given number of bytes.
 //
+// Memory allocated by this function is automatically initialized to zero in the release builds, and to DEBUG_ARENA_DEALLOCATED_VALUE
+// in the debug builds.
+//
 // @Parameters:
 // 1. arena - The Arena structure that receives the address of the allocated memory and its total size.
 // 2. total_size - How many bytes to allocate.
@@ -96,8 +99,11 @@ bool create_arena(Arena* arena, size_t total_size)
 
 // Moves an arena's available memory pointer by a certain number, giving back the aligned address to a memory location
 // where you can write at least that number of bytes.
+//
 // This function is usually called by using the macro push_arena(arena, push_size, Type), which determines the alignment of
-// that Type. This macro also casts the resulting memory address to Type*. 
+// that Type. This macro also casts the resulting memory address to Type*.
+//
+// In the debug builds, this function clears this memory amount to zero.
 //
 // @Parameters:
 // 1. arena - The Arena structure whose available_memory member will be increased to accommodate at least push_size bytes.
@@ -223,6 +229,8 @@ float32 get_used_arena_capacity(Arena* arena)
 
 // Clears the entire arena, resetting the pointer to the available memory back to the original address and the number of used
 // bytes to zero.
+//
+// In the debug builds, this function clears the entire allocated memory to zero.
 //
 // @Parameters:
 // 1. arena - The Arena structure whose available_memory and used_size members will be reset.

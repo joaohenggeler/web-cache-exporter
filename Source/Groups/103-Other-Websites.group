@@ -75,7 +75,7 @@ END
 BEGIN_URL_GROUP Blogger
 
 	BEGIN_DOMAINS
-		blogspot.com
+		blogspot.*
 	END
 
 END
@@ -394,6 +394,7 @@ BEGIN_URL_GROUP Pinterest
 
 	BEGIN_DOMAINS
 		pinterest.com
+		pinimg.com
 	END
 
 END

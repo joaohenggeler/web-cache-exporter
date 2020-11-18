@@ -75,7 +75,7 @@ PUSHD "%~dp0"
 	REM Common compiler options and any other ones that only apply to a specific build target or mode.
 	REM Disabled warnings:
 	REM - C4100 - unused function parameter.
-	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
+	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /EHa- /nologo /I "%THIRD_PARTY_INCLUDE_PATH%""
 	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT /GL"
 	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D DEBUG"
 	SET "COMPILER_OPTIONS_WIN_NT_ONLY="

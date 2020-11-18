@@ -122,6 +122,14 @@ BEGIN_URL_GROUP DAN-BALL
 
 END
 
+BEGIN_URL_GROUP Disney
+
+	BEGIN_DOMAINS
+		disney.go.com
+	END
+
+END
+
 BEGIN_URL_GROUP Ezone
 
 	BEGIN_DOMAINS
@@ -143,6 +151,14 @@ BEGIN_URL_GROUP Funschool
 
 	BEGIN_DOMAINS
 		funschool.com
+	END
+
+END
+
+BEGIN_URL_GROUP Game Show Network
+
+	BEGIN_DOMAINS
+		gsn.com
 	END
 
 END
@@ -233,6 +249,18 @@ BEGIN_URL_GROUP Kewlbox
 
 	BEGIN_DOMAINS
 		kewlbox.com
+	END
+
+END
+
+BEGIN_URL_GROUP King.com / Royal Games
+
+	BEGIN_DOMAINS
+		king.com
+		king.gamesgames.com
+		king.games.co.uk
+		midas.games.yahoo.net
+		royalgames.com
 	END
 
 END

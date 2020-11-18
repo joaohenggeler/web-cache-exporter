@@ -36,7 +36,8 @@ END
 
 To export the cache from every user profile, we'd need to define multiple
 lists and change any necessary paths. For the same Windows version, this
-usually just means changing the username.
+usually just means changing the username. Note that every path is limited
+to 260 characters.
 
 Notice how the LOCAL_LOW_APPDATA location uses the "<None>" keyword. This
 tells the application to assume that this path is empty, and is used when

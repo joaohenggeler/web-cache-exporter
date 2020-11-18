@@ -347,13 +347,6 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		success = false;
 	}
 
-	if(exporter->should_load_specific_groups_files && exporter->num_group_filenames_to_load == 0)
-	{
-		console_print("The -load-group-files option requires one or more group filenames as its argument.");
-		log_print(LOG_ERROR, "Argument Parsing: The -load-group-files option was used but the supplied value does not contain filenames.");
-		success = false;
-	}
-
 	if(exporter->should_load_external_locations)
 	{
 		if(string_is_empty(exporter->external_locations_path))

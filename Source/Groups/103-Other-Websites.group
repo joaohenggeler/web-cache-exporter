@@ -215,6 +215,14 @@ BEGIN_URL_GROUP Google
 
 END
 
+BEGIN_URL_GROUP ImageShack
+
+	BEGIN_DOMAINS
+		imageshack.*
+	END
+
+END
+
 BEGIN_URL_GROUP Imgur
 
 	BEGIN_DOMAINS

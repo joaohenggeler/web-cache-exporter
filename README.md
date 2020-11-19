@@ -136,11 +136,11 @@ The following options change how [group files](#group-files) behave.
 | -filter-by-groups                     | Only exports files that match any loaded groups. |
 | -load-group-files &lt;Group Files&gt; | Only loads specific group files.                 |
 
-The &lt;Group Files&gt; argument is mandatory and specifies a filename list, where each one is separated by spaces and without the .group file extension. All group files are loaded by default. This tool will always look for group files in the "Groups" subdirectory in the executable's directory (and not in the current working directory).
+The &lt;Group Files&gt; argument is mandatory and specifies a filename list, where the filenames are separated by forward slashes and appear without the .group file extension. All group files are loaded by default. This tool will always look for group files in the "Groups" subdirectory in the executable's directory (and not in the current working directory).
 
 For example:
 ```
-WCE.exe -filter-by-groups -load-group-files "006-Plugin 101-Gaming-Websites" -export-option
+WCE.exe -filter-by-groups -load-group-files "006-Plugin/101-Gaming-Websites" -export-option
 ```
 
 This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group", and would filter the output based on the groups that they define.

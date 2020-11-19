@@ -1,4 +1,4 @@
-; This file lists some popular game portal websites, both old and new.
+; This file lists some popular gaming websites, both old and new.
 ; Be sure to check the Lost Websites group file first before adding any others.
 
 BEGIN_URL_GROUP Addicting Games
@@ -125,6 +125,7 @@ END
 BEGIN_URL_GROUP Disney
 
 	BEGIN_DOMAINS
+		disney.com
 		disney.go.com
 	END
 
@@ -176,6 +177,15 @@ BEGIN_URL_GROUP Gamelet
 
 	BEGIN_DOMAINS
 		gamelet.com
+	END
+
+END
+
+BEGIN_URL_GROUP Garfield
+
+	BEGIN_DOMAINS
+		garfield.com
+		professorgarfield.com
 	END
 
 END
@@ -322,6 +332,16 @@ BEGIN_URL_GROUP Newgrounds
 
 END
 
+BEGIN_URL_GROUP Nickelodeon
+
+	BEGIN_DOMAINS
+		nickelodeon.*
+		nick.com
+		nickjr.com
+	END
+
+END
+
 BEGIN_URL_GROUP Nitrome
 
 	BEGIN_DOMAINS
@@ -410,6 +430,14 @@ BEGIN_URL_GROUP Y8
 
 	BEGIN_DOMAINS
 		y8.com
+	END
+
+END
+
+BEGIN_URL_GROUP YTV
+
+	BEGIN_DOMAINS
+		ytv.com
 	END
 
 END

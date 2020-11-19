@@ -180,7 +180,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 				TCHAR* group_filenames = push_string_to_arena(arena, arguments[i+1]);
 				i += 1;
 
-				const TCHAR* FILENAME_DELIMITER = TEXT(" ");
+				const TCHAR* FILENAME_DELIMITER = TEXT("/");
 				TCHAR* remaining_filenames = NULL;
 				TCHAR* filename = _tcstok_s(group_filenames, FILENAME_DELIMITER, &remaining_filenames);
 

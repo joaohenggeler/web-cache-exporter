@@ -68,8 +68,8 @@ BEGIN_FILE_GROUP Burster
 
 END
 
-; This archive format is here and not in the Archive group file in order
-; to detect ActiveX controls.
+; This archive format is both here and in the Archive group file in order to
+; detect ActiveX controls.
 BEGIN_FILE_GROUP Cabinet
 
 	BEGIN_FILE_SIGNATURES

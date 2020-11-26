@@ -335,7 +335,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 	if(!seen_export_option)
 	{
-		console_print("Missing the an export option.");
+		console_print("Missing the export option.");
 		log_print(LOG_ERROR, "Argument Parsing: The main -export option was not found.");
 		success = false;
 	}

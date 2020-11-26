@@ -101,7 +101,7 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 	TCHAR* file_type = NULL;
 
 	const u32 MAX_READ_SIZE = MAX(MIN_RIFX_CHUNK_READ_SIZE, MIN_SHOCKWAVE_AUDIO_READ_SIZE);
-	u8 file_buffer[MAX_READ_SIZE];
+	u8 file_buffer[MAX_READ_SIZE] = {};
 
 	u32 num_bytes_read = 0;
 	if(read_first_file_bytes(file_path, file_buffer, MAX_READ_SIZE, true, &num_bytes_read))

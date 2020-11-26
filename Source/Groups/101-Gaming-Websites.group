@@ -148,6 +148,14 @@ BEGIN_URL_GROUP FreeArcade
 
 END
 
+BEGIN_URL_GROUP FunBrain
+
+	BEGIN_DOMAINS
+		funbrain.com
+	END
+
+END
+
 BEGIN_URL_GROUP Funschool
 
 	BEGIN_DOMAINS
@@ -366,6 +374,15 @@ BEGIN_URL_GROUP OneMoreLevel
 
 END
 
+BEGIN_URL_GROUP Orisinal
+
+	BEGIN_DOMAINS
+		ferryhalim.com/ori
+		orisinal.com
+	END
+
+END
+
 BEGIN_URL_GROUP Playforia / Aapeli / Playray / Apaja
 
 	BEGIN_DOMAINS
@@ -389,6 +406,14 @@ BEGIN_URL_GROUP Radical Play
 
 	BEGIN_DOMAINS
 		radicalplay.com
+	END
+
+END
+
+BEGIN_URL_GROUP Scratch
+
+	BEGIN_DOMAINS
+		scratch.mit.edu
 	END
 
 END

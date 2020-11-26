@@ -37,8 +37,8 @@ END
 BEGIN_URL_GROUP Cartoon Network
 
 	BEGIN_DOMAINS
-		cartoonnetwork.com
-		turner.com/toon
+		cartoonnetwork.*
+		turner.*/toon
 	END
 
 END

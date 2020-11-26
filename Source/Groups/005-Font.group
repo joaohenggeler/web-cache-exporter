@@ -4,6 +4,7 @@ BEGIN_FILE_GROUP Font
 
 	BEGIN_MIME_TYPES
 		font/
+		
 		application/font
 		; Matches:
 		; application/font-woff

@@ -2653,7 +2653,7 @@ static void escape_csv_string(TCHAR* str)
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 {
 	// Create any missing intermediate directories. 
-	TCHAR full_csv_directory_path[MAX_PATH_CHARS];
+	TCHAR full_csv_directory_path[MAX_PATH_CHARS] = TEXT("");
 	get_full_path_name(csv_file_path, full_csv_directory_path);
 	PathAppend(full_csv_directory_path, TEXT(".."));
 	

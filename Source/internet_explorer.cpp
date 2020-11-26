@@ -321,7 +321,14 @@ bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size)
 // @Returns: True if it's able to find Internet Explorer's version in the registry. Otherwise, false.
 static void undecorate_path(TCHAR* path)
 {
+	#if defined(DEBUG) && !defined(BUILD_9X)
+		wchar_t actual_undecorated_path[MAX_PATH_CHARS] = L"";
+		StringCchCopyW(actual_undecorated_path, MAX_PATH_CHARS, path);
+		PathUndecorateW(actual_undecorated_path);
+	#endif
+
 	TCHAR* filename = PathFindFileName(path);
+	
 	// PathFindExtension returns the address of the last file extension. E.g: "file.ext1.ext2" -> ".ext2"
 	// We'll use the Windows API function instead of our own because we're trying to replace PathUndecorate
 	// to maintain compatibility with older Windows versions, and it's best to use what Windows considers
@@ -375,6 +382,11 @@ static void undecorate_path(TCHAR* path)
 		TCHAR* remaining_path = decoration_end + 1;
 		MoveMemory(decoration_begin, remaining_path, string_size(remaining_path));
 	}
+
+	#if defined(DEBUG) && !defined(BUILD_9X)
+		// @Assert: Guarantee that our result matches PathUndecorate()'s.
+		_ASSERT(strings_are_equal(path, actual_undecorated_path));
+	#endif
 }
 
 // Parses specific cache related fields from HTTP headers.
@@ -702,7 +714,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	if(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) != 0)
 	{
-		char signature_string[NUM_SIGNATURE_CHARS + 1];
+		char signature_string[NUM_SIGNATURE_CHARS + 1] = "";
 		CopyMemory(signature_string, header->signature, NUM_SIGNATURE_CHARS);
 		signature_string[NUM_SIGNATURE_CHARS] = '\0';
 
@@ -824,7 +836,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						CLEAR_DEALLOCATED_VALUE(variable_name);\
 					} while(false, false)
 
-					u32 entry_offset_to_filename;
+					u32 entry_offset_to_filename = 0;
 					GET_URL_ENTRY_MEMBER(entry_offset_to_filename, entry_offset_to_filename);
 					// We'll keep two versions of the filename: the original decorated name (e.g. image[1].gif)
 					// which is the name of the actual cached file on disk, and the undecorated name (e.g. image.gif)
@@ -839,7 +851,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						undecorate_path(filename);
 					}
 
-					u32 entry_offset_to_url;
+					u32 entry_offset_to_url = 0;
 					GET_URL_ENTRY_MEMBER(entry_offset_to_url, entry_offset_to_url);
 					// @Format: The stored URL is encoded. We'll decode it for the CSV and to correctly create
 					// the website's original directory structure when we copy the cached file.
@@ -851,9 +863,9 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						url = decode_url(arena, url);
 					}
 
-					u32 entry_offset_to_headers;
+					u32 entry_offset_to_headers = 0;
 					GET_URL_ENTRY_MEMBER(entry_offset_to_headers, entry_offset_to_headers);
-					u32 headers_size;
+					u32 headers_size = 0;
 					GET_URL_ENTRY_MEMBER(headers_size, headers_size);
 			
 					TCHAR* response = NULL;
@@ -878,7 +890,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					#define GET_URL_ENTRY_FILETIME_MEMBER(variable_name, member_name)\
 					do\
 					{\
-						u64 u64_value;\
+						u64 u64_value = 0;\
 						GET_URL_ENTRY_MEMBER(u64_value, member_name);\
 						FILETIME filetime_value = {};\
 						convert_u64_to_filetime(u64_value, &filetime_value);\
@@ -890,24 +902,24 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					#define GET_URL_ENTRY_DOS_DATE_TIME_MEMBER(variable_name, member_name)\
 					do\
 					{\
-						u32 u32_value;\
+						u32 u32_value = 0;\
 						GET_URL_ENTRY_MEMBER(u32_value, member_name);\
 						Dos_Date_Time dos_date_time_value = {};\
 						convert_u32_to_dos_date_time(u32_value, &dos_date_time_value);\
 						format_dos_date_time(dos_date_time_value, variable_name);\
 					} while(false, false)
 
-					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					GET_URL_ENTRY_FILETIME_MEMBER(last_modified_time, last_modified_time);
 					
-					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					GET_URL_ENTRY_FILETIME_MEMBER(last_access_time, last_access_time);
 
-					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					GET_URL_ENTRY_DOS_DATE_TIME_MEMBER(creation_time, creation_time);
 
 					// @Format: The file's expiry time is stored as two different types depending on the index file's version.
-					TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS];
+					TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					if(major_version == '4')
 					{
 						u64 u64_expiry_time = url_entry_4->expiry_time;
@@ -931,7 +943,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
 					// Channel Definition Format (CDF): https://en.wikipedia.org/wiki/Channel_Definition_Format
-					u8 cache_directory_index;
+					u8 cache_directory_index = 0;
 					GET_URL_ENTRY_MEMBER(cache_directory_index, cache_directory_index);
 
 					if(cache_directory_index < MAX_NUM_CACHE_DIRECTORIES)
@@ -942,7 +954,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						// E.g. "ABCDEFGH\image[1].gif".
 						// @Format: The cache directory's name doesn't include the null terminator.
 						const char* cache_directory_name_in_mmf = header->cache_directories[cache_directory_index].name;
-						char cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS + 1];
+						char cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS + 1] = "";
 						CopyMemory(cache_directory_ansi_name, cache_directory_name_in_mmf, NUM_CACHE_DIRECTORY_NAME_CHARS * sizeof(char));
 						cache_directory_ansi_name[NUM_CACHE_DIRECTORY_NAME_CHARS] = '\0';
 
@@ -964,7 +976,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						log_print(LOG_WARNING, "Internet Explorer 4 to 9: Unknown cache directory index 0x%02X for file '%s' with the following URL: '%s'.", cache_directory_index, filename, url);
 					}
 			
-					TCHAR cached_file_size[MAX_INT64_CHARS];
+					TCHAR cached_file_size[MAX_INT64_CHARS] = TEXT("");
 					if(major_version == '4')
 					{
 						u32 u32_cached_file_size = url_entry_4->cached_file_size;
@@ -980,8 +992,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						convert_u64_to_string(cached_file_size_value, cached_file_size);
 					}
 
-					TCHAR num_hits[MAX_INT32_CHARS];
-					u32 num_entry_locks;
+					TCHAR num_hits[MAX_INT32_CHARS] = TEXT("");
+					u32 num_entry_locks = 0;
 					GET_URL_ENTRY_MEMBER(num_entry_locks, num_entry_locks);
 					convert_u32_to_string(num_entry_locks, num_hits);
 
@@ -1072,7 +1084,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				default:
 				{
 					const size_t NUM_ENTRY_SIGNATURE_CHARS = 4;
-					char signature_string[NUM_ENTRY_SIGNATURE_CHARS + 1];
+					char signature_string[NUM_ENTRY_SIGNATURE_CHARS + 1] = "";
 					CopyMemory(signature_string, &(entry->signature), NUM_ENTRY_SIGNATURE_CHARS);
 					signature_string[NUM_ENTRY_SIGNATURE_CHARS] = '\0';
 					log_print(LOG_WARNING, "Internet Explorer 4 to 9: Found unknown entry signature at (%Iu, %Iu): 0x%08X ('%hs') with %I32u block(s) allocated.", block_index_in_byte, byte_index, entry->signature, signature_string, entry->num_allocated_blocks);

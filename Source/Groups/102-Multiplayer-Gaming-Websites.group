@@ -41,6 +41,16 @@ BEGIN_URL_GROUP Poptropica
 
 END
 
+BEGIN_URL_GROUP Roblox
+
+	BEGIN_DOMAINS
+		roblox.com
+		rbxcdn.com
+		rbxtrk.com
+	END
+
+END
+
 BEGIN_URL_GROUP RuneScape
 
 	BEGIN_DOMAINS

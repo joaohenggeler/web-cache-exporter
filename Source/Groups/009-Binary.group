@@ -112,6 +112,18 @@ BEGIN_FILE_GROUP Shortcut
 
 END
 
+BEGIN_FILE_GROUP WebAssembly
+
+	BEGIN_MIME_TYPES
+		application/wasm
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		wasm
+	END
+
+END
+
 BEGIN_FILE_GROUP Binary
 
 	BEGIN_MIME_TYPES

@@ -28,6 +28,7 @@ BEGIN_URL_GROUP Amazon
 
 	BEGIN_DOMAINS
 		amazon.*
+		ssl-images-amazon.com
 	END
 
 END
@@ -67,7 +68,7 @@ END
 BEGIN_URL_GROUP Bing
 
 	BEGIN_DOMAINS
-		bing.com
+		bing.*
 	END
 
 END
@@ -80,10 +81,20 @@ BEGIN_URL_GROUP Blogger
 
 END
 
+BEGIN_URL_GROUP BrotherSoft
+
+	BEGIN_DOMAINS
+		brothersoft.com
+	END
+
+END
+
 BEGIN_URL_GROUP CNET
 
 	BEGIN_DOMAINS
 		cnet.com
+		download.com
+		download.com.com
 	END
 
 END
@@ -137,6 +148,27 @@ BEGIN_URL_GROUP Discord
 
 END
 
+BEGIN_URL_GROUP Dropbox
+
+	BEGIN_DOMAINS
+		dropbox.*
+		db.tt	
+		dropboxapi.com
+		dropboxbusiness.com
+		dropboxcaptcha.com
+		dropboxforums.com
+		dropboxforum.com
+		dropboxinsiders.com
+		dropboxmail.com
+		dropboxpartners.com
+		dropboxstatic.com
+		dropboxteam.com
+		dropbox.zendesk.com
+		getdropbox.com
+	END
+
+END
+
 BEGIN_URL_GROUP DuckDuckGo
 
 	BEGIN_DOMAINS
@@ -145,10 +177,21 @@ BEGIN_URL_GROUP DuckDuckGo
 
 END
 
+BEGIN_URL_GROUP eBaum's World
+
+	BEGIN_DOMAINS
+		ebaumsworld.com
+	END
+
+END
+
 BEGIN_URL_GROUP eBay
 
 	BEGIN_DOMAINS
 		ebay.com
+		ebaystatic.com
+		ebayimg.com
+		ebayrtm.com
 	END
 
 END
@@ -165,6 +208,8 @@ BEGIN_URL_GROUP Facebook
 
 	BEGIN_DOMAINS
 		facebook.com
+		fbcdn.net
+		fbsbx.com
 	END
 
 END
@@ -195,6 +240,15 @@ BEGIN_URL_GROUP GeoCities
 
 END
 
+BEGIN_URL_GROUP Gmail
+
+	BEGIN_DOMAINS
+		gmail.*
+		googlemail.*
+	END
+
+END
+
 BEGIN_URL_GROUP The Go Network
 
 	BEGIN_DOMAINS
@@ -207,10 +261,30 @@ BEGIN_URL_GROUP Google
 
 	BEGIN_DOMAINS
 		google.*
+
+		google-analytics.*
+		googleadservices.*
+		googleanalytics.*
 		googleapis.*
+		googleapps.*
+		googlearth.*
+		googlebot.*
+		googlecode.*
+		googlecommerce.*
+		googledrive.*
+		googleearth.*
+		googlemaps.*
+		googlepagecreator.*
+		googlescholar.*
+		googlesource.*
 		googlesyndication.*
+		googletagmanager.*
+		googletagservices.*
 		googleusercontent.*
 		gstatic.*
+		ggpht.*
+		gmodules.*
+		goo.gl
 	END
 
 END
@@ -378,6 +452,10 @@ BEGIN_URL_GROUP Netflix
 
 	BEGIN_DOMAINS
 		netflix.com
+		nflxext.com
+		nflximg.com
+		nflximg.net
+		nflxvideo.net
 	END
 
 END
@@ -421,6 +499,15 @@ BEGIN_URL_GROUP Reddit
 		reddit.com
 		redditmedia.com
 		redditstatic.com
+		redd.it
+	END
+
+END
+
+BEGIN_URL_GROUP Slack
+
+	BEGIN_DOMAINS
+		slack.com
 	END
 
 END
@@ -429,6 +516,23 @@ BEGIN_URL_GROUP Snopes
 
 	BEGIN_DOMAINS
 		snopes.com
+	END
+
+END
+
+BEGIN_URL_GROUP Softonic
+
+	BEGIN_DOMAINS
+		softonic.com
+	END
+
+END
+
+BEGIN_URL_GROUP Softpedia
+
+	BEGIN_DOMAINS
+		softpedia.com
+		softpedia-static.com
 	END
 
 END
@@ -469,7 +573,11 @@ BEGIN_URL_GROUP Twitch
 
 	BEGIN_DOMAINS
 		justin.tv
+		jtvnw.net
+
 		twitch.tv
+		twitchcdn.net
+		betterttv.net
 	END
 
 END
@@ -478,6 +586,7 @@ BEGIN_URL_GROUP Twitter
 
 	BEGIN_DOMAINS
 		twitter.com
+		twimg.com
 	END
 
 END
@@ -486,6 +595,7 @@ BEGIN_URL_GROUP Vimeo
 
 	BEGIN_DOMAINS
 		vimeo.com
+		vimeocdn.com
 	END
 
 END
@@ -537,6 +647,17 @@ BEGIN_URL_GROUP YouTube
 
 	BEGIN_DOMAINS
 		youtube.com
+		youtu.be
+		yt.be
+		ytimg.com
+	END
+
+END
+
+BEGIN_URL_GROUP Zombo.com
+
+	BEGIN_DOMAINS
+		zombo.com
 	END
 
 END

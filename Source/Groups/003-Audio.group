@@ -38,8 +38,7 @@ BEGIN_FILE_GROUP Audio
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		aif aiff aifc au flac mka mp3 wav weba wma
-		ogg oga
+		aif aiff aifc au flac mka mp3 oga wav weba wma
 	END
 
 END

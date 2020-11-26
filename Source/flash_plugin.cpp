@@ -131,7 +131,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 	PathCombine(full_file_path, directory_path, filename);
 
 	const u32 SIGNATURE_BUFFER_SIZE = 3;
-	u8 signature_buffer[SIGNATURE_BUFFER_SIZE];
+	u8 signature_buffer[SIGNATURE_BUFFER_SIZE] = {};
 	bool is_flv_file = 	read_first_file_bytes(full_file_path, signature_buffer, SIGNATURE_BUFFER_SIZE)
 						&& memory_is_equal(signature_buffer, "FLV", SIGNATURE_BUFFER_SIZE);
 

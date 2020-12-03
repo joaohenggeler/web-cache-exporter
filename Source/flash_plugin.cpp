@@ -138,7 +138,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 	// Skip non-FLV files.
 	if(is_flv_file)
 	{
-		TCHAR* short_file_path = TEXT("<Temporary>");
+		TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+		PathCombine(short_file_path, TEXT("<Temporary>"), filename);
 
 		Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 		{

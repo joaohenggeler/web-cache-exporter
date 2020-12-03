@@ -256,7 +256,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	}
 	else
 	{
-		StringCchCopy(short_file_path, MAX_PATH_CHARS, params->location_identifier);
+		PathCombine(short_file_path, params->location_identifier, filename);
 	}
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =

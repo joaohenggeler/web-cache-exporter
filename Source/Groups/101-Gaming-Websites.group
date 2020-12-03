@@ -1,10 +1,26 @@
 ; This file lists some popular gaming websites, both old and new.
 ; Be sure to check the Lost Websites group file first before adding any others.
 
+BEGIN_URL_GROUP 2DPlay
+
+	BEGIN_DOMAINS
+		2dplay.com
+	END
+
+END
+
 BEGIN_URL_GROUP Addicting Games
 
 	BEGIN_DOMAINS
 		addictinggames.com
+	END
+
+END
+
+BEGIN_URL_GROUP Adult Swim
+
+	BEGIN_DOMAINS
+		adultswim.com
 	END
 
 END

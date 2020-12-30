@@ -1,7 +1,7 @@
-; This file lists common archive formats. Note that files based on these formats may
-; be labeled differently if their group is loaded first. For example, the Plugin group
-; file labels a JAR file as "Java", even though this type of file is based on the ZIP
-; format.
+; This file lists common archive and/or compression formats. Note that files based on
+; these formats may be labeled differently if their group is loaded first. For example,
+; the Plugin group file labels a JAR file as "Java", even though this type of file is
+; based on the ZIP format.
 
 BEGIN_FILE_GROUP 7-Zip
 
@@ -67,7 +67,7 @@ BEGIN_FILE_GROUP GZIP
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		gz
+		gz tgz
 	END
 
 END

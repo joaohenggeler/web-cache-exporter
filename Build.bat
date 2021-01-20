@@ -47,7 +47,7 @@ PUSHD "%~dp0"
 
 	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
 	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
-	REM In our case, we use 7-Zip Extra 9.20.
+	REM In our case, we use 7-Zip 9.20 Command Line Version.
 	SET "PACKAGE_BUILD=Yes"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
@@ -84,7 +84,7 @@ PUSHD "%~dp0"
 	SET "COMPILER_OPTIONS_64_ONLY="
 
 	REM Statically link with the required libraries. Note that we tell the linker not to use any default libraries.
-	SET "LIBRARIES=Kernel32.lib Advapi32.lib Shell32.lib Shlwapi.lib"
+	SET "LIBRARIES=Kernel32.lib Advapi32.lib Shell32.lib Shlwapi.lib Version.lib"
 	SET "LIBRARIES_RELEASE_ONLY=LIBCMT.lib"
 	SET "LIBRARIES_DEBUG_ONLY=LIBCMTD.lib"
 	SET "LIBRARIES_32_ONLY="

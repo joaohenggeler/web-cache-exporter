@@ -27,10 +27,10 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 {
-	TCHAR* filename = find_data->cFileName;
+	TCHAR* filename = callback_find_data->cFileName;
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, filename);
+	PathCombine(full_file_path, callback_directory_path, filename);
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
@@ -40,8 +40,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 		{/* Custom File Group */}
 	};
 
-	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+	Exporter* exporter = (Exporter*) callback_user_data;
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 
 	return true;
 }

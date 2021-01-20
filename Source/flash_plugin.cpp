@@ -44,6 +44,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_LIBRARY_SHA_256,
 	CSV_LOCATION_ON_CACHE,
 	CSV_CUSTOM_FILE_GROUP
 };
@@ -97,23 +98,57 @@ void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 {
-	TCHAR* filename = find_data->cFileName;
+	Exporter* exporter = (Exporter*) callback_user_data;
+	Arena* arena = &(exporter->temporary_arena);
+
+	TCHAR* filename = callback_find_data->cFileName;
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, filename);
+	PathCombine(full_file_path, callback_directory_path, filename);
 
 	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
+
+	TCHAR* library_sha_256 = NULL;
+	{
+		TCHAR* file_extension = skip_to_file_extension(filename, true);
+		if(strings_are_equal(file_extension, TEXT(".swz"), true))
+		{
+			TCHAR previous_char = *file_extension;
+			*file_extension = TEXT('\0');
+
+			TCHAR metadata_file_path[MAX_PATH_CHARS] = TEXT("");
+			PathCombine(metadata_file_path, callback_directory_path, filename);
+			StringCchCat(metadata_file_path, MAX_PATH_CHARS, TEXT(".heu"));
+
+			u64 metadata_file_size = 0;
+			char* metadata_file = (char*) read_entire_file(arena, metadata_file_path, &metadata_file_size, true);
+			if(metadata_file != NULL)
+			{
+				for(int i = 0; i < 3; ++i)
+				{
+					metadata_file = skip_to_end_of_string(metadata_file);
+					++metadata_file;
+				}
+
+				library_sha_256 = convert_ansi_string_to_tchar(arena, metadata_file);
+				// @Assert: Each SWZ's filename should be the first 40 character of its packaged library's SHA-256.
+				_ASSERT(strings_are_at_most_equal(filename, library_sha_256, 40, true));
+			}
+
+			*file_extension = previous_char;
+		}
+	}
 
 	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
+		{library_sha_256},
 		{short_file_path},
 		{/* Custom File Group */}
 	};
 
-	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 
 	return true;
 }
@@ -125,10 +160,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 {
-	TCHAR* filename = find_data->cFileName;
+	TCHAR* filename = callback_find_data->cFileName;
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, filename);
+	PathCombine(full_file_path, callback_directory_path, filename);
 
 	const u32 SIGNATURE_BUFFER_SIZE = 3;
 	u8 signature_buffer[SIGNATURE_BUFFER_SIZE] = {};
@@ -145,12 +180,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 		{
 			{/* Filename */}, {/* File Extension */}, {/* File Size */},
 			{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
+			{/* Library SHA-256 */},
 			{short_file_path},
 			{/* Custom File Group */}
 		};
 
-		Exporter* exporter = (Exporter*) user_data;
-		export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);	
+		Exporter* exporter = (Exporter*) callback_user_data;
+		export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);	
 	}
 
 	return true;

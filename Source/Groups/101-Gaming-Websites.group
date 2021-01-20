@@ -41,6 +41,14 @@ BEGIN_URL_GROUP Andkon Arcade
 
 END
 
+BEGIN_URL_GROUP The Arcade Machine
+
+	BEGIN_DOMAINS
+		arcademachine.com
+	END
+
+END
+
 BEGIN_URL_GROUP ArcadePod
 
 	BEGIN_DOMAINS

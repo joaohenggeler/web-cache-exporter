@@ -32,7 +32,7 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_DIRECTOR_FILE_TYPE,
+	CSV_DIRECTOR_FILE_TYPE, CSV_XTRA_DESCRIPTION, CSV_XTRA_VERSION,
 	CSV_LOCATION_ON_CACHE,
 	CSV_CUSTOM_FILE_GROUP
 };
@@ -238,21 +238,36 @@ void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 {
-	Find_Shockwave_Files_Params* params = (Find_Shockwave_Files_Params*) user_data;
+	Find_Shockwave_Files_Params* params = (Find_Shockwave_Files_Params*) callback_user_data;
 
-	TCHAR* filename = find_data->cFileName;
+	Exporter* exporter = params->exporter;
+	Arena* arena = &(exporter->temporary_arena);
+
+	TCHAR* filename = callback_find_data->cFileName;
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, filename);
+	PathCombine(full_file_path, callback_directory_path, filename);
 
 	TCHAR* director_file_type = (params->is_xtra) ? (TEXT("Xtra")) : (get_director_file_type_from_file_signature(full_file_path));
 
 	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR* xtra_description = NULL;
+	TCHAR* xtra_version = NULL;
 
 	if(params->is_xtra)
 	{
 		PathCombine(short_file_path, params->location_identifier, TEXT("[...]"));
 		PathAppend(short_file_path, find_last_path_components(full_file_path, 3));
+
+		if(!get_file_info(arena, full_file_path, INFO_FILE_DESCRIPTION, &xtra_description))
+		{
+			log_print(LOG_WARNING, "Shockwave Plugin: No file description found for the Xtra '%s'.", filename);
+		}
+
+		if(!get_file_info(arena, full_file_path, INFO_PRODUCT_VERSION, &xtra_version))
+		{
+			log_print(LOG_WARNING, "Shockwave Plugin: No product version found for the Xtra '%s'.", filename);
+		}
 	}
 	else
 	{
@@ -263,13 +278,12 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
-		{director_file_type},
+		{director_file_type}, {xtra_description}, {xtra_version},
 		{short_file_path},
 		{/* Custom File Group */}
 	};
 
-	Exporter* exporter = params->exporter;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 
 	return true;
 }

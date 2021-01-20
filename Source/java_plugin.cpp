@@ -161,10 +161,10 @@ void export_specific_or_default_java_plugin_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 {
-	TCHAR* filename = find_data->cFileName;
+	TCHAR* filename = callback_find_data->cFileName;
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, filename);
+	PathCombine(full_file_path, callback_directory_path, filename);
 
 	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
 
@@ -180,8 +180,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 		{/* Custom File Group */}, {/* Custom URL Group */}
 	};
 
-	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+	Exporter* exporter = (Exporter*) callback_user_data;
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 
 	return true;
 }
@@ -328,9 +328,9 @@ struct Find_Filename_Result
 // @Returns: True if the file was not found (to keep searching) or false if it was found (to stop searching).
 static TRAVERSE_DIRECTORY_CALLBACK(find_cached_filename_that_starts_with_callback)
 {
-	Find_Filename_Result* result = (Find_Filename_Result*) user_data;
-	result->was_found = !string_ends_with(find_data->cFileName, TEXT(".idx"))
-					&& SUCCEEDED(StringCchCopy(result->result_buffer, MAX_PATH_CHARS, find_data->cFileName));
+	Find_Filename_Result* result = (Find_Filename_Result*) callback_user_data;
+	result->was_found = !string_ends_with(callback_find_data->cFileName, TEXT(".idx"))
+					&& SUCCEEDED(StringCchCopy(result->result_buffer, MAX_PATH_CHARS, callback_find_data->cFileName));
 	return !result->was_found;
 }
 
@@ -363,18 +363,18 @@ static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, c
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 {
-	Exporter* exporter = (Exporter*) user_data;
+	Exporter* exporter = (Exporter*) callback_user_data;
 	Arena* arena = &(exporter->temporary_arena);
 
 	// Find out what kind of cache location we're in by looking at the directory's name:
 	// - "[...]\cache\javapi\v1.0\file\file.ext"
 	// - "[...]\cache\javapi\v1.0\jar\archive.zip"
 	// Otherwise, we assume that it's version 6, whose directory structure is "[...]\cache\6.0\<Number>\<Random Characters>".
-	TCHAR* directory_name = PathFindFileName(directory_path);
+	TCHAR* directory_name = PathFindFileName(callback_directory_path);
 	
 	// For the ".jpi_cache" directory (version 1), where the directory structure follows ".jpi_cache\file\1.0\file.ext" instead.
 	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(previous_directory_path, directory_path, TEXT(".."));
+	PathCombine(previous_directory_path, callback_directory_path, TEXT(".."));
 	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
 
 	Location_Type location_type = LOCATION_ALL;
@@ -387,8 +387,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		location_type = LOCATION_ARCHIVES;
 	}
 
-	TCHAR* index_filename = find_data->cFileName;
-	PathCombine(exporter->index_path, directory_path, index_filename);
+	TCHAR* index_filename = callback_find_data->cFileName;
+	PathCombine(exporter->index_path, callback_directory_path, index_filename);
 	Index index = {};
 	read_index_file(arena, exporter->index_path, &index, location_type);
 
@@ -490,7 +490,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 				// If that fails, take the time to search on disk for the actual filename.
 				// This applies to the version 1 cache directories that still exist in version 6.
 				TCHAR actual_filename[MAX_PATH_CHARS] = TEXT("");
-				if(find_cached_filename_that_starts_with(directory_path, cached_filename, actual_filename))
+				if(find_cached_filename_that_starts_with(callback_directory_path, cached_filename, actual_filename))
 				{
 					StringCchCopy(cached_filename, MAX_PATH_CHARS, actual_filename);
 				}
@@ -511,7 +511,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, cached_filename);
+	PathCombine(full_file_path, callback_directory_path, cached_filename);
 
 	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
 

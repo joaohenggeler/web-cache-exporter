@@ -517,7 +517,7 @@ static void convert_u32_to_dos_date_time(u32 value, Dos_Date_Time* dos_date_time
 // @Returns: Nothing.
 static void export_internet_explorer_4_to_9_cache(Exporter* exporter);
 static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter);
-static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix);
+static void export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix);
 
 void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 {
@@ -569,11 +569,11 @@ void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
 
 			log_print_newline();
 			PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV01.dat");
-			windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V01");
+			export_internet_explorer_10_to_11_cache(exporter, L"V01");
 
 			log_print_newline();
 			PathCombineW(exporter->index_path, exporter->cache_path, L"WebCacheV24.dat");
-			windows_nt_export_internet_explorer_10_to_11_cache(exporter, L"V24");
+			export_internet_explorer_10_to_11_cache(exporter, L"V24");
 			
 		#endif
 	}
@@ -621,14 +621,14 @@ static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback)
 {
-	TCHAR* filename = find_data->cFileName;
+	TCHAR* filename = callback_find_data->cFileName;
 	// Skip the index.dat file itself. We only want the cached files.
 	if(strings_are_equal(filename, TEXT("index.dat"), true)) return true;
 
 	// Despite not using the index.dat file, we can find out where we're located on the cache.
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, directory_path, filename);
+	PathCombine(full_file_path, callback_directory_path, filename);
 
 	TCHAR* short_file_path = find_last_path_components(full_file_path, 2);
 
@@ -640,8 +640,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 		{/* Custom File Group */}
 	};
 
-	Exporter* exporter = (Exporter*) user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, find_data);
+	Exporter* exporter = (Exporter*) callback_user_data;
+	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 
 	return true;
 }
@@ -1410,10 +1410,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// - JetGetRecordPosition()
 	// - JetMove()
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters: None.
 	// 
 	// @Returns: Nothing.
-	void windows_nt_load_esent_functions(void)
+	void load_esent_functions(void)
 	{
 		if(esent_library != NULL)
 		{
@@ -1453,10 +1455,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// Free any functions that were previously dynamically loaded from ESENT.dll. After being called, these functions should
 	// no longer be called.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters: None.
 	// 
 	// @Returns: Nothing.
-	void windows_nt_free_esent_functions(void)
+	void free_esent_functions(void)
 	{
 		if(esent_library == NULL)
 		{
@@ -1496,6 +1500,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// Performs all clean up operations on the ESE database and deletes the temporary directory that holds any copied
 	// ESE files that were used to attempt a recovery of the database.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters:
 	// 1. temporary_directory_path - The path to the temporary directory to delete.
 	// 2. instance - The address of the ESE instance to terminate. This value will be set to JET_instanceNil.
@@ -1504,7 +1510,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// 5. containers_table_id - The address of the Containers table ID to close. This value will be set to JET_tableidNil.
 	//
 	// @Returns: Nothing.
-	static void windows_nt_ese_clean_up(TCHAR* temporary_directory_path,
+	static void ese_clean_up(TCHAR* temporary_directory_path,
 										JET_INSTANCE* instance, JET_SESID* session_id,
 										JET_DBID* database_id, JET_TABLEID* containers_table_id)
 	{
@@ -1548,11 +1554,13 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	// Maps the value of the database state to a string.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters:
 	// 1. state - The value of the 'dbstate' member in the JET_DBINFOMISC database information structure.
 	//
 	// @Returns: The database state as a constant string.
-	static wchar_t* windows_nt_get_database_state_string(unsigned long state)
+	static wchar_t* get_database_state_string(unsigned long state)
 	{
 		switch(state)
 		{
@@ -1580,16 +1588,18 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// @Returns: True.
 	static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_10_to_11_ese_files_callback)
 	{
-		Copy_Ese_Files_Params* params = (Copy_Ese_Files_Params*) user_data;
+		wchar_t* filename = callback_find_data->cFileName;
+
+		Copy_Ese_Files_Params* params = (Copy_Ese_Files_Params*) callback_user_data;
 		
 		Arena* arena = params->arena;
 		wchar_t* temporary_directory_path = params->temporary_directory_path;
 
 		wchar_t copy_source_path[MAX_PATH_CHARS] = L"";
-		PathCombineW(copy_source_path, directory_path, find_data->cFileName);
+		PathCombineW(copy_source_path, callback_directory_path, filename);
 
 		wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
-		PathCombineW(copy_destination_path, temporary_directory_path, find_data->cFileName);
+		PathCombineW(copy_destination_path, temporary_directory_path, filename);
 
 		// Attempt to copy the ESE file normally...
 		if(!CopyFile(copy_source_path, copy_destination_path, FALSE))
@@ -1600,20 +1610,20 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			DWORD error_code = GetLastError();
 			if(error_code == ERROR_SHARING_VIOLATION)
 			{
-				log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", find_data->cFileName);
+				log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory because it's being used by another process. Attempting to forcibly copy it.", filename);
 
-				if(windows_nt_force_copy_open_file(arena, copy_source_path, copy_destination_path))
+				if(force_copy_open_file(arena, copy_source_path, copy_destination_path))
 				{
-					log_print(LOG_INFO, "Internet Explorer 10 to 11: Forcibly copied the database file '%ls' successfully to '%ls'.", find_data->cFileName, copy_destination_path);
+					log_print(LOG_INFO, "Internet Explorer 10 to 11: Forcibly copied the database file '%ls' successfully to '%ls'.", filename, copy_destination_path);
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to forcibly copy the database file '%ls' to the temporary recovery directory.", find_data->cFileName);
+					log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to forcibly copy the database file '%ls' to the temporary recovery directory.", filename);
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", find_data->cFileName, error_code);
+				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the database file '%ls' to the temporary recovery directory with the error code %lu.", filename, error_code);
 			}
 		}
 
@@ -1622,6 +1632,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	// Exports Internet Explorer 10 and 11's cache from a given location.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters:
 	// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
 	// 2. ese_files_prefix - The three character prefix on the ESE files that are kept next to the ESE database. This parameter
@@ -1629,7 +1641,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// use the prefix "V01", as seen in the files next to this one (e.g. the transaction log file "V01.log").
 	//
 	// @Returns: Nothing.
-	static void windows_nt_export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
+	static void export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix)
 	{
 		Arena* arena = &(exporter->temporary_arena);
 		wchar_t* index_filename = PathFindFileNameW(exporter->index_path);
@@ -1653,7 +1665,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		// 1a. The normal CopyFile() function which will be used for files that aren't being used by another
 		// process (if we're exporting from a live machine) or for every file (if we're exporting from
 		// a backup of another machine).
-		// 1b. Our own windows_nt_force_copy_open_file() function which will be used for files that are being
+		// 1b. Our own force_copy_open_file() function which will be used for files that are being
 		// used by another process.
 		// 2. Set the required ESE system parameters so a database recovery is attempted if necessary. We'll
 		// need to point to our temporary directory which contains the copied transaction logs, and specify
@@ -1708,14 +1720,14 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code == JET_errSuccess)
 		{
 			StringCchPrintfW(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("ESE-v%X-u%X"), database_info.ulVersion, database_info.ulUpdate);
-			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's version is '%ls' and the state is '%ls'.", cache_version, windows_nt_get_database_state_string(database_info.dbstate));
+			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's version is '%ls' and the state is '%ls'.", cache_version, get_database_state_string(database_info.dbstate));
 		}
 
 		error_code = JetCreateInstanceW(&instance, L"WebCacheExporter");
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to create the ESE instance with the error code %ld.", error_code);
-			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 		
@@ -1733,7 +1745,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to initialize the ESE instance with the error code %ld.", error_code);
-			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 		
@@ -1741,7 +1753,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to begin the session with the error code %ld.", error_code);
-			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
@@ -1750,7 +1762,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to attach the database '%ls' with the error code %ld.", temporary_database_path, error_code);
-			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 	
@@ -1758,7 +1770,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to open the database '%ls' with the error code %ld.", temporary_database_path, error_code);
-			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
@@ -1766,7 +1778,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		if(error_code < 0)
 		{
 			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to open the Containers table with the error code %ld.", error_code);
-			windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+			ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 			return;
 		}
 
@@ -2147,7 +2159,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			found_container_record = (JetMove(session_id, containers_table_id, JET_MoveNext, 0) == JET_errSuccess);
 		}
 
-		windows_nt_ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
+		ese_clean_up(temporary_directory_path, &instance, &session_id, &database_id, &containers_table_id);
 	}
 
 #endif

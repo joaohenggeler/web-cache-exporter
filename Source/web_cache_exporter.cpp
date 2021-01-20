@@ -41,12 +41,19 @@
 	files, READMEs, group files, CSV files, the log file, etc.
 
 	- All Windows paths that are used by this application are limited to MAX_PATH (260) characters. Some exporter functions used
-	to extended this limit on the Windows 2000 to 10 builds by using the "\\?\" prefix. However, not all functions in the Win32
-	API support it (e.g. the Shell API), and it can also be difficult to delete any files or directories that exceed this limit
-	on the supported Windows versions. Since the purpose of this application is to recover lost web media by asking the average
-	user to check their cache, this behavior is not desirable.
+	to extend this limit on the Windows 2000 to 10 builds by using the "\\?\" prefix. However, not all functions in the Win32 API
+	support it (e.g. the Shell API), and it can also be difficult to delete any exported files or directories that exceed this
+	limit on the supported Windows versions. Since the purpose of this application is to recover lost web media by asking the
+	average user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
+
+	@TODO:
+
+	- Global: New CSV column "Location In Output" for the copied file's output location. Must be affected by the -show-full-paths option.
+	- Flash Plugin: New CSV column "Library SHA-256" for the shared library's SHA-256 value from the HEU metadata file.
+	- Shockwave Plugin: New CSV column "Xtra Description" for the File Description property from an Xtra file.
+	- Try to replace the usage of memory_map_entire_file with read_entrie_file (created for the latest Flash Plugin TODO) in some cases.
 */
 
 /*
@@ -438,9 +445,9 @@ static void clean_up(Exporter* exporter)
 	#ifndef BUILD_9X
 		if( (exporter->cache_type == CACHE_INTERNET_EXPLORER) || (exporter->cache_type == CACHE_ALL) )
 		{
-			windows_nt_free_esent_functions();
-			windows_nt_free_ntdll_functions();
-			windows_nt_free_kernel32_functions();
+			free_esent_functions();
+			free_ntdll_functions();
+			free_kernel32_functions();
 		}
 	#endif
 
@@ -525,7 +532,15 @@ int _tmain(int argc, TCHAR* argv[])
 			log_print(LOG_ERROR, "Startup: Failed to get Internet Explorer's version with the error code %lu.", GetLastError());
 		}
 		
-		log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
+		CPINFOEX code_page_info = {};
+		if(GetCPInfoEx(CP_ACP, 0, &code_page_info) == TRUE)
+		{
+			log_print(LOG_INFO, "Startup: The current Windows ANSI code page is '%s' (%u).", code_page_info.CodePageName, code_page_info.CodePage);
+		}
+		else
+		{
+			log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
+		}
 	}
 
 	if(argc <= 1)
@@ -617,9 +632,9 @@ int _tmain(int argc, TCHAR* argv[])
 		if( (exporter.cache_type == CACHE_INTERNET_EXPLORER) || (exporter.cache_type == CACHE_ALL) )
 		{
 			log_print(LOG_INFO, "Startup: Dynamically loading any necessary functions.");
-			windows_nt_load_kernel32_functions();
-			windows_nt_load_ntdll_functions();
-			windows_nt_load_esent_functions();
+			load_kernel32_functions();
+			load_ntdll_functions();
+			load_esent_functions();
 		}
 	#endif
 

@@ -134,10 +134,23 @@ bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
+
+// Any code page identifiers that don't have a readily available macro or constant. Used by MultiByteToWideChar() and WideCharToMultiByte() in the Win32 API,
+// and also convert_code_page_string_to_tchar().
+enum Code_Page
+{
+	CP_UTF16 = 1200
+};
+
+TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string);
+TCHAR* convert_code_page_string_to_tchar(Arena* arena, u32 code_page, const char* string);
 TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string);
+TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string);
 TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string);
 TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
-TCHAR* skip_to_end_of_string(TCHAR* str);
+
+char* skip_to_end_of_string(char* str);
+wchar_t* skip_to_end_of_string(wchar_t* str);
 TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings);
 
 /*
@@ -148,7 +161,7 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-// The various components of a URL.
+// The components of a URL.
 // See: partition_url().
 struct Url_Parts
 {
@@ -204,7 +217,7 @@ enum Traversal_Flag
 	TRAVERSE_DIRECTORIES = 1 << 1
 };
 
-#define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(const TCHAR* directory_path, WIN32_FIND_DATA* find_data, void* user_data)
+#define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(const TCHAR* callback_directory_path, WIN32_FIND_DATA* callback_find_data, void* callback_user_data)
 typedef TRAVERSE_DIRECTORY_CALLBACK(Traverse_Directory_Callback);
 void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,
@@ -225,13 +238,45 @@ bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_fi
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
+void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator = false, size_t optional_alignment_size = 0);
 bool read_first_file_bytes(	const TCHAR* path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
 
-// The types of the various log lines in the global log file.
+// The types of property strings stored in an executable or DLL file's information.
+// See: get_file_info().
+enum File_Info_Type
+{
+	INFO_COMMENTS = 0,
+	INFO_INTERNAL_NAME = 1,
+	INFO_PRODUCT_NAME = 2,
+	INFO_COMPANY_NAME = 3,
+	INFO_LEGAL_COPYRIGHT = 4,
+	INFO_PRODUCT_VERSION = 5,
+	INFO_FILE_DESCRIPTION = 6,
+	INFO_LEGAL_TRADEMARKS = 7,
+	INFO_PRIVATE_BUILD = 8,
+	INFO_FILE_VERSION = 9,
+	INFO_ORIGINAL_FILENAME = 10,
+	INFO_SPECIAL_BUILD = 11,
+
+	NUM_FILE_INFO_TYPES = 12
+};
+
+// An array that maps the previous values to ANSI strings.
+const char* const FILE_INFO_TYPE_TO_STRING[NUM_FILE_INFO_TYPES] =
+{
+	"Comments", "InternalName", "ProductName",
+	"CompanyName", "LegalCopyright", "ProductVersion",
+	"FileDescription", "LegalTrademarks", "PrivateBuild",
+	"FileVersion", "OriginalFilename", "SpecialBuild"
+};
+
+bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type info_type, TCHAR** result_info);
+
+// The types of log lines in the global log file.
 // See: tchar_log_print().
 enum Log_Type
 {
@@ -240,6 +285,7 @@ enum Log_Type
 	LOG_WARNING = 2,
 	LOG_ERROR = 3,
 	LOG_DEBUG = 4,
+
 	NUM_LOG_TYPES = 5
 };
 
@@ -288,7 +334,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 	unsigned long long 			= %llu
 
 	int 						= %d
-	unsigned int 				= %u
+	unsigned int / UNINT		= %u
 
 	size_t 						= %Iu
 	ptrdiff_t					= %Id
@@ -310,9 +356,10 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 	void* / HANDLE 				= %p
 	BOOL 						= %d
 	HRESULT / JET_ERR 			= %ld
+	[enum]						= %d
 */
 
-// The types of the various columns in the CSV files. These may be shared by all of them or only apply to one cache database file format.
+// The types of columns in the CSV files. These may be shared by all of them or only apply to one cache database file format.
 enum Csv_Type
 {
 	CSV_NONE = 0,
@@ -348,7 +395,12 @@ enum Csv_Type
 	CSV_HITS,
 	
 	// Shockwave Plugin specific.
+	CSV_LIBRARY_SHA_256,
+
+	// Shockwave Plugin specific.
 	CSV_DIRECTOR_FILE_TYPE,
+	CSV_XTRA_DESCRIPTION,
+	CSV_XTRA_VERSION,
 
 	// Java Plugin specific.
 	CSV_CODEBASE_IP,
@@ -368,9 +420,9 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Location On Cache", "Cache Version", "Location On Disk", "Missing File",
 	"Custom File Group", "Custom URL Group",
 	"Hits",
-	"Director File Type",
-	"Codebase IP",
-	"Version"
+	"Library SHA-256",
+	"Director File Type", "Xtra Description", "Xtra Version",
+	"Codebase IP", "Version"
 };
 
 // A helper structure used to write values to the CSV file. The 'value' member is the ANSI or UTF-16 string to write, and
@@ -411,21 +463,21 @@ do\
 // to call these functions will result in a compile time error.
 // If we want to use them, we have to explicitly wrap the code with #ifndef BUILD_9X [...] #endif.
 #ifndef BUILD_9X
-	void windows_nt_load_ntdll_functions(void);
-	void windows_nt_free_ntdll_functions(void);
+	void load_ntdll_functions(void);
+	void free_ntdll_functions(void);
 
-	void windows_nt_load_kernel32_functions(void);
-	void windows_nt_free_kernel32_functions(void);
+	void load_kernel32_functions(void);
+	void free_kernel32_functions(void);
 	
-	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path);
+	bool force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path);
 #else
-	#define windows_nt_load_ntdll_functions(...) _STATIC_ASSERT(false)
-	#define windows_nt_free_ntdll_functions(...) _STATIC_ASSERT(false)
+	#define load_ntdll_functions(...) _STATIC_ASSERT(false)
+	#define free_ntdll_functions(...) _STATIC_ASSERT(false)
 	
-	#define windows_nt_load_kernel32_functions(...) _STATIC_ASSERT(false)
-	#define windows_nt_free_kernel32_functions(...) _STATIC_ASSERT(false)
+	#define load_kernel32_functions(...) _STATIC_ASSERT(false)
+	#define free_kernel32_functions(...) _STATIC_ASSERT(false)
 
-	#define windows_nt_force_copy_open_file(...) _STATIC_ASSERT(false)
+	#define force_copy_open_file(...) _STATIC_ASSERT(false)
 #endif
 
 #endif

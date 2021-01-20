@@ -822,7 +822,69 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 	return success;
 }
 
+// Converts a string encoded with a given code page to to a TCHAR one and copies the final result to a memory arena. On the Windows 98 and ME
+// builds, the intermediary UTF-16 string is stored in an intermediary arena. If this is irrelevant, use convert_code_page_string_to_tchar(2)
+// instead.
+//
+// On the Windows 98 and ME builds, this function first converts the string to UTF-16, and then to an ANSI one.
+// On the Windows 2000 through 10 builds, this function converts the string to a UTF-16 one.
+//
+// For code page 1200 (UTF-16 LE) exclusively, this function will simply call convert_utf_16_string_to_tchar() instead.
+//
+// @Parameters:
+// 1. final_arena - The Arena structure that will receive the final converted TCHAR string.
+// 2. intermediary_arena - The Arena structure that will receive the intermediary converted UTF-16 string. This only applies to Windows 98
+// and ME. On the Windows 2000 to 10 builds, this parameter is unused.
+// 3. code_page - The code page used by the string.
+// 4. string - The string to convert.
+//
+// @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
+TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string)
+{
+	// A bit hacky since we're not even handling code pages 1201, 12000, or 12001 (UTF-16 BE, UTF-32 LE, or UTF-32 BE),
+	// but it works for our purposes.
+	if(code_page == CP_UTF16) return convert_utf_16_string_to_tchar(final_arena, (const wchar_t*) string);
+
+	int num_chars_required_utf_16 = MultiByteToWideChar(code_page, 0, string, -1, NULL, 0);
+
+	if(num_chars_required_utf_16 == 0)
+	{
+		log_print(LOG_ERROR, "Convert Code Page String To Tchar: Failed to determine the number of characters required to convert the code page %I32u string '%hs' into a UTF-16 string with the error code %lu.", code_page, string, GetLastError());
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		Arena* utf_16_string_arena = intermediary_arena;
+	#else
+		Arena* utf_16_string_arena = final_arena;
+	#endif
+
+	int size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
+	wchar_t* utf_16_string = push_arena(utf_16_string_arena, size_required_utf_16, wchar_t);
+
+	if(MultiByteToWideChar(code_page, 0, string, -1, utf_16_string, num_chars_required_utf_16) == 0)
+	{
+		log_print(LOG_ERROR, "Convert Code Page String To Tchar: Failed to convert the code page %I32u string '%hs' into a UTF-16 string with the error code %lu.", code_page, string, GetLastError());
+		return NULL;
+	}
+
+	#ifdef BUILD_9X
+		return convert_utf_16_string_to_tchar(final_arena, utf_16_string);
+	#else
+		return utf_16_string;
+	#endif
+}
+
+// Behaves like convert_code_page_string_to_tchar(3) but instead copies both the final and intermediary strings to the same memory arena.
+// 
+// @Returns: See convert_code_page_string_to_tchar(3).
+TCHAR* convert_code_page_string_to_tchar(Arena* arena, u32 code_page, const char* string)
+{
+	return convert_code_page_string_to_tchar(arena, arena, code_page, string);
+}
+
 // Converts an ANSI string to a TCHAR one.
+//
 // On the Windows 98 and ME builds, this function simply copies the ANSI string.
 // On the Windows 2000 through 10 builds, this function converts the ANSI string to a UTF-16 one.
 //
@@ -836,32 +898,50 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 	#ifdef BUILD_9X
 		return push_string_to_arena(arena, ansi_string);
 	#else
-		int num_chars_required = MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, NULL, 0);
-
-		if(num_chars_required == 0)
-		{
-			log_print(LOG_ERROR, "Convert Ansi String To Tchar: Failed to determine the size required to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
-			return NULL;
-		}
-
-		int size_required = num_chars_required * sizeof(wchar_t);
-		wchar_t* utf_16_string = push_arena(arena, size_required, wchar_t);
-
-		if(MultiByteToWideChar(CP_ACP, 0, ansi_string, -1, utf_16_string, num_chars_required) == 0)
-		{
-			log_print(LOG_ERROR, "Convert Ansi String To Tchar: Failed to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu.", ansi_string, GetLastError());
-			return NULL;
-		}
-
-		return utf_16_string;
+		return convert_code_page_string_to_tchar(arena, CP_ACP, ansi_string);
 	#endif
 }
 
-// Converts an UTF-8 string to a TCHAR one and copies the final result to a memory arena. On the Windows 98 and ME builds, the
+// Converts a UTF-16 LE string to a TCHAR one.
+//
+// On the Windows 98 and ME builds, this function converts the UTF-16 string to an ANSI one.
+// On the Windows 2000 through 10 builds, simply copies the UTF-16 string.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the converted TCHAR string.
+// 2. utf_16_string - The UTF-16 string to convert.
+//
+// @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
+TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string)
+{
+	#ifdef BUILD_9X
+		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
+		
+		if(size_required_ansi == 0)
+		{
+			log_print(LOG_ERROR, "Convert Utf-16 String To Tchar: Failed to determine the size required to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			return NULL;
+		}
+
+		char* ansi_string = push_arena(arena, size_required_ansi, char);
+		
+		if(WideCharToMultiByte(CP_UTF8, 0, utf_16_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
+		{
+			log_print(LOG_ERROR, "Convert Utf-16 String To Tchar: Failed to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			return NULL;
+		}
+
+		return ansi_string;
+	#else
+		return push_string_to_arena(arena, utf_16_string);
+	#endif
+}
+
+// Converts a UTF-8 string to a TCHAR one and copies the final result to a memory arena. On the Windows 98 and ME builds, the
 // intermediary UTF-16 string is stored in an intermediary arena. If this is irrelevant, use convert_utf_8_string_to_tchar(2)
 // instead.
 //
-// On the Windows 98 and ME builds, this function converts the UTF-8 string to UTF-16, and then to an ANSI one.
+// On the Windows 98 and ME builds, this function first converts the UTF-8 string to UTF-16, and then to an ANSI one.
 // On the Windows 2000 through 10 builds, this function converts the UTF-8 string to a UTF-16 one.
 //
 // @Parameters:
@@ -873,49 +953,10 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string)
 {
-	int num_chars_required_wide = MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, NULL, 0);
-	if(num_chars_required_wide == 0)
-	{
-		log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to determine the size required to convert the UTF-8 string '%hs' into a UTF-16 string with the error code %lu.", utf_8_string, GetLastError());
-		return NULL;
-	}
-
-	#ifdef BUILD_9X
-		Arena* utf_16_string_arena = intermediary_arena;
-	#else
-		Arena* utf_16_string_arena = final_arena;
-	#endif
-
-	int size_required_wide = num_chars_required_wide * sizeof(wchar_t);
-	wchar_t* utf_16_string = push_arena(utf_16_string_arena, size_required_wide, wchar_t);
-	if(MultiByteToWideChar(CP_UTF8, 0, utf_8_string, -1, utf_16_string, num_chars_required_wide) == 0)
-	{
-		log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to convert the UTF-8 string '%hs' into a UTF-16 string with the error code %lu.", utf_8_string, GetLastError());
-		return NULL;
-	}
-
-	#ifdef BUILD_9X
-		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
-		if(size_required_ansi == 0)
-		{
-			log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to determine the size required to convert the intermediate UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
-			return NULL;
-		}
-
-		char* ansi_string = push_arena(final_arena, size_required_ansi, char);
-		if(WideCharToMultiByte(CP_UTF8, 0, utf_16_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
-		{
-			log_print(LOG_ERROR, "Convert Utf-8 String To Tchar: Failed to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
-			return NULL;
-		}
-
-		return ansi_string;
-	#else
-		return utf_16_string;
-	#endif
+	return convert_code_page_string_to_tchar(final_arena, intermediary_arena, CP_UTF8, utf_8_string);
 }
 
-// Behaves like convert_utf_8_string_to_tchar(3) but instead copies both the final and intermediary to the same memory arena.
+// Behaves like convert_utf_8_string_to_tchar(3) but instead copies both the final and intermediary strings to the same memory arena.
 // 
 // @Returns: See convert_utf_8_string_to_tchar(3).
 TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
@@ -929,9 +970,15 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
 // 1. str - The string.
 //
 // @Returns: The end of the string.
-TCHAR* skip_to_end_of_string(TCHAR* str)
+char* skip_to_end_of_string(char* str)
 {
-	while(*str != TEXT('\0')) ++str;
+	while(*str != '\0') ++str;
+	return str;
+}
+
+wchar_t* skip_to_end_of_string(wchar_t* str)
+{
+	while(*str != L'\0') ++str;
 	return str;
 }
 
@@ -1250,6 +1297,8 @@ static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_pa
 // 1. path - The path to check for a file extension.
 // 2. optional_include_period - An optional parameter that specifies whether the file extension should include the
 // period character or not. This value defaults to false.
+// 3. optional_get_first_extension - An optional parameter that specifies whether the file extension starts at the
+// first period character instead of the last. This value defaults to false.
 //
 // @Returns: The beginning of the file extension in the path. If the path is NULL, this function returns NULL.
 // If the filename doesn't contain a file extension, the end of the string is returned.
@@ -1958,7 +2007,7 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 static TRAVERSE_DIRECTORY_CALLBACK(find_temporary_directories_callback)
 {
 	TCHAR full_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_directory_path, directory_path, find_data->cFileName);
+	PathCombine(full_directory_path, callback_directory_path, callback_find_data->cFileName);
 	log_print(LOG_INFO, "Find Temporary Directories Callback: Deleting the temporary directory in '%s'.", full_directory_path);
 	delete_directory_and_contents(full_directory_path);
 	return true;
@@ -2238,12 +2287,12 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 
 					if(mapped_memory == NULL)
 					{
-						log_print(LOG_ERROR, "Memory Mapping: Failed to map a view of the file with the error code %lu.", GetLastError());
+						log_print(LOG_ERROR, "Memory Map Entire File: Failed to map a view of the file with the error code %lu.", GetLastError());
 					}
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Memory Mapping: Failed to create the file mapping with the error code %lu.", GetLastError());
+					log_print(LOG_ERROR, "Memory Map Entire File: Failed to create the file mapping with the error code %lu.", GetLastError());
 				}
 
 				// About CloseHandle() and UnmapViewOfFile():
@@ -2252,17 +2301,17 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Memory Mapping: Failed to create a file mapping since the file is empty.");
+				log_print(LOG_ERROR, "Memory Map Entire File: Failed to create a file mapping since the file is empty.");
 			}
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Memory Mapping: Failed to get the file's size with the error code %lu.", GetLastError());
+			log_print(LOG_ERROR, "Memory Map Entire File: Failed to get the file's size with the error code %lu.", GetLastError());
 		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Memory Mapping: Failed to map the entire file into memory since the file handle is invalid.");
+		log_print(LOG_ERROR, "Memory Map Entire File: Failed to map the entire file into memory since the file handle is invalid.");
 	}
 
 	return mapped_memory;
@@ -2292,9 +2341,88 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 									0,
 									NULL);
 
+	if(file_handle == INVALID_HANDLE_VALUE)
+	{
+		log_print(LOG_ERROR, "Memory Map Entire File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+	}
+
 	*result_file_handle = file_handle;
 
 	return memory_map_entire_file(file_handle, result_file_size, optional_read_only);
+}
+
+// @TODO
+void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator, size_t optional_alignment_size)
+{
+	void* read_file = NULL;
+	*result_file_size = 0;
+
+	HANDLE file_handle = CreateFile(file_path,
+									GENERIC_READ,
+									0,
+									NULL,
+									OPEN_EXISTING,
+									0,
+									NULL);
+
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		const u32 FILE_BUFFER_SIZE = 65536;
+		_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
+		
+		void* file_buffer = push_arena(arena, FILE_BUFFER_SIZE, u8);
+
+		if(optional_alignment_size == 0)
+		{
+			SYSTEM_INFO system_info = {};
+			GetSystemInfo(&system_info);
+			optional_alignment_size = system_info.dwPageSize;
+		}
+		_ASSERT(IS_POWER_OF_TWO(optional_alignment_size));
+
+		read_file = aligned_push_arena(arena, 0, optional_alignment_size);
+		
+		bool reached_end_of_file = false;
+		do
+		{
+			DWORD num_bytes_read = 0;
+			bool read_success = ReadFile(file_handle, file_buffer, FILE_BUFFER_SIZE, &num_bytes_read, NULL) != FALSE;
+
+			if(read_success)
+			{
+				if(num_bytes_read > 0)
+				{
+					push_and_copy_to_arena(arena, num_bytes_read, u8, file_buffer, num_bytes_read);
+					*result_file_size += num_bytes_read;
+				}
+				else
+				{
+					reached_end_of_file = true;
+
+					if(optional_add_null_terminator)
+					{
+						push_and_copy_to_arena(arena, sizeof(wchar_t), u8, L"\0", sizeof(wchar_t));
+						// @TODO: Add to result_file_size?
+					}
+				}
+			}
+			else
+			{
+				reached_end_of_file = true;
+				read_file = NULL;
+				log_print(LOG_ERROR, "Read Entire File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes so far.", file_path, GetLastError(), *result_file_size);
+			}
+
+		} while(!reached_end_of_file);
+		
+		safe_close_handle(&file_handle);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Read Entire File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+	}
+
+	return read_file;
 }
 
 // Reads a given number of bytes from the beginning of a file.
@@ -2411,6 +2539,100 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 	}
 
 	SetLastError(error_code);
+	return success;
+}
+
+// @TODO
+bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type info_type, TCHAR** result_info)
+{
+	// @Assert: The requested file info type is handled and is associated with a string identifier.
+	_ASSERT(0 <= info_type && info_type < NUM_FILE_INFO_TYPES);
+
+	// @Assert: The file path argument is an absolute path. Otherwise, it searches for it in various locations
+	// as specified by LoadLibrary().
+	_ASSERT(PathIsRelative(full_file_path) == FALSE);
+
+	bool success = false;
+
+	DWORD handle = 0;
+	DWORD info_size = GetFileVersionInfoSize(full_file_path, &handle);
+	if(info_size > 0)
+	{
+		void* info_block = push_arena(arena, info_size, char);
+		if(GetFileVersionInfo(full_file_path, handle, info_size, info_block) != FALSE)
+		{
+			struct Language_Code_Page_Info
+			{
+				WORD wLanguage;
+				WORD wCodePage;
+			};
+
+			Language_Code_Page_Info* language_code_page_info = NULL;
+			UINT queried_info_size = 0;
+
+			if(VerQueryValue(info_block, TEXT("\\VarFileInfo\\Translation"), (LPVOID*) &language_code_page_info, &queried_info_size) != FALSE)
+			{
+				UINT num_languages_and_code_pages = queried_info_size / sizeof(Language_Code_Page_Info);
+				if(num_languages_and_code_pages > 0)
+				{
+					if(num_languages_and_code_pages > 1)
+					{
+						log_print(LOG_WARNING, "Get File Info: Ignoring %d language and code page info structures for the file '%s' and info type %d.", num_languages_and_code_pages - 1, full_file_path, info_type);
+					}
+
+					WORD language = language_code_page_info[0].wLanguage;
+					WORD code_page = language_code_page_info[0].wCodePage;
+					const char* info_type_string = FILE_INFO_TYPE_TO_STRING[info_type];
+
+					TCHAR* string_subblock = push_arena(arena, info_size, TCHAR);
+					StringCbPrintf(string_subblock, info_size, TEXT("\\StringFileInfo\\%04x%04x\\%hs"), language, code_page, info_type_string);
+
+					char* file_description = NULL;
+					UINT file_description_size = 0;
+
+					if(VerQueryValue(info_block, string_subblock, (LPVOID*) &file_description, &file_description_size) != FALSE)
+					{
+						if(file_description_size > 0)
+						{
+							if(code_page != CP_UTF16)
+							{
+								log_print(LOG_INFO, "Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
+							}
+
+							// Even though the most common case seems to be UTF-16 LE, the code page could still be some other value.
+							*result_info = convert_code_page_string_to_tchar(arena, code_page, file_description);
+							success = (*result_info != NULL);
+						}
+						else
+						{
+							log_print(LOG_WARNING, "Get File Info: No language and code page info for the file '%s' and info type %d.", full_file_path, info_type);
+						}
+					}
+					else
+					{
+						log_print(LOG_ERROR, "Get File Info: Failed to query the language and code page info for the file '%s' and info type %d. The subblock query was '%s'.", full_file_path, info_type, string_subblock);
+					}
+				}
+				else
+				{
+					log_print(LOG_WARNING, "Get File Info: No translation info found for the file '%s' and info type %d.", full_file_path, info_type);
+				}
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Get File Info: Failed to query the translation info for the file '%s' and info type %d.", full_file_path, info_type);
+			}
+		}
+		else
+		{
+			log_print(LOG_ERROR, "Get File Info: Failed to get the version info for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
+		}
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Get File Info: Failed to determine the version info size for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
+	}
+
 	return success;
 }
 
@@ -2900,11 +3122,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	//
 	// - NtQuerySystemInformation()
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters: None.
 	// 
 	// @Returns: Nothing.
 	static HMODULE ntdll_library = NULL;
-	void windows_nt_load_ntdll_functions(void)
+	void load_ntdll_functions(void)
 	{
 		if(ntdll_library != NULL)
 		{
@@ -2926,10 +3150,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// Free any functions that were previously dynamically loaded from Ntdll.dll. After being called, these functions should
 	// no longer be called.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters: None.
 	// 
 	// @Returns: Nothing.
-	void windows_nt_free_ntdll_functions(void)
+	void free_ntdll_functions(void)
 	{
 		if(ntdll_library == NULL)
 		{
@@ -2968,11 +3194,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	//
 	// - GetOverlappedResultEx()
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters: None.
 	// 
 	// @Returns: Nothing.
 	static HMODULE kernel32_library = NULL;
-	void windows_nt_load_kernel32_functions(void)
+	void load_kernel32_functions(void)
 	{
 		if(kernel32_library != NULL)
 		{
@@ -2994,10 +3222,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// Free any functions that were previously dynamically loaded from Kernel32.dll. After being called, these functions should
 	// no longer be called.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters: None.
 	// 
 	// @Returns: Nothing.
-	void windows_nt_free_kernel32_functions(void)
+	void free_kernel32_functions(void)
 	{
 		if(kernel32_library == NULL)
 		{
@@ -3045,6 +3275,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 	// Finds and creates a duplicated handle for a file that was opened by another process given its path on disk.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters:
 	// 1. arena - The Arena structure where any intermediary information about the currently opened handles is stored.
 	// Note that this function does not clear this arena. Use clear_arena() after calling this function.
@@ -3056,7 +3288,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// 2. If the file's handle cannot be duplicated.
 	// 3. If it's not possible to get a handle with read attributes only access for the file. 
 	// 4. If it couldn't query the system for information on all opened handles.
-	static bool windows_nt_query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle)
+	static bool query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle)
 	{
 		*result_file_handle = INVALID_HANDLE_VALUE;
 
@@ -3160,6 +3392,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	//
 	// Note that this function will clear the supplied memory arena before returning.
 	//
+	// @Compatibility: Windows 2000 to 10 only.
+	//
 	// @Parameters:
 	// 1. arena - The Arena structure where the file buffer and any intermediary information about the currently opened handles
 	// is stored.
@@ -3171,12 +3405,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// 1. The file specified in copy_source_path exists and is currently open by another process.
 	// 2. The number of bytes written to disk matches the number of bytes read using the duplicated file handle.
 	// 3. The number of bytes written to disk matches the source file's real size.
-	bool windows_nt_force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
+	bool force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
 	{
 		bool copy_success = false;
 
 		HANDLE source_file_handle = INVALID_HANDLE_VALUE;
-		bool was_source_handle_found = windows_nt_query_file_handle_from_file_path(arena, copy_source_path, &source_file_handle);
+		bool was_source_handle_found = query_file_handle_from_file_path(arena, copy_source_path, &source_file_handle);
 		clear_arena(arena);
 
 		if(was_source_handle_found)
@@ -3273,6 +3507,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 							continue;
 						}
 					}
+
+					// Here the read is successful ('read_success' is true) or it was unsuccessful but because we reached
+					// the end of file ('read_success' is false and 'reached_end_of_file' is true).
 
 					// Reset the number of retries if the read operation was successful.
 					num_read_retry_attempts = 0;

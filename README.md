@@ -239,7 +239,7 @@ This section will list some resources and tools that were used to learn how to p
 * [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/).
 * [NirSoft - Improved solution for reading the history of Internet Explorer 10](https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/).
 
-### Shockwave Plugin
+### Shockwave Player
 
 * [TOMYSSHADOW's Movie Restorer Xtra](https://github.com/tomysshadow/Movie-Restorer-Xtra) allows you to open Shockwave movies in Director. This is useful when trying to find out the name of a Shockwave game (e.g. by looking at the game's menu screen) since the plugin's cache does not store the original filename or URL.
 

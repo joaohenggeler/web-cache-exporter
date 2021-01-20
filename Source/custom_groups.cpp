@@ -150,9 +150,9 @@ struct Total_Group_File_Result
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 {
-	Total_Group_File_Result* result = (Total_Group_File_Result*) user_data;
+	Total_Group_File_Result* result = (Total_Group_File_Result*) callback_user_data;
 	Exporter* exporter = result->exporter;
-	TCHAR* filename = find_data->cFileName;
+	TCHAR* filename = callback_find_data->cFileName;
 
 	if(exporter->should_load_specific_groups_files
 		&& !should_load_group_with_filename(exporter->group_filenames_to_load, exporter->num_group_filenames_to_load, filename))
@@ -161,7 +161,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 	}
 
 	TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(group_file_path, directory_path, filename);
+	PathCombine(group_file_path, callback_directory_path, filename);
 
 	HANDLE group_file_handle = INVALID_HANDLE_VALUE;
 	u64 group_file_size = 0;
@@ -722,9 +722,9 @@ struct Find_Group_Files_Result
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_group_files_callback)
 {
-	Find_Group_Files_Result* result = (Find_Group_Files_Result*) user_data;
+	Find_Group_Files_Result* result = (Find_Group_Files_Result*) callback_user_data;
 	Exporter* exporter = result->exporter;
-	TCHAR* filename = find_data->cFileName;
+	TCHAR* filename = callback_find_data->cFileName;
 
 	if(exporter->should_load_specific_groups_files
 		&& !should_load_group_with_filename(exporter->group_filenames_to_load, exporter->num_group_filenames_to_load, filename))

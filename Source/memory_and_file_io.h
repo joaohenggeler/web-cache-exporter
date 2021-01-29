@@ -9,18 +9,27 @@
 	>>>>>>>>>>>>>>>>>>>>
 */
 
+
+
 // A structure that represents a memory arena of with a given capacity in bytes. The 'available_memory' member points to the next free
 // memory location.
 // See: create_arena() and aligned_push_arena().
+
+// The maximum number of locks in a memory arena. See: lock_arena().
+const size_t MAX_NUM_ARENA_LOCKS = 30;
+
 struct Arena
 {
 	size_t used_size;
 	size_t total_size;
 	void* available_memory;
+
+	int num_locks;
+	size_t locked_sizes[MAX_NUM_ARENA_LOCKS];
 };
 
-// A helper constant used to identify uninitialized or destroyed memory arenas.
-const Arena NULL_ARENA = {0, 0, NULL};
+// A helper constant used to mark uninitialized or destroyed memory arenas.
+const Arena NULL_ARENA = {0, 0, NULL, 0, {}};
 
 bool create_arena(Arena* arena, size_t total_size);
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size);
@@ -29,6 +38,8 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 #define push_and_copy_to_arena(arena, push_size, Type, data, data_size) ((Type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(Type), data, data_size))
 TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy);
 float32 get_used_arena_capacity(Arena* arena);
+void lock_arena(Arena* arena);
+void unlock_arena(Arena* arena);
 void clear_arena(Arena* arena);
 bool destroy_arena(Arena* arena);
 
@@ -139,7 +150,10 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 // and also convert_code_page_string_to_tchar().
 enum Code_Page
 {
-	CP_UTF16 = 1200
+	CP_UTF16_LE = 1200,
+	CP_UTF16_BE = 1201,
+	CP_UTF32_LE = 12000,
+	CP_UTF32_BE = 12001
 };
 
 TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string);
@@ -149,8 +163,8 @@ TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string
 TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string);
 TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
 
-char* skip_to_end_of_string(char* str);
-wchar_t* skip_to_end_of_string(wchar_t* str);
+char* skip_to_next_string(char* str);
+wchar_t* skip_to_next_string(wchar_t* str);
 TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings);
 
 /*
@@ -178,6 +192,8 @@ struct Url_Parts
 
 bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
 TCHAR* decode_url(Arena* arena, const TCHAR* url);
+void correct_url_path_characters(TCHAR* path);
+bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -191,10 +207,13 @@ const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 
 TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
-TCHAR* find_last_path_components(TCHAR* path, u32 desired_num_components);
+TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components);
+int count_path_components(const TCHAR* path);
 bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_result_path_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
+void truncate_path_components(TCHAR* path);
+void correct_reserved_path_components(TCHAR* path);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -233,8 +252,8 @@ const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
 void delete_all_temporary_directories(const TCHAR* base_temporary_path);
 bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
-bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_file_path, 
-												const TCHAR* full_base_directory_path, const TCHAR* url, const TCHAR* filename);
+
+bool create_empty_file(const TCHAR* file_path);
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
@@ -383,26 +402,29 @@ enum Csv_Type
 	CSV_CONTENT_LENGTH,
 	CSV_CONTENT_ENCODING,
 
+	CSV_HITS,
+
 	CSV_LOCATION_ON_CACHE,
 	CSV_CACHE_VERSION,
 	CSV_LOCATION_ON_DISK,
-	CSV_MISSING_FILE,
 
+	// Set automatically - cannot be overridden.
+	CSV_MISSING_FILE,
+	CSV_LOCATION_IN_OUTPUT,
+	CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP,
 	CSV_CUSTOM_URL_GROUP,
+	CSV_SHA_256,
 	
-	// Internet Explorer specific.
-	CSV_HITS,
-	
-	// Shockwave Plugin specific.
+	// For the Shockwave Plugin:
 	CSV_LIBRARY_SHA_256,
 
-	// Shockwave Plugin specific.
+	// For the Shockwave Plugin:
 	CSV_DIRECTOR_FILE_TYPE,
 	CSV_XTRA_DESCRIPTION,
 	CSV_XTRA_VERSION,
 
-	// Java Plugin specific.
+	// For the Java Plugin:
 	CSV_CODEBASE_IP,
 	CSV_VERSION,
 
@@ -417,9 +439,9 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
 	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Encoding",
-	"Location On Cache", "Cache Version", "Location On Disk", "Missing File",
-	"Custom File Group", "Custom URL Group",
 	"Hits",
+	"Location On Cache", "Cache Version", "Location On Disk",
+	"Missing File", "Location In Output", "Copy Error", "Custom File Group", "Custom URL Group", "SHA-256",
 	"Library SHA-256",
 	"Director File Type", "Xtra Description", "Xtra Version",
 	"Codebase IP", "Version"
@@ -458,6 +480,17 @@ do\
 		log_print(LOG_ERROR, "Get Function Address: Failed to retrieve the function address for '%hs' with the error code %lu.", function_name, GetLastError());\
 	}\
 } while(false, false)
+
+// Define custom error codes that are passed to SetLastError(). This is only done for functions that mix Windows errors (e.g. copying a file) with their
+// own error conditions (e.g. failed to resolve a naming collision). See: copy_file_using_url_directory_structure().
+// @Docs: "Bit 29 is reserved for application-defined error codes; no system error code has this bit set." - SetLastError - Win32 API Reference.
+#define CUSTOM_WIN32_ERROR_CODE(n) ( (1 << 28) | n )
+enum Custom_Error_Code
+{
+	// For copy_file_using_url_directory_structure().
+	CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS = CUSTOM_WIN32_ERROR_CODE(0),
+	CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION = CUSTOM_WIN32_ERROR_CODE(1)
+};
 
 // These functions are only meant to be used in the Windows 2000 through 10 builds. In the Windows 98 and ME builds, attempting
 // to call these functions will result in a compile time error.

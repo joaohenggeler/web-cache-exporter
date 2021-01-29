@@ -20,10 +20,18 @@
 
 	@Resources: TOMYSSHADOW's extensive knowledge of Macromedia / Adobe Director: https://github.com/tomysshadow
 
-	@Tools: None.
+	@Tools: Some utilities that can be used to process certain Director file formats that are found in the plugin's cache.
 
-	But I did use the Director game "Adventure Elf" (developed by Blockdot and published by Kewlbox.com) to test the Xtras export
-	feature in the Temporary Files directory.
+	[MRX] "Movie Restorer Xtra 1.4.5"
+	--> https://github.com/tomysshadow/Movie-Restorer-Xtra
+	--> Can be used to open Shockwave movies in Director.
+
+	[VU] "Valentin's Unpack"
+	--> https://valentin.dasdeck.com/lingo/unpack/
+	--> Can be used to extract Xtras from Xtra-Packages.
+
+	I also used the Director game "Adventure Elf" (developed by Blockdot and published by Kewlbox.com) to test the Xtras export
+	feature for the Temporary Files directory. This was done by executing the exporter while the game was running.
 */
 
 static const TCHAR* OUTPUT_NAME = TEXT("SW");
@@ -33,8 +41,8 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_DIRECTOR_FILE_TYPE, CSV_XTRA_DESCRIPTION, CSV_XTRA_VERSION,
-	CSV_LOCATION_ON_CACHE,
-	CSV_CUSTOM_FILE_GROUP
+	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -257,7 +265,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	if(params->is_xtra)
 	{
 		PathCombine(short_file_path, params->location_identifier, TEXT("[...]"));
-		PathAppend(short_file_path, find_last_path_components(full_file_path, 3));
+		PathAppend(short_file_path, skip_to_last_path_components(full_file_path, 3));
 
 		if(!get_file_info(arena, full_file_path, INFO_FILE_DESCRIPTION, &xtra_description))
 		{
@@ -274,14 +282,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 		PathCombine(short_file_path, params->location_identifier, filename);
 	}
 
-	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
 		{director_file_type}, {xtra_description}, {xtra_version},
-		{short_file_path},
-		{/* Custom File Group */}
+		{short_file_path}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* SHA-256 */}
 	};
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 

@@ -131,6 +131,23 @@ BEGIN_FILE_GROUP Flash
 
 END
 
+BEGIN_FILE_GROUP Flash Cache Metadata
+
+	BEGIN_FILE_EXTENSIONS
+		heu
+	END
+
+END
+
+; Local Shared Object
+BEGIN_FILE_GROUP Flash Cookie
+
+	BEGIN_FILE_EXTENSIONS
+		sol
+	END
+
+END
+
 BEGIN_FILE_GROUP GoBit Games Plugin
 
 	BEGIN_MIME_TYPES

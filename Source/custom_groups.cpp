@@ -422,8 +422,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						u8* bytes = push_arena(permanent_arena, num_bytes * sizeof(u8), u8);
 						bool* is_wildcard = push_arena(permanent_arena, num_bytes * sizeof(bool), bool);
 
-						TCHAR* next_file_signature_string = skip_to_end_of_string(file_signature_strings);
-						++next_file_signature_string;
+						TCHAR* next_file_signature_string = skip_to_next_string(file_signature_strings);
 
 						TCHAR* remaining_bytes = NULL;
 						TCHAR* byte_string = _tcstok_s(file_signature_strings, BYTE_DELIMITERS, &remaining_bytes);
@@ -501,8 +500,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						++(group->url_info.num_domains);
 						Domain* domain = push_arena(permanent_arena, sizeof(Domain), Domain);
 
-						TCHAR* next_domain_string = skip_to_end_of_string(domain_strings);
-						++next_domain_string;
+						TCHAR* next_domain_string = skip_to_next_string(domain_strings);
 
 						TCHAR* path = NULL;
 						TCHAR* host = _tcstok_s(domain_strings, URL_PATH_DELIMITERS, &path);

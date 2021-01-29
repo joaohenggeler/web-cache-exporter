@@ -50,10 +50,8 @@
 
 	@TODO:
 
-	- Global: New CSV column "Location In Output" for the copied file's output location. Must be affected by the -show-full-paths option.
 	- Flash Plugin: New CSV column "Library SHA-256" for the shared library's SHA-256 value from the HEU metadata file.
-	- Shockwave Plugin: New CSV column "Xtra Description" for the File Description property from an Xtra file.
-	- Try to replace the usage of memory_map_entire_file with read_entrie_file (created for the latest Flash Plugin TODO) in some cases.
+	- Generate the SHA-256 value for each exported file.
 */
 
 /*
@@ -146,8 +144,8 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 	bool success = true;
 	bool seen_export_option = false;
 
-	Arena* arena = &(exporter->temporary_arena);
-
+	Arena* temporary_arena = &(exporter->temporary_arena);
+	
 	// Set any options that shouldn't be zero, false, or empty strings by default.
 	exporter->should_copy_files = true;
 	exporter->should_create_csv = true;
@@ -184,7 +182,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 
 			if(i+1 < num_arguments)
 			{
-				TCHAR* group_filenames = push_string_to_arena(arena, arguments[i+1]);
+				TCHAR* group_filenames = push_string_to_arena(temporary_arena, arguments[i+1]);
 				i += 1;
 
 				const TCHAR* FILENAME_DELIMITER = TEXT("/");
@@ -192,18 +190,18 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 				TCHAR* filename = _tcstok_s(group_filenames, FILENAME_DELIMITER, &remaining_filenames);
 
 				u32 num_filenames = 0;
-				TCHAR* first_filename = push_arena(arena, 0, TCHAR);
+				TCHAR* first_filename = push_arena(temporary_arena, 0, TCHAR);
 				while(filename != NULL)
 				{
 					++num_filenames;
 					size_t size = string_size(filename);
-					push_and_copy_to_arena(arena, size, u8, filename, size);
+					push_and_copy_to_arena(temporary_arena, size, u8, filename, size);
 
 					filename = _tcstok_s(NULL, FILENAME_DELIMITER, &remaining_filenames);					
 				}
 
 				exporter->num_group_filenames_to_load = num_filenames;
-				exporter->group_filenames_to_load = build_array_from_contiguous_strings(arena, first_filename, num_filenames);
+				exporter->group_filenames_to_load = build_array_from_contiguous_strings(temporary_arena, first_filename, num_filenames);
 			}			
 		}
 		else if(strings_are_equal(option, TEXT("-hint-ie")))
@@ -451,10 +449,10 @@ static void clean_up(Exporter* exporter)
 		}
 	#endif
 
+	destroy_arena( &(exporter->permanent_arena) );
 	destroy_arena( &(exporter->secondary_temporary_arena) );
 	destroy_arena( &(exporter->temporary_arena) );
-	destroy_arena( &(exporter->permanent_arena) );
-
+	
 	close_log_file();
 }
 
@@ -552,11 +550,12 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
+	Arena* temporary_arena = &(exporter.temporary_arena);
 	{
 		size_t temporary_memory_size = get_temporary_memory_size_for_os_version(&exporter);
 		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
 
-		if(!create_arena(&exporter.temporary_arena, temporary_memory_size))
+		if(!create_arena(temporary_arena, temporary_memory_size))
 		{
 			console_print("Could not allocate enough temporary memory to run the program.");
 			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
@@ -565,11 +564,13 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 
 		#ifdef BUILD_9X
+			Arena* secondary_temporary_arena = &(exporter.secondary_temporary_arena);
+
 			// Create a smaller, secondary memory arena for Windows 98 and ME. This will be used when loading group files.
 			temporary_memory_size /= 10;
 			log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the secondary temporary memory arena.", temporary_memory_size);
 
-			if(!create_arena(&exporter.secondary_temporary_arena, temporary_memory_size))
+			if(!create_arena(secondary_temporary_arena, temporary_memory_size))
 			{
 				console_print("Could not allocate enough temporary memory to run the program.");
 				log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
@@ -586,6 +587,7 @@ int _tmain(int argc, TCHAR* argv[])
 		return 1;
 	}
 
+	Arena* permanent_arena = &(exporter.permanent_arena);
 	{
 		if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) != 0)
 		{
@@ -608,7 +610,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the permanent memory arena.", permanent_memory_size);
 
-		if(!create_arena(&exporter.permanent_arena, permanent_memory_size))
+		if(!create_arena(permanent_arena, permanent_memory_size))
 		{
 			console_print("Could not allocate enough permanent memory to run the program.");
 			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", permanent_memory_size);
@@ -625,7 +627,10 @@ int _tmain(int argc, TCHAR* argv[])
 			load_external_locations(&exporter, num_profiles);			
 		}
 
-		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity.", get_used_arena_capacity(&exporter.permanent_arena));
+		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity before being locked.", get_used_arena_capacity(permanent_arena));
+
+		// @BeginLock: There is no corresponding @EndLock since this memory lasts throughout the program's lifetime.
+		lock_arena(permanent_arena);
 	}
 
 	#ifndef BUILD_9X
@@ -712,8 +717,11 @@ int _tmain(int argc, TCHAR* argv[])
 
 	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around
 	// should be stored in the permanent arena.
-	log_print(LOG_INFO, "Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(&exporter.temporary_arena));
-	clear_arena(&(exporter.temporary_arena));
+	log_print(LOG_INFO, "Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(temporary_arena));
+	
+	_ASSERT(temporary_arena->num_locks == 0);
+	clear_arena(temporary_arena);
+	exporter.group_filenames_to_load = NULL;
 
 	log_print_newline();
 
@@ -837,6 +845,8 @@ int _tmain(int argc, TCHAR* argv[])
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
 								const Csv_Type* column_types, size_t num_columns)
 {
+	_ASSERT(count_path_components(cache_identifier) == 1);
+
 	exporter->cache_identifier = cache_identifier;
 	exporter->csv_column_types = column_types;
 	exporter->num_csv_columns = num_columns;
@@ -925,6 +935,181 @@ void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subd
 	{
 		PathAppend(exporter->output_copy_path, subdirectory_name);
 	}
+
+	// E.g. "SW\Xtras" = 2 components.
+	exporter->num_output_components = count_path_components(exporter->cache_identifier) + count_path_components(subdirectory_name);
+	_ASSERT(exporter->num_output_components > 0);
+}
+
+// Copies a file using a given URL's directory structure. If the generated file path already exists, this function will resolve any
+// naming collisions by adding a number to the filename. This function is a core part of the cache exporters.
+//
+// The final path is built by joining the following paths:
+// 1. The base destination directory.
+// 2. The host and path components of the URL (if a URL was passed to this function).
+// 3. The filename.
+//
+// For example: "C:\Path" + "http://www.example.com:80/path/file.php?query#fragment" + "file.ext"
+// results in: "C:\Path\www.example.com\path\file.ext"
+//
+// If this file already exists, a tilde followed by a number will be added before the file extension. This number will be incremented
+// until there's no longer a naming collision. For example: "C:\Path\www.example.com\path\file~1.ext".
+//
+// Since the URL and filename can be invalid Windows paths, these may be modified accordingly (e.g. replacing invalid characters).
+//
+// Note that all of these paths are limited to MAX_PATH_CHARS characters. This limit used to be extended by using the "\\?\" prefix
+// on the Windows 2000 through 10 builds. However, in practice that would result in paths that would be too long for the File Explorer
+// to delete. This is a problem for this application since the whole point is to get the average user to check their cache for lost
+// web media files.
+//
+// Instead of failing in the cases where the final path length exceeds this limit, this function will attempt to copy the file to the base
+// destination directory. Using the example above, this would be "C:\Path\file.ext". This limit may be exceed by either the URL structure
+// or the filename.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the current cache exporter's parameters and the values of command line options
+// that will influence how the file is copied.
+//
+// 2. full_source_path - The fully qualified path to the source file to copy.
+// 3. full_base_directory_path - The fully qualified path to base destination directory.
+// 4. url - The URL whose host and path components are converted into a Windows path. If this string is NULL, only the base directory
+// and filename will be used.
+// 5. filename - The filename to add to the end of the path.
+//
+// 6. result_destination_path - The final destination path after resolving any naming collisions. This string is only set if this function
+// returns true. Otherwise, this string will be empty.
+// 7. result_error_code - A string containing the Windows system error code generated after attempting to copy the file. This string is
+// only set if this function returns false. Otherwise, this string will be empty.
+//
+// @Returns: True if the file was copied successfully. Otherwise, false. This function fails if the source file path is empty.
+static bool copy_file_using_url_directory_structure(	Exporter* exporter,
+														const TCHAR* full_source_path, const TCHAR* full_base_directory_path,
+														const TCHAR* url, const TCHAR* filename,
+														TCHAR* result_destination_path, TCHAR* result_error_code)
+{
+	*result_destination_path = TEXT('\0');
+	*result_error_code = TEXT('\0');
+
+	if(string_is_empty(full_source_path)) return false;
+
+	Arena* arena = &(exporter->temporary_arena);
+
+	// Copy Target = Base Destination Path
+	TCHAR full_destination_path[MAX_PATH_CHARS] = TEXT("");
+	PathCanonicalize(full_destination_path, full_base_directory_path);
+
+	int num_base_components = count_path_components(full_destination_path);
+
+	// Copy Target = Base Destination Path + Url Converted To Path (if it exists)
+	if(url != NULL)
+	{
+		TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
+		bool build_target_success = convert_url_to_path(arena, url, url_path) && PathAppend(full_destination_path, url_path);
+		if(!build_target_success)
+		{
+			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
+			StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
+		}
+	}
+
+	_ASSERT(!string_is_empty(full_destination_path));
+	create_directories(full_destination_path);
+
+	TCHAR corrected_filename[MAX_PATH_CHARS] = TEXT("");
+	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
+	correct_url_path_characters(corrected_filename);
+	truncate_path_components(corrected_filename);
+	correct_reserved_path_components(corrected_filename);
+
+	// Copy Target = Base Destination Path + Url Converted To Path (if it exists) + Filename
+	bool build_target_success = PathAppend(full_destination_path, corrected_filename) != FALSE;
+	if(!build_target_success)
+	{
+		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
+		
+		StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
+		if(!PathAppend(full_destination_path, corrected_filename))
+		{
+			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
+			return false;
+		}
+	}
+
+	_ASSERT(!string_is_empty(full_destination_path));
+
+	bool copy_success = false;
+	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
+		copy_success = create_empty_file(full_destination_path);
+	#else
+		copy_success = CopyFile(full_source_path, full_destination_path, TRUE) != FALSE;
+	#endif
+
+	u32 num_naming_collisions = 0;
+	TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
+	TCHAR full_unique_destination_path[MAX_PATH_CHARS] = TEXT("");
+
+	TCHAR file_extension[MAX_PATH_CHARS] = TEXT("");
+	StringCchCopy(file_extension, MAX_PATH_CHARS, skip_to_file_extension(corrected_filename, true));
+
+	while(!copy_success && GetLastError() == ERROR_FILE_EXISTS)
+	{
+		++num_naming_collisions;
+		if(num_naming_collisions == 0)
+		{
+			log_print(LOG_ERROR, "Copy File Using Url Structure: Wrapped around the number of naming collisions for the file '%s'. This file will not be copied.", filename);
+			SetLastError(CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS);
+			break;
+		}
+
+		bool naming_success = SUCCEEDED(StringCchCopy(full_unique_destination_path, MAX_PATH_CHARS, full_destination_path));
+		if(naming_success)
+		{
+			TCHAR* file_extension_in_target = skip_to_file_extension(full_unique_destination_path, true);
+			*file_extension_in_target = TEXT('\0');
+		}
+
+		naming_success = naming_success && convert_u32_to_string(num_naming_collisions, unique_id + 1)
+										&& SUCCEEDED(StringCchCat(full_unique_destination_path, MAX_PATH_CHARS, unique_id))
+										&& SUCCEEDED(StringCchCat(full_unique_destination_path, MAX_PATH_CHARS, file_extension));
+
+		if(!naming_success)
+		{
+			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to resolve the naming collision %I32u for the file '%s'. This file will not be copied.", num_naming_collisions, filename);
+			SetLastError(CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION);
+			break;
+		}
+		
+		#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
+			copy_success = create_empty_file(full_unique_destination_path);
+		#else
+			copy_success = CopyFile(full_source_path, full_unique_destination_path, TRUE) != FALSE;
+		#endif
+	}
+	
+	if(copy_success)
+	{
+		TCHAR* final_destination_path = (num_naming_collisions == 0) ? (full_destination_path) : (full_unique_destination_path);
+
+		if(!exporter->should_show_full_paths)
+		{
+			int num_final_components = count_path_components(final_destination_path);
+			int num_short_components = num_final_components - num_base_components + exporter->num_output_components;
+			_ASSERT(num_short_components > 0);
+
+			final_destination_path = skip_to_last_path_components(final_destination_path, num_short_components);
+		}
+
+		StringCchCopy(result_destination_path, MAX_PATH_CHARS, final_destination_path);
+		_ASSERT(!string_is_empty(result_destination_path));
+	}
+	else
+	{
+		DWORD copy_error_code = GetLastError();
+		log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to copy '%s' to '%s' with the error code %lu.", filename, full_destination_path, copy_error_code);
+		convert_u32_to_string(copy_error_code, result_error_code);
+	}
+	
+	return copy_success;
 }
 
 // Exports a cache entry by copying its file to the output location using the original website's directory structure, and by adding a
@@ -1016,13 +1201,21 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			// @CustomGroups
 			case(CSV_CUSTOM_FILE_GROUP):
 			{
+				_ASSERT(value == NULL);
 				file_group_index = i;
 			} break;
 
 			// @CustomGroups
 			case(CSV_CUSTOM_URL_GROUP):
 			{
+				_ASSERT(value == NULL);
 				url_group_index = i;
+			} break;
+
+			case(CSV_SHA_256):
+			{
+				_ASSERT(value == NULL);
+				// @TODO: column_values[i].value = generate_sha_256(full_entry_path);
 			} break;
 
 			// @CustomGroups
@@ -1066,7 +1259,8 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			// @UseFunctionParameter
 			case(CSV_MISSING_FILE):
 			{
-				if(value == NULL) column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+				_ASSERT(value == NULL);
+				column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
 			} break;
 
 			// @FindData
@@ -1140,17 +1334,42 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 
 	bool match_allows_for_exporting_entry = (!exporter->should_filter_by_groups) || (exporter->should_filter_by_groups && matched_group);
 
-	if(exporter->should_create_csv && match_allows_for_exporting_entry)
-	{
-		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, exporter->num_csv_columns);
-	}
-
+	TCHAR copy_destination_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR copy_error_code[MAX_INT32_CHARS] = TEXT("");
 	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)
 	{
-		if(copy_file_using_url_directory_structure(temporary_arena, full_entry_path, exporter->output_copy_path, entry_url, entry_filename))
+		if(copy_file_using_url_directory_structure(	exporter, full_entry_path,
+													exporter->output_copy_path, entry_url, entry_filename,
+													copy_destination_path, copy_error_code))
 		{
 			++(exporter->num_copied_files);
 		}
+	}
+
+	// For any values that can only be added to the CSV row after copying the file.
+	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
+	{
+		TCHAR* value = column_values[i].value;
+
+		switch(exporter->csv_column_types[i])
+		{
+			case(CSV_LOCATION_IN_OUTPUT):
+			{
+				_ASSERT(value == NULL);
+				column_values[i].value = copy_destination_path;
+			} break;
+
+			case(CSV_COPY_ERROR):
+			{
+				_ASSERT(value == NULL);
+				column_values[i].value = copy_error_code;
+			} break;
+		}
+	}
+
+	if(exporter->should_create_csv && match_allows_for_exporting_entry)
+	{
+		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, exporter->num_csv_columns);
 	}
 
 	clear_arena(temporary_arena);

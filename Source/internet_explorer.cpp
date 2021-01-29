@@ -101,8 +101,9 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
-	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE,
-	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP
+	CSV_HITS, CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION,
+	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
@@ -122,8 +123,8 @@ static const Csv_Type RAW_CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_LOCATION_ON_CACHE,
-	CSV_CUSTOM_FILE_GROUP
+	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 static const size_t RAW_CSV_NUM_COLUMNS = _countof(RAW_CSV_COLUMN_TYPES);
 
@@ -160,7 +161,8 @@ enum Ie_Index_Entry_Signature
 };
 
 // We'll tightly pack the structures that represent different parts of the index.dat file and then access each member directly after
-// mapping it into memory. Due to the way the file is designed, there shouldn't be any memory alignment problems when accessing them. 
+// mapping it into memory. Due to the way the file is designed, there shouldn't be any memory alignment problems when accessing this
+// structure's values. 
 #pragma pack(push, 1)
 
 // @Format: The header for the index.dat file.
@@ -298,7 +300,7 @@ _STATIC_ASSERT(sizeof(Ie_5_To_9_Index_Url_Entry) == 0x60);
 bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size)
 {
 	// We'll try "svcVersion" first since that one contains the correct value for the newer IE versions. In older versions this would
-	// fails and we would resot to the "Version" key.
+	// fails and we would resort to the "Version" key.
 	return query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "svcVersion", ie_version, ie_version_size)
 		|| query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ie_version, ie_version_size);
 }
@@ -625,20 +627,23 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	// Skip the index.dat file itself. We only want the cached files.
 	if(strings_are_equal(filename, TEXT("index.dat"), true)) return true;
 
-	// Despite not using the index.dat file, we can find out where we're located on the cache.
-
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, callback_directory_path, filename);
 
-	TCHAR* short_file_path = find_last_path_components(full_file_path, 2);
+	// Despite not using the index.dat file, we can find out where we're located on the cache.
+	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 2);
 
-	Csv_Entry csv_row[RAW_CSV_NUM_COLUMNS] =
+	// And we can also remove the filename's decoration to obtain the original name.
+	undecorate_path(filename);
+
+	Csv_Entry csv_row[] =
 	{
-		{/* Filename */}, {/* File Extension */}, {/* File Size */},
+		{filename}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
-		{short_file_path},
-		{/* Custom File Group */}
+		{short_file_path}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* SHA-256 */}
 	};
+	_STATIC_ASSERT(_countof(csv_row) == RAW_CSV_NUM_COLUMNS);
 
 	Exporter* exporter = (Exporter*) callback_user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
@@ -1006,14 +1011,16 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					TCHAR short_file_path_with_prefix[MAX_PATH_CHARS] = TEXT("");
 					PathCombine(short_file_path_with_prefix, format_version_prefix, short_file_path_pointer);
 
-					Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+					Csv_Entry csv_row[] =
 					{
 						{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 						{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-						{num_hits}, {short_file_path_with_prefix}, {cache_version}, {/* Missing File */},
-						{/* Custom File Group */}, {/* Custom URL Group */}
+						{num_hits}, {short_file_path_with_prefix}, {cache_version},
+						{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+						{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 					};
+					_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 					if(was_deallocated)
 					{
@@ -2115,14 +2122,16 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									wchar_t short_file_path_with_prefix[MAX_PATH_CHARS] = L"";
 									StringCchPrintfW(short_file_path_with_prefix, MAX_PATH_CHARS, L"Content[%I64d]\\%ls", container_id, short_file_path);
 
-									Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+									Csv_Entry csv_row[] =
 									{
 										{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time},
 										{response}, {server}, {cache_control}, {pragma}, {content_type}, {content_length}, {content_encoding},
-										{num_hits}, {short_file_path_with_prefix}, {cache_version}, {/* Missing File */},
-										{/* Custom File Group*/}, {/* Custom URL Group */}
+										{num_hits}, {short_file_path_with_prefix}, {cache_version},
+										{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+										{/* Custom File Group*/}, {/* Custom URL Group */}, {/* SHA-256 */}
 									};
+									_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 									export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 								}

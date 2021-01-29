@@ -5,12 +5,9 @@
 	This file defines how the exporter processes the Adobe (previously Macromedia) Flash Player's cache. Note that this cache doesn't
 	contain actual Flash movies (SWF files) and is instead used for other types of files, like shared library code (SWZ files). This
 	might not be useful when looking for lost web game assets, but these SWZ files could potentially be used to get specific Flash
-	games working (e.g. their files were found but they require a currently missing library).
-
-	These SWZ files are located in the Asset Cache and each one has a HEU metadata file associated with it. Unlike other cache metadata
-	files (like the Java Plugin IDX files), we won't extract any information from these since there doesn't seem to be much relevant
-	stuff to show. We'll perform a naive export and copy these files directly. There are other cache subdirectories in the main cache
-	location so we'll cover these too for good measure. This export process might change if new information is found.
+	games working (e.g. their files were found but they require a currently missing library). These SWZ files are located in the Asset
+	Cache and each one is associated with a HEU metadata file that contains a few strings of information (like the packaged library's
+	SHA-256 value).
 
 	@SupportedFormats: Flash Player 9.0.115.0 and later.
 
@@ -44,9 +41,9 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_LIBRARY_SHA_256,
-	CSV_LOCATION_ON_CACHE,
-	CSV_CUSTOM_FILE_GROUP
+	CSV_HITS, CSV_LIBRARY_SHA_256,
+	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -106,8 +103,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, callback_directory_path, filename);
 
-	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
+	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 3);
 
+	TCHAR* num_hits = NULL;
 	TCHAR* library_sha_256 = NULL;
 	{
 		TCHAR* file_extension = skip_to_file_extension(filename, true);
@@ -124,29 +122,39 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 			char* metadata_file = (char*) read_entire_file(arena, metadata_file_path, &metadata_file_size, true);
 			if(metadata_file != NULL)
 			{
-				for(int i = 0; i < 3; ++i)
-				{
-					metadata_file = skip_to_end_of_string(metadata_file);
-					++metadata_file;
-				}
+				// @Format: Each HEU metadata file contains a few null terminated strings with information about
+				// its respective SWZ file (which packages a shared Flash library).
+				char* first_in_file 				= metadata_file;
+				char* last_modified_time_in_file 	= skip_to_next_string(first_in_file);
+				char* num_hits_in_file 				= skip_to_next_string(last_modified_time_in_file);
+				char* library_sha_256_in_file 		= skip_to_next_string(num_hits_in_file);
+				char* fifth_in_file 				= skip_to_next_string(library_sha_256_in_file);
+				fifth_in_file;
 
-				library_sha_256 = convert_ansi_string_to_tchar(arena, metadata_file);
+				num_hits = convert_ansi_string_to_tchar(arena, num_hits_in_file);
+				library_sha_256 = convert_ansi_string_to_tchar(arena, library_sha_256_in_file);
+				
 				// @Assert: Each SWZ's filename should be the first 40 character of its packaged library's SHA-256.
 				_ASSERT(strings_are_at_most_equal(filename, library_sha_256, 40, true));
+			}
+			else
+			{
+				log_print(LOG_ERROR, "Flash Plugin: Failed to open the metadata file '%s'. No additional information about this library will be extracted.", metadata_file_path);
 			}
 
 			*file_extension = previous_char;
 		}
 	}
 
-	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
-		{library_sha_256},
-		{short_file_path},
-		{/* Custom File Group */}
+		{num_hits}, {library_sha_256},
+		{short_file_path}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* SHA-256 */}
 	};
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
 
@@ -176,14 +184,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 		TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
 		PathCombine(short_file_path, TEXT("<Temporary>"), filename);
 
-		Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+		Csv_Entry csv_row[] =
 		{
 			{/* Filename */}, {/* File Extension */}, {/* File Size */},
 			{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
-			{/* Library SHA-256 */},
-			{short_file_path},
-			{/* Custom File Group */}
+			{/* Hits */}, {/* Library SHA-256 */},
+			{short_file_path}, {/* Location In Output */}, {/* Copy Error */},
+			{/* Custom File Group */}, {/* SHA-256 */}
 		};
+		_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 		Exporter* exporter = (Exporter*) callback_user_data;
 		export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);	

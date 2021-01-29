@@ -95,8 +95,8 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LAST_MODIFIED_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING,
 	CSV_CODEBASE_IP, CSV_VERSION,
-	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE,
-	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP
+	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -166,19 +166,20 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, callback_directory_path, filename);
 
-	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
+	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 3);
 
 	TCHAR* cache_version = TEXT("AppletStore");
 
-	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* URL */}, {/* File Extension */},
 		{/* Last Modified Time */}, {/* Expiry Time */},
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */}, {/* Content Type */}, {/* Content Length */}, {/* Content Encoding */},
 		{/* Codebase IP */}, {/* Version */},
-		{short_file_path}, {cache_version}, {/* Missing File */},
-		{/* Custom File Group */}, {/* Custom URL Group */}
+		{short_file_path}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter* exporter = (Exporter*) callback_user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
@@ -513,17 +514,18 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, callback_directory_path, cached_filename);
 
-	TCHAR* short_file_path = find_last_path_components(full_file_path, 3);
+	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 3);
 
-	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* URL */}, {/* File Extension */},
 		{last_modified_time}, {expiry_time},
 		{index.response}, {index.server}, {index.cache_control}, {index.pragma}, {index.content_type}, {content_length}, {index.content_encoding},
 		{index.codebase_ip}, {index.version},
-		{short_file_path}, {cache_version}, {/* Missing File */},
-		{/* Custom File Group */}, {/* Custom URL Group */}
+		{short_file_path}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 	
 	export_cache_entry(exporter, csv_row, full_file_path, url, filename);
 
@@ -627,22 +629,7 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 	utf_16_string[utf_16_index] = L'\0';
 
 	#ifdef BUILD_9X
-
-		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
-		if(size_required_ansi == 0)
-		{
-			log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Failed to determine the size required to convert the intermediate UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
-			return NULL;
-		}
-
-		char* ansi_string = push_arena(arena, size_required_ansi, char);
-		if(WideCharToMultiByte(CP_UTF8, 0, utf_16_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
-		{
-			log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Failed to convert the intermediate UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
-			return NULL;
-		}
-
-		return ansi_string;
+		return convert_utf_16_string_to_tchar(arena, utf_16_string);
 	#else
 		return utf_16_string;
 	#endif
@@ -661,15 +648,13 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 // @Returns: Nothing.
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type)
 {
-	HANDLE index_handle = INVALID_HANDLE_VALUE;
 	u64 index_file_size = 0;
-	void* index_file = memory_map_entire_file(index_path, &index_handle, &index_file_size);
+	void* index_file = read_entire_file(arena, index_path, &index_file_size);
 	
 	if(index_file == NULL)
 	{
-		log_print(LOG_ERROR, "Read Index File: Failed to open the index file '%s' with the error code %lu. No files will be exported using this index.", index_path, GetLastError());
-		safe_close_handle(&index_handle);
-		return;		
+		log_print(LOG_ERROR, "Read Index File: Failed to open the index file '%s'. No files will be exported using this index.", index_path);
+		return;
 	}
 
 	/*
@@ -973,9 +958,6 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 			} break;
 		}
 	}
-
-	safe_unmap_view_of_file((void**) &index_file);
-	safe_close_handle(&index_handle);
 }
 
 /*

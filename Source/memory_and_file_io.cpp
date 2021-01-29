@@ -82,6 +82,8 @@ bool create_arena(Arena* arena, size_t total_size)
 	arena->used_size = 0;
 	arena->total_size = (success) ? (total_size) : (0);
 
+	arena->num_locks = 0;
+
 	#ifdef DEBUG
 		if(success)
 		{
@@ -227,6 +229,77 @@ float32 get_used_arena_capacity(Arena* arena)
 	return ((float32) arena->used_size) / arena->total_size * 100;
 }
 
+// Adds a new lock to the arena. A lock marks the currently used size and prevents clear_arena() from clearing any of
+// this memory. The arena keeps track of these locked regions by using a stack that holds at most MAX_NUM_ARENA_LOCKS
+// locks. This operation is reversed using unlock_arena(). For example:
+//
+// lock_arena(arena)
+// push_string_to_arena(arena, "ABC")
+//
+//		lock_arena(arena)
+//		push_string_to_arena(arena, "123")
+//		clear_arena(arena) -> "ABC" still exists but "123" was cleared.
+//		unlock_arena(arena)
+//
+// clear_arena(arena) -> Any data before "ABC" still exists.
+// unlock_arena(arena)
+//
+// @Note: This function should be used sparingly as it can increase the code's complexity if the same lock is only
+// unlocked in another function call. The pair of lock and unlock operations should be done in the same function
+// scope.
+//
+// @Parameters:
+// 1. arena - The Arena structure whose num_locks member will be incremented, and whose current used size will be saved
+// in the next free locked_sizes slot.
+//
+// @Returns: Nothing.
+void lock_arena(Arena* arena)
+{
+	if(arena->available_memory == NULL)
+	{
+		log_print(LOG_ERROR, "Lock Arena: Failed to lock the arena since no memory was previously allocated.");
+		return;
+	}
+
+	if(arena->num_locks < MAX_NUM_ARENA_LOCKS)
+	{
+		arena->locked_sizes[arena->num_locks] = arena->used_size;
+		++(arena->num_locks);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Lock Arena: Ran out of lock slots in the arena.");
+		_ASSERT(false);
+	}
+}
+
+// Removes the last lock from the arena. An arena with no locks cannot be unlocked. See: lock_arena().
+//
+// @Parameters:
+// 1. arena - The Arena structure whose num_locks member will be decremented, and whose last saved used size will be
+// removed from the last locked_sizes slot.
+//
+// @Returns: Nothing.
+void unlock_arena(Arena* arena)
+{
+	if(arena->available_memory == NULL)
+	{
+		log_print(LOG_ERROR, "Unlock Arena: Failed to unlock the arena since no memory was previously allocated.");
+		return;
+	}
+
+	if(arena->num_locks > 0)
+	{
+		--(arena->num_locks);
+		arena->locked_sizes[arena->num_locks] = 0;
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Unlock Arena: Attempted to unlock an arena without any previously locked sizes.");
+		_ASSERT(false);
+	}
+}
+
 // Clears the entire arena, resetting the pointer to the available memory back to the original address and the number of used
 // bytes to zero.
 //
@@ -244,11 +317,17 @@ void clear_arena(Arena* arena)
 		return;
 	}
 
-	arena->available_memory = retreat_bytes(arena->available_memory, arena->used_size);
+	size_t num_bytes_to_clear = arena->used_size;
+	if(arena->num_locks > 0)
+	{
+		num_bytes_to_clear -= arena->locked_sizes[arena->num_locks - 1];
+	}
+
+	arena->available_memory = retreat_bytes(arena->available_memory, num_bytes_to_clear);
 	#ifdef DEBUG
-		FillMemory(arena->available_memory, arena->used_size, DEBUG_ARENA_DEALLOCATED_VALUE);
+		FillMemory(arena->available_memory, num_bytes_to_clear, DEBUG_ARENA_DEALLOCATED_VALUE);
 	#endif
-	arena->used_size = 0;
+	arena->used_size -= num_bytes_to_clear;
 }
 
 // Destroys an arena and deallocates all of its memory.
@@ -843,7 +922,16 @@ TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary
 {
 	// A bit hacky since we're not even handling code pages 1201, 12000, or 12001 (UTF-16 BE, UTF-32 LE, or UTF-32 BE),
 	// but it works for our purposes.
-	if(code_page == CP_UTF16) return convert_utf_16_string_to_tchar(final_arena, (const wchar_t*) string);
+	if(code_page == CP_UTF16_LE)
+	{
+		return convert_utf_16_string_to_tchar(final_arena, (const wchar_t*) string);
+	}
+	else if(code_page == CP_UTF16_BE || code_page == CP_UTF32_LE || code_page == CP_UTF32_BE)
+	{
+		log_print(LOG_ERROR, "Convert Code Page String To Tchar: Attempted to convert a UTF-16 BE or UTF-32 string. The code page was %I32u.", code_page);
+		_ASSERT(false);
+		return NULL;
+	}
 
 	int num_chars_required_utf_16 = MultiByteToWideChar(code_page, 0, string, -1, NULL, 0);
 
@@ -964,22 +1052,22 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
 	return convert_utf_8_string_to_tchar(arena, arena, utf_8_string);
 }
 
-// Skips to the null terminator character in a string.
+// Skips to the character immediately after the current string's null terminator.
 //
 // @Parameters:
 // 1. str - The string.
 //
-// @Returns: The end of the string.
-char* skip_to_end_of_string(char* str)
+// @Returns: The beginning of the next contiguous string.
+char* skip_to_next_string(char* str)
 {
 	while(*str != '\0') ++str;
-	return str;
+	return ++str;
 }
 
-wchar_t* skip_to_end_of_string(wchar_t* str)
+wchar_t* skip_to_next_string(wchar_t* str)
 {
 	while(*str != L'\0') ++str;
-	return str;
+	return ++str;
 }
 
 // Creates an array of strings based on a number of strings that are contiguously stored in memory.
@@ -998,8 +1086,7 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 	for(u32 i = 0; i < num_strings; ++i)
 	{
 		string_array[i] = first_string;
-		first_string = skip_to_end_of_string(first_string);
-		++first_string;
+		first_string = skip_to_next_string(first_string);
 	}
 
 	return string_array;
@@ -1225,6 +1312,125 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 	return tchar_url;
 }
 
+// Corrects the path extracted from a URL (host and resource path) so it may be used by certain functions from the Win32 API (like
+// CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths. This function should only be used in paths from URLs.
+//
+// This function makes the following changes to the path:
+//
+// 1. Replaces any forward slashes with backslashes.
+// 2. Replaces two consecutive slashes with a single one.
+// 3. Replaces any reserved characters (<, >, :, ", |, ?, *) with underscores.
+// 4. Replaces characters whose integer representations are in the range from 1 through 31 with underscores.
+// 5. If the path ends in a period or space, this character is replaced with an underscore.
+// 6. If the path contains a colon followed by a slash in the first component, it will remove the colon character instead of replacing
+// it with an underscore.
+//
+// For example:
+//
+// 1. "www.example.com/path/file.ext" 		-> "www.example.com\path\file.ext"
+// 2. "www.example.com//path//file.ext" 	-> "www.example.com\path\file.ext"
+// 3. "www.example.com/<path>/file::ext" 	-> "www.example.com\_path_\file__ext"
+// 4. "www.example.com/path/\x20file.ext" 	-> "www.example.com\path\_file.ext"
+// 5. "www.example.com/path/file." 			-> "www.example.com\path\file_"
+// 6. "C:\Path\File.ext" 					-> "C\Path\File.ext".
+//
+// See the "Naming Files, Paths, and Namespaces" in the Win32 API Reference.
+//
+// @Parameters:
+// 1. path - The path to modify.
+//
+// @Returns: Nothing.
+void correct_url_path_characters(TCHAR* path)
+{
+	if(path == NULL) return;
+
+	bool is_first_path_segment = true;
+	TCHAR* last_char = NULL;
+
+	while(*path != TEXT('\0'))
+	{
+		last_char = path;
+
+		switch(*path)
+		{
+			case(TEXT('/')):
+			{
+				*path = TEXT('\\');
+			} // Intentional fallthrough.
+
+			case(TEXT('\\')):
+			{
+				is_first_path_segment = false;
+
+				// Remove double backslashes, leaving only one of them.
+				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
+				TCHAR* next_char = path + 1;
+				if( *next_char == TEXT('\\') || *next_char == TEXT('/') )
+				{
+					MoveMemory(path, next_char, string_size(next_char));
+					// Make sure to also replace the forward slash in the next character.
+					*path = TEXT('\\');
+				}
+
+			} break;
+
+			case(TEXT(':')):
+			{
+				// Remove the colon from the drive letter in the first segment.
+				// Otherwise, replace it with an underscore like the rest of the reserved characters.
+				//
+				// This is just so the exported directories look nicer. If we didn't do this, we would
+				// add an underscore after the drive letter if the URL had an authority segment:
+				// - With authority: "res://C:\Path\File.ext" -> "C\Path\File.ext"
+				// - Without authority: "ms-itss:C:\Path\File.ext" -> "C_\Path\File.ext"
+				// In the first case, the drive letter colon is interpreted as the separator between the
+				// host and port.
+				TCHAR* next_char = path + 1;
+				if( is_first_path_segment && (*next_char == TEXT('\\') || *next_char == TEXT('/')) )
+				{
+					MoveMemory(path, next_char, string_size(next_char));
+				}
+				else
+				{
+					*path = TEXT('_');
+				}
+
+			} break;
+
+			case(TEXT('<')):
+			case(TEXT('>')):
+			case(TEXT('\"')):
+			case(TEXT('|')):
+			case(TEXT('?')):
+			case(TEXT('*')):
+			{
+				// Replace reserved characters with underscores.
+				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
+				*path = TEXT('_');
+			} break;
+
+			default:
+			{
+				// Replace characters whose integer representations are in the range from 1 through 31 with underscores.
+				if(1 <= *path && *path <= 31)
+				{
+					*path = TEXT('_');
+				}
+
+			} break;
+		}
+
+		++path;
+	}
+
+	// Replace a trailing period or space with an underscore.
+	// Otherwise, we'd run into problems when trying to delete these files/directories.
+	if(last_char != NULL && (*last_char == TEXT('.') || *last_char == TEXT(' ')) )
+	{
+		*last_char = TEXT('_');
+	}
+}
+
 // Converts the host and path in a URL into a Windows directory path.
 // For example: "http://www.example.com:80/path1/path2/file.ext?id=1#top" -> "www.example.com\path1\path2"
 //
@@ -1234,11 +1440,7 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 // 3. path - The buffer which receives the converted path. This buffer must be able to hold MAX_PATH_CHARS characters.
 //
 // @Returns: True if it succeeds. Otherwise, false.
-static void correct_url_path_characters(TCHAR* path);
-static void truncate_path_components(TCHAR* path);
-static void correct_reserved_path_components(TCHAR* path);
-
-static bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
+bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 {
 	bool success = true;
 
@@ -1332,7 +1534,7 @@ TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period, bool op
 	return file_extension;
 }
 
-// Finds the beginning of a substring in a path that contains a given number of components, where each one is delimited by a backslash.
+// Skips to the beginning of a substring in a path that contains a given number of components, where each one is delimited by a backslash.
 // This search is done by starting at the end of the path and going backwards.
 //
 // This function is used to get a shortened version of the full path of a cached file, where only the file's name and one or two
@@ -1351,14 +1553,14 @@ TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period, bool op
 // 2. desired_num_components - The number of components to find. This value must be greater than zero.
 //
 // @Returns: The beginning of the substring in the path that contains the components. If the path is NULL, this function returns NULL.
-TCHAR* find_last_path_components(TCHAR* path, u32 desired_num_components)
+TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components)
 {
 	_ASSERT(desired_num_components > 0);
 
 	if(path == NULL) return NULL;
 
 	size_t num_chars = string_length(path);
-	u32 current_num_components = 0;
+	int current_num_components = 0;
 	TCHAR* components_begin = path;
 	
 	// Traverse the path backwards.
@@ -1376,6 +1578,35 @@ TCHAR* find_last_path_components(TCHAR* path, u32 desired_num_components)
 	}
 
 	return components_begin;
+}
+
+// Counts the number of components in a path. For example, the path "C:\DirectoryA\DirectoryB\File.ext" has four components, where
+// each one is delimited by a backslash.
+//
+// @Parameters:
+// 1. path - The path to be searched for components.
+//
+// @Returns: The number of components. If the path is NULL or empty, this function returns zero.
+int count_path_components(const TCHAR* path)
+{
+	int count = 0;
+
+	if(path != NULL && !string_is_empty(path))
+	{
+		++count;
+
+		while(*path != TEXT('\0'))
+		{
+			if(*path == TEXT('\\'))
+			{
+				++count;
+			}
+
+			++path;
+		}
+	}
+
+	return count;
 }
 
 // Retrieves the absolute version of a specified path. The path may be relative or absolute. This function has two overloads: 
@@ -1432,125 +1663,6 @@ bool get_special_folder_path(int csidl, TCHAR* result_path)
 	#endif
 }
 
-// Corrects the path extracted from a URL (host and resource path) so it may be used by certain functions from the Win32 API (like
-// CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths. This function should only be used in paths from URLs.
-//
-// This function makes the following changes to the path:
-//
-// 1. Replaces any forward slashes with backslashes.
-// 2. Replaces two consecutive slashes with a single one.
-// 3. Replaces any reserved characters (<, >, :, ", |, ?, *) with underscores.
-// 4. Replaces characters whose integer representations are in the range from 1 through 31 with underscores.
-// 5. If the path ends in a period or space, this character is replaced with an underscore.
-// 6. If the path contains a colon followed by a slash in the first component, it will remove the colon character instead of replacing
-// it with an underscore.
-//
-// For example:
-//
-// 1. "www.example.com/path/file.ext" 		-> "www.example.com\path\file.ext"
-// 2. "www.example.com//path//file.ext" 	-> "www.example.com\path\file.ext"
-// 3. "www.example.com/<path>/file::ext" 	-> "www.example.com\_path_\file__ext"
-// 4. "www.example.com/path/\x20file.ext" 	-> "www.example.com\path\_file.ext"
-// 5. "www.example.com/path/file." 			-> "www.example.com\path\file_"
-// 6. "C:\Path\File.ext" 					-> "C\Path\File.ext".
-//
-// See the "Naming Files, Paths, and Namespaces" in the Win32 API Reference.
-//
-// @Parameters:
-// 1. path - The path to modify.
-//
-// @Returns: Nothing.
-static void correct_url_path_characters(TCHAR* path)
-{
-	if(path == NULL) return;
-
-	bool is_first_path_segment = true;
-	TCHAR* last_char = NULL;
-
-	while(*path != TEXT('\0'))
-	{
-		last_char = path;
-
-		switch(*path)
-		{
-			case(TEXT('/')):
-			{
-				*path = TEXT('\\');
-			} // Intentional fallthrough.
-
-			case(TEXT('\\')):
-			{
-				is_first_path_segment = false;
-
-				// Remove double backslashes, leaving only one of them.
-				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
-				TCHAR* next_char = path + 1;
-				if( *next_char == TEXT('\\') || *next_char == TEXT('/') )
-				{
-					MoveMemory(path, next_char, string_size(next_char));
-					// Make sure to also replace the forward slash in the next character.
-					*path = TEXT('\\');
-				}
-
-			} break;
-
-			case(TEXT(':')):
-			{
-				// Remove the colon from the drive letter in the first segment.
-				// Otherwise, replace it with an underscore like the rest of the reserved characters.
-				//
-				// This is just so the exported directories look nicer. If we didn't do this, we would
-				// add an underscore after the drive letter if the URL had an authority segment:
-				// - With authority: "res://C:\Path\File.ext" -> "C\Path\File.ext"
-				// - Without authority: "ms-itss:C:\Path\File.ext" -> "C_\Path\File.ext"
-				// In the first case, the drive letter colon is interpreted as the separator between the
-				// host and port.
-				TCHAR* next_char = path + 1;
-				if( is_first_path_segment && (*next_char == TEXT('\\') || *next_char == TEXT('/')) )
-				{
-					MoveMemory(path, next_char, string_size(next_char));
-				}
-				else
-				{
-					*path = TEXT('_');
-				}
-
-			} break;
-
-			case(TEXT('<')):
-			case(TEXT('>')):
-			case(TEXT('\"')):
-			case(TEXT('|')):
-			case(TEXT('?')):
-			case(TEXT('*')):
-			{
-				// Replace reserved characters with underscores.
-				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
-				*path = TEXT('_');
-			} break;
-
-			default:
-			{
-				// Replace characters whose integer representations are in the range from 1 through 31 with underscores.
-				if(1 <= *path && *path <= 31)
-				{
-					*path = TEXT('_');
-				}
-
-			} break;
-		}
-
-		++path;
-	}
-
-	// Replace a trailing period or space with an underscore.
-	// Otherwise, we'd run into problems when trying to delete these files/directories.
-	if(last_char != NULL && (*last_char == TEXT('.') || *last_char == TEXT(' ')) )
-	{
-		*last_char = TEXT('_');
-	}
-}
-
 // Truncates each component in a path to the maximum component length supported by the current file system.
 // For example, assuming that this limit is 255 characters:
 // "C:\Path\<255 Characters>ABC\RemainingPath" -> "C:\Path\<255 Characters>\RemainingPath"
@@ -1560,7 +1672,7 @@ static void correct_url_path_characters(TCHAR* path)
 //
 // @Returns: Nothing.
 static DWORD MAXIMUM_COMPONENT_LENGTH = 0;
-static void truncate_path_components(TCHAR* path)
+void truncate_path_components(TCHAR* path)
 {
 	TCHAR* component_begin = path;
 	bool is_first_char = true;
@@ -1625,7 +1737,7 @@ static int compare_reserved_names(const void* name_pointer, const void* reserved
 	return result;
 }
 
-// Corrects any component in a path that uses a reserved name (or a reserved name followed immediately  by a file extension) so it may
+// Corrects any component in a path that uses a reserved name (or a reserved name followed immediately by a file extension) so it may
 // be used by certain functions from the Win32 API (like CreateDirectory(), CopyFile(), etc) that would otherwise reject invalid paths.
 // This correction is done by replacing the first character with an underscore. The comparison between the component and reserved name
 // is case insensitive.
@@ -1643,7 +1755,7 @@ static int compare_reserved_names(const void* name_pointer, const void* reserved
 // 1. path - The path to modify.
 //
 // @Returns: Nothing.
-static void correct_reserved_path_components(TCHAR* path)
+void correct_reserved_path_components(TCHAR* path)
 {
 	const TCHAR* const SORTED_RESERVED_NAMES[] =
 	{
@@ -2075,155 +2187,18 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 //
 // @Returns: True if the file was created successfully. Otherwise, false. This function fails if the file in the specified
 // path already exists. In this case, GetLastError() returns ERROR_FILE_EXISTS.
-#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-	static bool create_empty_file(const TCHAR* file_path)
-	{
-		HANDLE empty_file = CreateFile(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-		DWORD error_code = GetLastError();
-		
-		bool success = empty_file != INVALID_HANDLE_VALUE;
-		safe_close_handle(&empty_file);
-
-		// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
-		// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
-		SetLastError(error_code);
-		return success;
-	}
-#endif
-
-// Copies a file using a given URL's directory structure. If the generated file path already exists, this function will resolve any
-// naming collisions by adding a number to the filename. This function is a core part of the cache exporters.
-//
-// The final path is built by joining the following paths:
-// 1. The base destination directory.
-// 2. The host and path components of the URL (if a URL was passed to this function).
-// 3. The filename.
-//
-// For example: "C:\Path" + "http://www.example.com:80/path/file.php?query#fragment" + "file.ext"
-// results in: "C:\Path\www.example.com\path\file.ext"
-//
-// If this file already exists, a tilde followed by a number will be added before the file extension. This number will be incremented
-// until there's no longer a naming collision. For example: "C:\Path\www.example.com\path\file~1.ext".
-//
-// Since the URL and filename can be invalid Windows paths, these may be modified accordingly (e.g. replacing invalid characters).
-//
-// Note that all of these paths are limited to MAX_PATH_CHARS characters. This limit used to be extended by using the "\\?\" prefix
-// on the Windows 2000 through 10 builds. However, in practice that would result in paths that would be too long for the File Explorer
-// to delete. This is a problem for this application since the whole point is to get the average user to check their cache for lost
-// web media files.
-//
-// Instead of failing in the cases where the final path length exceeds this limit, this function will attempt to copy the file to the base
-// destination directory. Using the example above, this would be "C:\Path\file.ext". This limit may be exceed by either the URL structure
-// or the filename.
-//
-// @Parameters:
-// 1. arena - The Arena structure where any intermediary strings are stored.
-// 2. full_file_path - The fully qualified path to the source file to copy.
-// 3. full_base_directory_path - The fully qualified path to base destination directory.
-// 4. url - The URL whose host and path components are converted into a Windows path. If this string is NULL, only the base directory
-// and filename will be used.
-// 5. filename - The filename to add to the end of the path.
-//
-// @Returns: True if the file was copied successfully. Otherwise, false. This function fails if the source file path is empty.
-bool copy_file_using_url_directory_structure(	Arena* arena, const TCHAR* full_file_path, 
-												const TCHAR* full_base_directory_path, const TCHAR* url, const TCHAR* filename)
+bool create_empty_file(const TCHAR* file_path)
 {
-	if(string_is_empty(full_file_path)) return false;
-
-	// Copy Target = Base Destination Path
-	TCHAR full_copy_target_path[MAX_PATH_CHARS] = TEXT("");
-	StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
+	HANDLE empty_file = CreateFile(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+	DWORD error_code = GetLastError();
 	
-	// Copy Target = Base Destination Path + Url Converted To Path (if it exists)
-	if(url != NULL)
-	{
-		TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
-		bool build_target_success = convert_url_to_path(arena, url, url_path) && PathAppend(full_copy_target_path, url_path);
-		if(!build_target_success)
-		{
-			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
-			StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
-		}
-	}
+	bool success = empty_file != INVALID_HANDLE_VALUE;
+	safe_close_handle(&empty_file);
 
-	_ASSERT(!string_is_empty(full_copy_target_path));
-	create_directories(full_copy_target_path);
-
-	TCHAR corrected_filename[MAX_PATH_CHARS] = TEXT("");
-	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
-	correct_url_path_characters(corrected_filename);
-	truncate_path_components(corrected_filename);
-	correct_reserved_path_components(corrected_filename);
-
-	// Copy Target = Base Destination Path + Url Converted To Path (if it exists) + Filename
-	bool build_target_success = PathAppend(full_copy_target_path, corrected_filename) != FALSE;
-	if(!build_target_success)
-	{
-		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
-		
-		StringCchCopy(full_copy_target_path, MAX_PATH_CHARS, full_base_directory_path);
-		if(!PathAppend(full_copy_target_path, corrected_filename))
-		{
-			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
-			return false;
-		}
-	}
-
-	_ASSERT(!string_is_empty(full_copy_target_path));
-
-	bool copy_success = false;
-	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-		copy_success = create_empty_file(full_copy_target_path);
-	#else
-		copy_success = CopyFile(full_file_path, full_copy_target_path, TRUE) != FALSE;
-	#endif
-
-	u32 num_naming_collisions = 0;
-	TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
-	TCHAR full_unique_copy_target_path[MAX_PATH_CHARS] = TEXT("");
-
-	TCHAR file_extension[MAX_PATH_CHARS] = TEXT("");
-	StringCchCopy(file_extension, MAX_PATH_CHARS, skip_to_file_extension(corrected_filename, true));
-
-	while(!copy_success && GetLastError() == ERROR_FILE_EXISTS)
-	{
-		++num_naming_collisions;
-		if(num_naming_collisions == 0)
-		{
-			log_print(LOG_ERROR, "Copy File Using Url Structure: Wrapped around the number of naming collisions for the file '%s'. This file will not be copied.", filename);
-			break;
-		}
-
-		bool naming_success = SUCCEEDED(StringCchCopy(full_unique_copy_target_path, MAX_PATH_CHARS, full_copy_target_path));
-		if(naming_success)
-		{
-			TCHAR* file_extension_in_target = skip_to_file_extension(full_unique_copy_target_path, true);
-			*file_extension_in_target = TEXT('\0');
-		}
-
-		naming_success = naming_success && convert_u32_to_string(num_naming_collisions, unique_id + 1)
-										&& SUCCEEDED(StringCchCat(full_unique_copy_target_path, MAX_PATH_CHARS, unique_id))
-										&& SUCCEEDED(StringCchCat(full_unique_copy_target_path, MAX_PATH_CHARS, file_extension));
-
-		if(!naming_success)
-		{
-			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to resolve the naming collision %I32u for the file '%s'. This file will not be copied.", num_naming_collisions, filename);
-			break;
-		}
-		
-		#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-			copy_success = create_empty_file(full_unique_copy_target_path);
-		#else
-			copy_success = CopyFile(full_file_path, full_unique_copy_target_path, TRUE) != FALSE;
-		#endif
-	}
-
-	if(!copy_success)
-	{
-		log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to copy '%s' to '%s' with the error code %lu.", filename, full_copy_target_path, GetLastError());
-	}
-	
-	return copy_success;
+	// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
+	// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
+	SetLastError(error_code);
+	return success;
 }
 
 // Maps an entire file into memory from its handle.
@@ -2351,7 +2326,23 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 	return memory_map_entire_file(file_handle, result_file_size, optional_read_only);
 }
 
-// @TODO
+// Reads an entire file into memory.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the entire file's contents.
+// 2. file_path - The path to the file to read.
+// 3. result_file_size - The resulting file size in bytes.
+//
+// 4. optional_add_null_terminator - An optional parameter that specifies whether to add a null terminator to the end of the
+// file's contents. This value defaults to false. This is useful when reading text data from a file since this function does
+// not distinguish between text and binary data. If set to true, this function will actually add two zero bytes to represent
+// a null terminator in UTF-16. This is done for convenience since it allows us to read text encoded using UTF-8 or UTF-16.
+//
+// 5. optional_alignment_size - An optional parameter that specifies the alignment size in bytes used to align the resulting
+// address. This value defaults to zero, which tells the function to align it to the current page size. This was done so this
+// function's behavior was the same as memory_map_entire_file(). If some other value is used, it must be a power of two.
+// 
+// @Returns: True if all of the file's contents were read successfully. Otherwise, false.
 void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator, size_t optional_alignment_size)
 {
 	void* read_file = NULL;
@@ -2402,7 +2393,7 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 					if(optional_add_null_terminator)
 					{
 						push_and_copy_to_arena(arena, sizeof(wchar_t), u8, L"\0", sizeof(wchar_t));
-						// @TODO: Add to result_file_size?
+						// These extra bytes are not added to the resulting file size.
 					}
 				}
 			}
@@ -2542,7 +2533,15 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 	return success;
 }
 
-// @TODO
+// Retrieves a specific file property from an executable or DLL.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the file property as a string.
+// 2. full_file_path - The full path to the file.
+// 3. info_type - The file property to retrieve.
+// 4. result_info - The resulting file property string.
+// 
+// @Returns: True if the specified file property was read successfully. Otherwise, false.
 bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type info_type, TCHAR** result_info)
 {
 	// @Assert: The requested file info type is handled and is associated with a string identifier.
@@ -2594,7 +2593,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 					{
 						if(file_description_size > 0)
 						{
-							if(code_page != CP_UTF16)
+							if(code_page != CP_UTF16_LE)
 							{
 								log_print(LOG_INFO, "Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
 							}
@@ -3275,11 +3274,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 	// Finds and creates a duplicated handle for a file that was opened by another process given its path on disk.
 	//
-	// @Compatibility: Windows 2000 to 10 only.
+	// @Compatibility: Compiles in the Windows 2000 to 10 builds, though it was only made to work in Windows 7 to 10.
 	//
 	// @Parameters:
 	// 1. arena - The Arena structure where any intermediary information about the currently opened handles is stored.
-	// Note that this function does not clear this arena. Use clear_arena() after calling this function.
 	// 2. full_file_path - The full path to the file of interest.
 	// 3. result_file_handle - The address to the variable that receives the resulting duplicated handle.
 	// 
@@ -3390,9 +3388,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// You should use the CopyFile() function from the Windows API first, and only use this one if CopyFile() fails with the error
 	// code ERROR_SHARING_VIOLATION. This function should be used very sparingly.
 	//
-	// Note that this function will clear the supplied memory arena before returning.
-	//
-	// @Compatibility: Windows 2000 to 10 only.
+	// @Compatibility: Compiles in the Windows 2000 to 10 builds, though it was only made to work in Windows 7 to 10.
 	//
 	// @Parameters:
 	// 1. arena - The Arena structure where the file buffer and any intermediary information about the currently opened handles
@@ -3409,8 +3405,12 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		bool copy_success = false;
 
+		// @BeginLock
+		lock_arena(arena);
+
 		HANDLE source_file_handle = INVALID_HANDLE_VALUE;
 		bool was_source_handle_found = query_file_handle_from_file_path(arena, copy_source_path, &source_file_handle);
+
 		clear_arena(arena);
 
 		if(was_source_handle_found)
@@ -3566,6 +3566,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 		
 		safe_close_handle(&source_file_handle);
+		
+		// @EndLock
+		unlock_arena(arena);
+
 		return copy_success;
 	}
 

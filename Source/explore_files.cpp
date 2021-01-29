@@ -14,8 +14,8 @@ static const Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_LOCATION_ON_DISK,
-	CSV_CUSTOM_FILE_GROUP
+	CSV_LOCATION_ON_DISK, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -32,13 +32,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
 	PathCombine(full_file_path, callback_directory_path, filename);
 
-	Csv_Entry csv_row[CSV_NUM_COLUMNS] =
+	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
-		{/* Location On Disk */},
-		{/* Custom File Group */}
+		{/* Location On Disk */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* SHA-256 */}
 	};
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter* exporter = (Exporter*) callback_user_data;
 	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);

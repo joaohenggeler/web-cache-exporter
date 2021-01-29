@@ -284,6 +284,8 @@ struct Exporter
 	// - The number of columns in the CSV file.
 	size_t num_csv_columns;
 
+	// - The number of components in the relative path containing composed of the current cache exporter's identifier and subdirectories.
+	int num_output_components;
 	// - The path to the base directory where the cached files will be copied to.
 	TCHAR output_copy_path[MAX_PATH_CHARS];
 	// - The path to the currently open CSV file.

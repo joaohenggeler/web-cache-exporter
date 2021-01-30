@@ -27,6 +27,19 @@ BEGIN_FILE_GROUP 3DVIA Player
 
 END
 
+; Adobe Atmosphere
+BEGIN_FILE_GROUP Atmosphere
+
+	BEGIN_MIME_TYPES
+		application/x-aer
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		aer
+	END
+
+END
+
 BEGIN_FILE_GROUP Atomic3D
 
 	BEGIN_MIME_TYPES
@@ -330,6 +343,18 @@ BEGIN_FILE_GROUP Silverlight
 	BEGIN_FILE_EXTENSIONS
 		xap
 		; scr
+	END
+
+END
+
+BEGIN_FILE_GROUP Tcl
+
+	BEGIN_MIME_TYPES
+		application/x-tcl
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		tcl
 	END
 
 END

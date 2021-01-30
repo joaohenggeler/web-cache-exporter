@@ -176,11 +176,14 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 	// Keep track of the maximum used size starting at a certain value. This gives us an idea of how
 	// much memory each cache type and Windows version uses before clearing the arena.
 	#ifdef DEBUG
-		static size_t max_used_size = kilobytes_to_bytes(128);
-		if(arena->used_size > max_used_size)
+		const size_t MAX_USED_SIZE_INCREMENT = kilobytes_to_bytes(128);
+		static size_t max_used_size_marker = MAX_USED_SIZE_INCREMENT;
+		
+		if(arena->used_size > max_used_size_marker)
 		{
-			max_used_size = arena->used_size;
-			debug_log_print("Aligned Push Arena: Increased the maximum used size to %Iu after pushing %Iu bytes. The arena is now at %.2f%% used capacity.", max_used_size, aligned_push_size, get_used_arena_capacity(arena));
+			size_t previous_marker_size = max_used_size_marker;
+			max_used_size_marker += MAX_USED_SIZE_INCREMENT;
+			debug_log_print("Aligned Push Arena: Moved the maximum used size marker from %Iu to %Iu after pushing %Iu bytes. The arena is now at %.2f%% used capacity.", previous_marker_size, max_used_size_marker, aligned_push_size, get_used_arena_capacity(arena));
 		}
 	#endif
 
@@ -2719,21 +2722,21 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 					TCHAR* string_subblock = push_arena(arena, info_size, TCHAR);
 					StringCbPrintf(string_subblock, info_size, TEXT("\\StringFileInfo\\%04x%04x\\%hs"), language, code_page, info_type_string);
 
-					char* file_description = NULL;
-					UINT file_description_size = 0;
+					TCHAR* file_information = NULL;
+					UINT file_information_size = 0;
 
-					if(VerQueryValue(info_block, string_subblock, (LPVOID*) &file_description, &file_description_size) != FALSE)
+					if(VerQueryValue(info_block, string_subblock, (LPVOID*) &file_information, &file_information_size) != FALSE)
 					{
-						if(file_description_size > 0)
+						if(file_information_size > 0)
 						{
 							if(code_page != CP_UTF16_LE)
 							{
 								log_print(LOG_INFO, "Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
 							}
 
-							// Even though the most common case seems to be UTF-16 LE, the code page could still be some other value.
-							*result_info = convert_code_page_string_to_tchar(arena, code_page, file_description);
-							success = (*result_info != NULL);
+							// This file information was found in the info_block which is already part of our own memory arena.
+							*result_info = file_information;
+							success = true;
 						}
 						else
 						{

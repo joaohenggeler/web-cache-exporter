@@ -9,11 +9,13 @@ This command line tool allows you to more easily view and obtain the contents of
 
 This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed or played when they were still available.
 
-For example, [here's a list of some previously lost browser games that were found by searching the web cache](https://bluemaxima.org/flashpoint/datahub/Recovering_Files_from_Browser_Cache#List_of_games_found_by_searching_the_web_cache).
+For example, [here's a list of browser games, some of them previously lost, that were found by searching the web cache](https://docs.google.com/spreadsheets/d/1YGO5f0nXCKTE1b-fe4grhim3yIihoG81rjCPHx4puBM/edit?usp=sharing).
+
+![Recovered Game](Images/screenshot_recovered_game.png)
 
 ## Features
 
-* Finds and exports the cache by copying the cached files using their original website's directory structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, etc).
+* Finds and exports the cache by copying the cached files using their original website's directory structure, and by generating a CSV file that lists each one along with additional information (filename, URL, HTTP headers, SHA-256 hash, etc).
 
 ![Command Line Screenshot](Images/screenshot_command_line.png)
 
@@ -113,12 +115,12 @@ These extra command line arguments are optional. The **-export-option** argument
 
 The following options don't require any additional arguments.
 
-| Option           | Description                                                                           |
-|------------------|---------------------------------------------------------------------------------------|
-| -no-copy-files   | Stops the exporter from copying files.                                                |
-| -no-create-csv   | Stops the exporter from creating CSV files.                                           |
-| -overwrite       | Deletes the previous output folder of the same name before running.                   |
-| -show-full-paths | Replaces the "Location On Cache" CSV column with the cached file's full path on disk. |
+| Option           | Description                                                                                            |
+|------------------|--------------------------------------------------------------------------------------------------------|
+| -no-copy-files   | Stops the exporter from copying files.                                                                 |
+| -no-create-csv   | Stops the exporter from creating CSV files.                                                            |
+| -overwrite       | Deletes the previous output folder of the same name before running.                                    |
+| -show-full-paths | Replaces the "Location On Cache" and "Location In Output" CSV columns with the absolute paths on disk. |
 
 Using both `-no-copy-files` and `-no-create-csv` will result in an error and terminate the application.
 The `-show-full-paths` option does nothing if `-no-create-csv` is also used.
@@ -222,7 +224,7 @@ In order to target Windows 98 and ME, this program is compiled using Visual Stud
 
 Note that this application hasn't been thoroughly tested with modern versions of Visual Studio.
 
-This batch file can also use the 7-Zip utility to package any releases. By default, the `Build.bat` will try to run the 7-Zip executable located in the path specified by `_7ZIP_EXE_PATH`. This utility is not included with the source distribution. If you don't care about packaging the compiled application, you may turn off this feature by setting `PACKAGE_BUILD` to `No`.
+This batch file can also use the [7-Zip utility](https://www.7-zip.org/download.html) to package any releases. By default, the `Build.bat` will try to run the 7-Zip executable located in the path specified by `_7ZIP_EXE_PATH`. This utility is not included with the source distribution. If you don't care about packaging the compiled application, you may disable this feature by setting `PACKAGE_BUILD` to `No`.
 
 ### Dependencies
 

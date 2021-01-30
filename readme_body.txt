@@ -152,8 +152,8 @@ The following options don't require any additional arguments.
 before running.
 
 * Option: -show-full-paths
-* Description: Replaces the "Location On Cache" CSV column with the
-cached file's full path on disk.
+* Description: Replaces the "Location On Cache" and "Location In Output"
+CSV columns with the absolute paths on disk.
 
 Using both -no-copy-files and -no-create-csv will result in an error
 and terminate the application. The -show-full-paths option does nothing

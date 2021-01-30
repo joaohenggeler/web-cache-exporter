@@ -132,6 +132,8 @@ bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_cas
 
 bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_insensitive = false);
 
+void string_to_uppercase(TCHAR* str);
+
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
 
@@ -225,6 +227,7 @@ void correct_reserved_path_components(TCHAR* path);
 
 bool does_file_exist(const TCHAR* file_path);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
+bool get_file_size(const TCHAR* file_path, u64* result_file_size);
 void safe_close_handle(HANDLE* handle);
 void safe_find_close(HANDLE* search_handle);
 void safe_unmap_view_of_file(void** base_address);
@@ -260,6 +263,8 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator = false, size_t optional_alignment_size = 0);
 bool read_first_file_bytes(	const TCHAR* path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
+
+TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)

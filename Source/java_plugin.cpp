@@ -91,7 +91,7 @@ static const TCHAR* OUTPUT_NAME = TEXT("JV");
 
 static const Csv_Type CSV_COLUMN_TYPES[] =
 {
-	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION,
+	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE,
 	CSV_LAST_MODIFIED_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING,
 	CSV_CODEBASE_IP, CSV_VERSION,
@@ -172,7 +172,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 
 	Csv_Entry csv_row[] =
 	{
-		{/* Filename */}, {/* URL */}, {/* File Extension */},
+		{/* Filename */}, {/* URL */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Modified Time */}, {/* Expiry Time */},
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */}, {/* Content Type */}, {/* Content Length */}, {/* Content Encoding */},
 		{/* Codebase IP */}, {/* Version */},
@@ -516,9 +516,16 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 
 	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 3);
 
+	TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
+	u64 file_size_value = 0;
+	if(get_file_size(full_file_path, &file_size_value))
+	{
+		convert_u64_to_string(file_size_value, file_size);
+	}
+
 	Csv_Entry csv_row[] =
 	{
-		{/* Filename */}, {/* URL */}, {/* File Extension */},
+		{/* Filename */}, {/* URL */}, {/* File Extension */}, {file_size},
 		{last_modified_time}, {expiry_time},
 		{index.response}, {index.server}, {index.cache_control}, {index.pragma}, {index.content_type}, {content_length}, {index.content_encoding},
 		{index.codebase_ip}, {index.version},

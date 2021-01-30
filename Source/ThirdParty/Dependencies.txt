@@ -1,0 +1,43 @@
+This document lists any third party code used by the Web Cache Exporter.
+Each third party library is contained in a subdirectory next to this
+text file. This file will document why a library was used, who made it,
+where it can be found, and any modifications.
+
+To make compiling this program easier, we will bundle the third party
+library's code with our own source files, provided we are allowed to
+distribute it. Each library's license will also be included in its
+respective subdirectory.
+
+======================================================================
+"Portable C++ Hashing Library" by Stephan Brumme
+======================================================================
+
+This tool uses this hashing library to generate the SHA-256 value for
+each exported file.
+
+The "SHA-256" subdirectory includes two source files: "sha256.h" and
+"sha256_modified.cpp". This last file was modified to disable any
+warnings that would prevent this tool from compiling. This was done
+by adding a single "#pragma warning(...)" to the top of the source file.
+
+Project Page: https://github.com/stbrumme/hash-library
+Version: 7 (2015-03-24)
+
+======================================================================
+Microsoft's Extensible Storage Engine (ESE) API
+======================================================================
+
+This tool uses the ESE API to export later versions of the WinINet cache.
+As such, the header file "esent.h" is required to build this application.
+
+For later versions of Visual Studio, this file is already part of the
+Windows SDK.
+
+For Visual Studio 2005, this file must be obtained from somewhere else
+and added to the subdirectory "ESENT" before building.
+
+For this project, this header file was taken from the Windows Vista SDK
+and is not included in this repository.
+
+Download: https://www.microsoft.com/en-eg/download/details.aspx?id=1919
+Version: 6.0 (2007-09-07)

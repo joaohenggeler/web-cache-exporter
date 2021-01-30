@@ -220,5 +220,15 @@ helping me test this tool in older Windows versions.
 knowledge: https://github.com/tomysshadow
 
 ======================================================================
+ACKNOWLEDGMENT
+======================================================================
+
+The Web Cache Exporter is made possible thanks to the following third
+party software:
+
+* "Portable C++ Hashing Library" by Stephan Brumme.
+* Project Page: https://github.com/stbrumme/hash-library
+
+======================================================================
 LICENSE
 ======================================================================

@@ -1,6 +1,14 @@
 #include "web_cache_exporter.h"
 #include "memory_and_file_io.h"
 
+// @Dependencies: Headers for third party libraries:
+
+// "Portable C++ Hashing Library" by Stephan Brumme.
+#pragma warning(push)
+#pragma warning(disable : 4244 4530 4995)
+	#include "sha256.h"
+#pragma warning(pop)
+
 /*
 	This file defines functions for memory management, file I/O (including creating and writing to the log and CSV files), date time
 	formatting, string, path, and URL manipulation, and basic numeric operations.
@@ -766,6 +774,21 @@ bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_
 
 	const TCHAR* suffix_in_str = str + str_length - suffix_length;
 	return strings_are_equal(suffix_in_str, suffix, optional_case_insensitive);
+}
+
+// Converts a string to uppercase.
+//
+// @Parameters:
+// 1. str - The string to convert.
+//
+// @Returns: Nothing.
+void string_to_uppercase(TCHAR* str)
+{
+	while(*str != TEXT('\0'))
+	{
+		*str = (TCHAR) _totupper(*str);
+		++str;
+	}
 }
 
 // Skips the leading whitespace (spaces and tabs) in a string.
@@ -1844,6 +1867,38 @@ bool get_file_size(HANDLE file_handle, u64* result_file_size)
 	#endif
 }
 
+// Determines the size in bytes of a file from its path.
+//
+// @Parameters:
+// 1. file_path - The path to the file.
+// 2. result_file_size - The resulting file size in bytes.
+//
+// @Returns: True if the function succeeds. Otherwise, it returns false and the file size is not modified.
+bool get_file_size(const TCHAR* file_path, u64* result_file_size)
+{
+	bool success = false;
+
+	HANDLE file_handle = CreateFile(file_path,
+									GENERIC_READ,
+									0,
+									NULL,
+									OPEN_EXISTING,
+									0,
+									NULL);
+
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		success = get_file_size(file_handle, result_file_size);
+		safe_close_handle(&file_handle);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Get File Size: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+	}
+
+	return success;
+}
+
 // Closes a handle and sets its value to INVALID_HANDLE_VALUE.
 //
 // @Parameters:
@@ -2303,6 +2358,9 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 // the resulting file handle should also be closed with safe_close_handle().
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only)
 {
+	void* mapped_memory = NULL;
+	*result_file_size = 0;
+
 	// @Docs:
 	// PAGE_READONLY - "The file specified must have been created with the GENERIC_READ access right."
 	// PAGE_WRITECOPY - "The files specified must have been created with the GENERIC_READ and GENERIC_WRITE access rights."
@@ -2316,14 +2374,18 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 									0,
 									NULL);
 
-	if(file_handle == INVALID_HANDLE_VALUE)
+	*result_file_handle = file_handle;
+
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		mapped_memory = memory_map_entire_file(file_handle, result_file_size, optional_read_only);
+	}
+	else
 	{
 		log_print(LOG_ERROR, "Memory Map Entire File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
 	}
 
-	*result_file_handle = file_handle;
-
-	return memory_map_entire_file(file_handle, result_file_size, optional_read_only);
+	return mapped_memory;
 }
 
 // Reads an entire file into memory.
@@ -2456,6 +2518,77 @@ bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_b
 	}
 
 	return success;
+}
+
+// Generates the SHA-256 hash of a file.
+//
+// @Dependencies: This function calls third party code from the Portable C++ Hashing Library.
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the computed hash as a hexadecimal character string.
+// 2. file_path - The path of the file to hash.
+// 
+// @Returns: The computed hash as a string. If any part of the file cannot be read, this function returns NULL.
+TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
+{
+	TCHAR* result = NULL;
+
+	HANDLE file_handle = CreateFile(file_path,
+									GENERIC_READ,
+									0,
+									NULL,
+									OPEN_EXISTING,
+									0,
+									NULL);
+
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		const u32 FILE_BUFFER_SIZE = 65536;
+		_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
+		
+		void* file_buffer = push_arena(arena, FILE_BUFFER_SIZE, u8);
+		u64 total_bytes_read = 0;
+		SHA256 hash_stream;
+
+		bool reached_end_of_file = false;
+		do
+		{
+			DWORD num_bytes_read = 0;
+			bool read_success = ReadFile(file_handle, file_buffer, FILE_BUFFER_SIZE, &num_bytes_read, NULL) != FALSE;
+
+			if(read_success)
+			{
+				if(num_bytes_read > 0)
+				{
+					total_bytes_read += num_bytes_read;
+					hash_stream.add(file_buffer, num_bytes_read);
+				}
+				else
+				{
+					reached_end_of_file = true;
+					std::string hash_string_cpp = hash_stream.getHash();
+					const char* hash_string = hash_string_cpp.c_str();
+					result = convert_ansi_string_to_tchar(arena, hash_string);
+					string_to_uppercase(result);
+				}
+			}
+			else
+			{
+				reached_end_of_file = true;
+				result = NULL;
+				log_print(LOG_ERROR, "Generate Sha-256 From File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes so far.", file_path, GetLastError(), total_bytes_read);
+			}
+
+		} while(!reached_end_of_file);
+		
+		safe_close_handle(&file_handle);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Generate Sha-256 From File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+	}
+
+	return result;
 }
 
 // Retrieves the data of a specified registry value of type string (REG_SZ).

@@ -222,9 +222,11 @@ In order to target Windows 98 and ME, this program is compiled using Visual Stud
 
 Note that this application hasn't been thoroughly tested with modern versions of Visual Studio.
 
+This batch file can also use the 7-Zip utility to package any releases. By default, the `Build.bat` will try to run the 7-Zip executable located in the path specified by `_7ZIP_EXE_PATH`. This utility is not included with the source distribution. If you don't care about packaging the compiled application, you may turn off this feature by setting `PACKAGE_BUILD` to `No`.
+
 ### Dependencies
 
-This tool uses Microsoft's Extensible Storage Engine (ESE) API to export later versions of the WinINet cache. As such, the header file `esent.h` is required to build this application. For later versions of Visual Studio, this file is already part of the Windows SDK. For Visual Studio 2005, this file must be obtained from somewhere else and added to [this source directory](Source/ThirdParty/Include) before building. For this project, this file was taken from the [Windows Vista SDK](https://www.microsoft.com/en-eg/download/details.aspx?id=1919) and is not included in this repository.
+See the [Dependencies](Source/ThirdParty/Dependencies.txt) help file to learn more about any third party code used by this application.
 
 ## Resources And Tools
 

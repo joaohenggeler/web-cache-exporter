@@ -47,11 +47,6 @@
 	average user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
-
-	@TODO:
-
-	- Flash Plugin: New CSV column "Library SHA-256" for the shared library's SHA-256 value from the HEU metadata file.
-	- Generate the SHA-256 value for each exported file.
 */
 
 /*
@@ -1160,8 +1155,11 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 {
 	_ASSERT(full_entry_path != NULL);
 
-	if(optional_find_data != NULL) entry_filename = optional_find_data->cFileName;
-	
+	if(entry_filename == NULL && optional_find_data != NULL)
+	{
+		entry_filename = optional_find_data->cFileName;
+	}
+
 	TCHAR unique_filename[MAX_PATH_CHARS] = TEXT("");
 	if(entry_filename == NULL)
 	{
@@ -1215,7 +1213,10 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			case(CSV_SHA_256):
 			{
 				_ASSERT(value == NULL);
-				// @TODO: column_values[i].value = generate_sha_256(full_entry_path);
+				if(file_exists)
+				{
+					column_values[i].value = generate_sha_256_from_file(temporary_arena, full_entry_path);
+				}
 			} break;
 
 			// @CustomGroups
@@ -1264,16 +1265,15 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			} break;
 
 			// @FindData
-			case(CSV_CONTENT_LENGTH):
 			case(CSV_FILE_SIZE):
 			{
 				if(value == NULL && optional_find_data != NULL)
 				{
-					u64 file_size = combine_high_and_low_u32s_into_u64(optional_find_data->nFileSizeHigh, optional_find_data->nFileSizeLow);
-					TCHAR file_size_string[MAX_INT64_CHARS] = TEXT("");
-					convert_u64_to_string(file_size, file_size_string);
+					u64 file_size_value = combine_high_and_low_u32s_into_u64(optional_find_data->nFileSizeHigh, optional_find_data->nFileSizeLow);
+					TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
+					convert_u64_to_string(file_size_value, file_size);
 
-					column_values[i].value = file_size_string;
+					column_values[i].value = file_size;
 				}	
 			} break;
 
@@ -1318,6 +1318,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 	entry_to_match.should_match_file_group = (file_group_index != -1);
 	entry_to_match.should_match_url_group = (url_group_index != -1);
 
+	// Files can match groups even if they don't exist on disk.
 	bool matched_group = match_cache_entry_to_groups(temporary_arena, exporter->custom_groups, &entry_to_match);
 	if(matched_group)
 	{
@@ -1349,7 +1350,9 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 	// For any values that can only be added to the CSV row after copying the file.
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
-		TCHAR* value = column_values[i].value;
+		#ifdef DEBUG
+			TCHAR* value = column_values[i].value;
+		#endif
 
 		switch(exporter->csv_column_types[i])
 		{

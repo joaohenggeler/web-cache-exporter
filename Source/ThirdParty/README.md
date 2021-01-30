@@ -1,1 +1,0 @@
-Put any third party .c or .cpp files here if necessary. This structure is subject to change if more complex third party libraries are added.

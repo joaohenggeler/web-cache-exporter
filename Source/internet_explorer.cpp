@@ -638,7 +638,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 
 	Csv_Entry csv_row[] =
 	{
-		{filename}, {/* File Extension */}, {/* File Size */},
+		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
 		{short_file_path}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}

@@ -11,7 +11,7 @@ WCE32
 WCE64
 
 # Third party source files.
-Source/ThirdParty/Include/esent.h
+Source/ThirdParty/ESENT/esent.h
 
 # Java Plugin index and class files for testing.
 Source/Other/JavaPlugin/*

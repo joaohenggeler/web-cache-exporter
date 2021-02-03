@@ -190,7 +190,7 @@ struct Find_Shockwave_Files_Params
 //
 // @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback);
-void export_specific_or_default_shockwave_plugin_cache(Exporter* exporter)
+void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Shockwave Plugin's cache...");
 

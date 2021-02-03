@@ -58,7 +58,7 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback);
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback);
-void export_specific_or_default_flash_plugin_cache(Exporter* exporter)
+void export_default_or_specific_flash_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Flash Plugin's cache...");
 	

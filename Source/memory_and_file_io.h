@@ -226,6 +226,7 @@ void correct_reserved_path_components(TCHAR* path);
 */
 
 bool does_file_exist(const TCHAR* file_path);
+bool does_directory_exist(const TCHAR* directory_path);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
 bool get_file_size(const TCHAR* file_path, u64* result_file_size);
 void safe_close_handle(HANDLE* handle);
@@ -245,7 +246,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data);
 
-void create_directories(const TCHAR* path_to_create);
+bool create_directories(const TCHAR* path_to_create, bool optional_resolve_naming_collisions = false, TCHAR* optional_result_path = NULL);
 bool delete_directory_and_contents(const TCHAR* directory_path);
 
 #define _TEMPORARY_NAME_PREFIX TEXT("WCE")

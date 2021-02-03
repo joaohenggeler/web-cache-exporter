@@ -16,12 +16,13 @@ This tool uses this hashing library to generate the SHA-256 value for
 each exported file.
 
 The "SHA-256" subdirectory includes two source files: "sha256.h" and
-"sha256_modified.cpp". This last file was modified to disable any
-warnings that would prevent this tool from compiling. This was done
-by adding a single "#pragma warning(...)" to the top of the source file.
+"sha256.cpp". This last file was modified to disable any warnings that
+would prevent this tool from compiling. This was done by adding the
+line "#pragma warning(...)" to the top of the source file.
 
 Project Page: https://github.com/stbrumme/hash-library
 Version: 7 (2015-03-24)
+License: Zlib
 
 ======================================================================
 Microsoft's Extensible Storage Engine (ESE) API

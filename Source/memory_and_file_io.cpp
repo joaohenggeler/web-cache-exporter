@@ -1837,7 +1837,7 @@ void correct_reserved_path_components(TCHAR* path)
 // @Parameters:
 // 1. file_path - The path to the file.
 //
-// @Returns: True if the function succeeds. Otherwise, false. This function returns false if the path points to a directory.
+// @Returns: True if the file exists. Otherwise, false. This function returns false if the path points to a directory.
 // This function fails if the path is empty or if the file's attributes cannot be determined.
 bool does_file_exist(const TCHAR* file_path)
 {
@@ -1845,6 +1845,21 @@ bool does_file_exist(const TCHAR* file_path)
 
 	DWORD attributes = GetFileAttributes(file_path);
 	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
+}
+
+// Determines whether or not a directory exists given its path.
+//
+// @Parameters:
+// 1. file_path - The path to the directory.
+//
+// @Returns: True if the directory exists. Otherwise, false. This function returns false if the path points to a file.
+// This function fails if the path is empty or if the directory's attributes cannot be determined.
+bool does_directory_exist(const TCHAR* directory_path)
+{
+	if(string_is_empty(directory_path)) return false;
+
+	DWORD attributes = GetFileAttributes(directory_path);
+	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
 }
 
 // Determines the size in bytes of a file from its handle.
@@ -2067,38 +2082,112 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 // @Parameters:
 // 1. path_to_create - The path of the directory to create.
 //
-// @Returns: Nothing.
-void create_directories(const TCHAR* path_to_create)
+// 2. optional_resolve_file_naming_collisions - An optional parameter that tells the function to resolve any potential naming
+// collisions with already existing files (but not other directories). This value defaults to false. A collision is resolved
+// by adding a tilde followed by a number. For example, if we want to create "C:\Path\To\Dir" but a file called "To" already
+// exists in "C:\Path", then the directory "C:\Path\To~1\Dir" is created instead. If "To" was a directory instead of a file,
+// nothing would be done.
+//
+// 3. optional_result_path - An optional parameter that receives the path of the created directory. This value defaults to NULL,
+// meaning it will be ignored. If this function succeedes and the previous parameter is false, this is the same as the fully
+// qualified version the 'path_to_create' parameter. If that parameter is true, the resulting path may be different if a file
+// naming collision had to be resolved.
+//
+// @Returns: True if the directory exists. Otherwise, false. If the fully qualified version of the path cannot be determined,
+// this function returns false.
+bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_naming_collisions, TCHAR* optional_result_path)
 {
+	if(optional_result_path != NULL) *optional_result_path = TEXT('\0');
+
 	// Default string length limit for the ANSI version of CreateDirectory().
 	const size_t MAX_SHORT_FILENAME_CHARS = 12;
 	const size_t MAX_CREATE_DIRECTORY_PATH_CHARS = MAX_PATH_CHARS - MAX_SHORT_FILENAME_CHARS;
+	_STATIC_ASSERT(MAX_CREATE_DIRECTORY_PATH_CHARS <= MAX_PATH_CHARS);
 
 	TCHAR path[MAX_CREATE_DIRECTORY_PATH_CHARS] = TEXT("");
 
 	if(!get_full_path_name(path_to_create, path, MAX_CREATE_DIRECTORY_PATH_CHARS))
 	{
 		log_print(LOG_ERROR, "Create Directory: Failed to create the directory in '%s' because its fully qualified path could not be determined with the error code %lu.", path_to_create, GetLastError());
-		return;
+		return false;
 	}
 
-	for(size_t i = 0; i < MAX_CREATE_DIRECTORY_PATH_CHARS; ++i)
+	bool collision_resolution_success = true;
+	size_t num_path_chars = string_length(path) + 1;
+	for(size_t i = 0; i < num_path_chars; ++i)
 	{
-		if(path[i] == TEXT('\0'))
-		{
-			// Create the last directory in the path.
-			CreateDirectory(path, NULL);
-			break;
-		}
-		else if(path[i] == TEXT('\\'))
+		if(path[i] == TEXT('\\') || path[i] == TEXT('\0'))
 		{
 			// Make sure we create any intermediate directories by truncating the string at each path separator.
 			// We do it this way since CreateDirectory() fails if a single intermediate directory doesn't exist.
+			// If this separator is the null terminator, this corresponds to creating the last directory in the path.
+			bool last_directory = (path[i] == TEXT('\0'));
+			TCHAR previous_char = path[i];
 			path[i] = TEXT('\0');
-			CreateDirectory(path, NULL);
-			path[i] = TEXT('\\');
+			
+			bool create_success = CreateDirectory(path, NULL) != FALSE;
+			
+			if(optional_resolve_file_naming_collisions)
+			{
+				u32 num_naming_collisions = 0;
+				TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
+				TCHAR unique_path[MAX_CREATE_DIRECTORY_PATH_CHARS] = TEXT("");
+
+				while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS && does_file_exist(path))
+				{
+					++num_naming_collisions;
+					log_print(LOG_INFO, "Create Directory: Resolving file naming collision number %I32u for the directory in '%s'.", num_naming_collisions, path);
+
+					if(num_naming_collisions == 0)
+					{
+						log_print(LOG_ERROR, "Create Directory: Wrapped around the number of naming collisions for the directory '%s'. This directory will not be created.", path);
+						collision_resolution_success = false;
+						break;
+					}
+
+					bool naming_success = 	SUCCEEDED(StringCchCopy(unique_path, MAX_CREATE_DIRECTORY_PATH_CHARS, path))
+											&& convert_u32_to_string(num_naming_collisions, unique_id + 1)
+											&& SUCCEEDED(StringCchCat(unique_path, MAX_CREATE_DIRECTORY_PATH_CHARS, unique_id));
+
+					if(!naming_success)
+					{
+						log_print(LOG_ERROR, "Create Directory: Failed to resolve the file naming collision %I32u for the directory '%s'. This directory will not be created.", num_naming_collisions, path);
+						collision_resolution_success = false;
+						break;
+					}
+
+					// Not being able to create a directory because another one already exists is acceptable.
+					// We only want to resolve naming collisions with files.
+					create_success = (CreateDirectory(unique_path, NULL) != FALSE ) || does_directory_exist(unique_path);
+
+					if(create_success)
+					{
+						// Put back the rest of the path after the unique identifier we added to resolve the naming collision.
+						if(!last_directory)
+						{
+							StringCchPrintf(unique_path, MAX_CREATE_DIRECTORY_PATH_CHARS, TEXT("%s%c%s"), unique_path, previous_char, path + i + 1);
+						}
+						// Update the current path we're iterating over while taking into account the characters we inserted.
+						StringCchCopy(path, MAX_CREATE_DIRECTORY_PATH_CHARS, unique_path);
+						i += string_length(unique_id);
+					}
+					else
+					{
+						log_print(LOG_ERROR, "Create Directory: Failed to create the directory while trying to resolve the file name collision for '%s' with the error code %lu.", path, GetLastError());
+						collision_resolution_success = false;
+						break;
+					}
+				}
+			}
+
+			path[i] = previous_char;
+			if(!collision_resolution_success) break;
 		}
 	}
+
+	if(optional_result_path != NULL) StringCchCopy(optional_result_path, MAX_PATH_CHARS, path);
+
+	return collision_resolution_success && does_directory_exist(path);
 }
 
 // Deletes a directory and all the files and subdirectories inside it.

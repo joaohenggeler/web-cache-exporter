@@ -27,7 +27,7 @@
 
 	- The exporters are located in a .cpp file called "<Browser Name>.cpp" for web browsers and "<Plugin Name>_plugin.cpp" for web
 	plugins. For example, "internet_explorer.cpp" and "shockwave_plugin.cpp". Each one is free to implement how they read their
-	respective cache formats in the way that best suits the data, exposing one function called export_specific_or_default_<Name>_cache
+	respective cache formats in the way that best suits the data, exposing one function called export_default_or_specific_<Name>_cache
 	that takes the Exporter as a parameter.
 
 	- The "memory_and_file_io.cpp" file defines functions for memory management, file I/O, date time formatting, string, path, and
@@ -764,22 +764,22 @@ int _tmain(int argc, TCHAR* argv[])
 	{
 		case(CACHE_INTERNET_EXPLORER):
 		{
-			export_specific_or_default_internet_explorer_cache(&exporter);
+			export_default_or_specific_internet_explorer_cache(&exporter);
 		} break;
 
 		case(CACHE_FLASH_PLUGIN):
 		{
-			export_specific_or_default_flash_plugin_cache(&exporter);
+			export_default_or_specific_flash_plugin_cache(&exporter);
 		} break;
 
 		case(CACHE_SHOCKWAVE_PLUGIN):
 		{
-			export_specific_or_default_shockwave_plugin_cache(&exporter);
+			export_default_or_specific_shockwave_plugin_cache(&exporter);
 		} break;
 
 		case(CACHE_JAVA_PLUGIN):
 		{
-			export_specific_or_default_java_plugin_cache(&exporter);
+			export_default_or_specific_java_plugin_cache(&exporter);
 		} break;
 
 		case(CACHE_ALL):
@@ -973,8 +973,9 @@ void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subd
 //
 // 6. result_destination_path - The final destination path after resolving any naming collisions. This string is only set if this function
 // returns true. Otherwise, this string will be empty.
-// 7. result_error_code - A string containing the Windows system error code generated after attempting to copy the file. This string is
-// only set if this function returns false. Otherwise, this string will be empty.
+// 7. result_error_code - A string containing the Windows system error code generated after attempting to copy the file. This string can
+// only be set if this function returns false. Otherwise, this string will be empty. Note that, if the function terminates before attempting
+// to copy the file due to an error early on, this string will also be empty.
 //
 // @Returns: True if the file was copied successfully. Otherwise, false. This function fails if the source file path is empty.
 static bool copy_file_using_url_directory_structure(	Exporter* exporter,
@@ -999,7 +1000,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	if(url != NULL)
 	{
 		TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
-		bool build_target_success = convert_url_to_path(arena, url, url_path) && PathAppend(full_destination_path, url_path);
+		bool build_target_success = convert_url_to_path(arena, url, url_path) && (PathAppend(full_destination_path, url_path) != FALSE);
 		if(!build_target_success)
 		{
 			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
@@ -1008,7 +1009,20 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	}
 
 	_ASSERT(!string_is_empty(full_destination_path));
-	create_directories(full_destination_path);
+
+	// Create every directory in the copy target, while resolving any file naming collisions.
+	// - If a directory with the same name already exists, nothing is done and function continues.
+	// - If a file with the same name already exists, then the name of the directory will be changed (e.g. "Dir" -> "Dir~1").
+	TCHAR resolved_full_destination_path[MAX_PATH_CHARS] = TEXT("");
+	if(create_directories(full_destination_path, true, resolved_full_destination_path))
+	{
+		StringCchCopy(full_destination_path, MAX_PATH_CHARS, resolved_full_destination_path);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to create the directory structure for the file '%s': '%s'. This file will not be copied.", filename, full_destination_path);
+		return false;
+	}
 
 	TCHAR corrected_filename[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
@@ -1023,7 +1037,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
 		
 		StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
-		if(!PathAppend(full_destination_path, corrected_filename))
+		if(PathAppend(full_destination_path, corrected_filename) == FALSE)
 		{
 			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
 			return false;
@@ -1042,11 +1056,16 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	u32 num_naming_collisions = 0;
 	TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
 	TCHAR full_unique_destination_path[MAX_PATH_CHARS] = TEXT("");
+	StringCchCopy(full_unique_destination_path, MAX_PATH_CHARS, full_destination_path);
 
 	TCHAR file_extension[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(file_extension, MAX_PATH_CHARS, skip_to_file_extension(corrected_filename, true));
 
-	while(!copy_success && GetLastError() == ERROR_FILE_EXISTS)
+	// Copy the file to the target directory, while resolving any file naming collisions.
+	// - If a file with the same name already exists, then the current name will be changed (e.g. "File.ext" -> "File~1.ext").
+	// - If a directory with the same name already exists, then the operation above is also performed.
+	while(	!copy_success &&
+			(GetLastError() == ERROR_FILE_EXISTS || (GetLastError() == ERROR_ACCESS_DENIED && does_directory_exist(full_unique_destination_path))) )
 	{
 		++num_naming_collisions;
 		if(num_naming_collisions == 0)
@@ -1112,12 +1131,17 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 //
 // This function should be called after initialize_cache_exporter() and before terminate_cache_exporter().
 //
-// The following CSV columns are automatically handled by this function, and don't need to be set explicitly:
+// The following CSV columns are automatically handled by this function, and cannot be set explicitly:
 //
+// - CSV_MISSING_FILE - determined using the 'full_entry_path' parameter.
+// - CSV_LOCATION_IN_OUTPUT - determined after copying the file using the 'full_entry_path' parameter.
+// - CSV_COPY_ERROR - determined after copying the file using the 'full_entry_path' parameter.
 // - CSV_CUSTOM_FILE_GROUP - determined using the 'full_entry_path' parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
 // - CSV_CUSTOM_URL_GROUP - determined using the 'entry_url' parameter.
+// - CSV_SHA_256 - determined using the 'full_entry_path' parameter.
 //
 // The following values and columns are also changed if the optional parameter 'optional_find_data' is used:
+//
 // - CSV_FILE_SIZE - determined using the 'nFileSizeHigh' and 'nFileSizeLow' members.
 // - CSV_LAST_WRITE_TIME - determined using the 'ftLastWriteTime' member.
 // - CSV_CREATION_TIME - determined using the 'ftCreationTime' member.
@@ -1127,7 +1151,6 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 // - CSV_FILE_EXTENSION - determined using the value above.
 // - CSV_URL - determined using the 'entry_url' parameter.
 // - CSV_LOCATION_ON_DISK - determined using the 'full_entry_path' parameter.
-// - CSV_MISSING_FILE - determined using the 'full_entry_path' parameter.
 //
 // - CSV_LOCATION_ON_CACHE - replaced with 'full_entry_path' if the exporter option 'should_show_full_paths' is true.
 //
@@ -1738,16 +1761,16 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 // @Returns: Nothing.
 static void export_all_cache_locations(Exporter* exporter)
 {
-	export_specific_or_default_internet_explorer_cache(exporter);
+	export_default_or_specific_internet_explorer_cache(exporter);
 	log_print_newline();
 
-	export_specific_or_default_flash_plugin_cache(exporter);
+	export_default_or_specific_flash_plugin_cache(exporter);
 	log_print_newline();
 
-	export_specific_or_default_shockwave_plugin_cache(exporter);
+	export_default_or_specific_shockwave_plugin_cache(exporter);
 	log_print_newline();
 
-	export_specific_or_default_java_plugin_cache(exporter);
+	export_default_or_specific_java_plugin_cache(exporter);
 }
 
 // Entry point for a cache exporter that handles every supported cache type. This function exports from a given number of locations if

@@ -2,7 +2,7 @@
 #define INTERNET_EXPLORER_H
 
 bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size);
-void export_specific_or_default_internet_explorer_cache(Exporter* exporter);
+void export_default_or_specific_internet_explorer_cache(Exporter* exporter);
 
 // These functions are only meant to be used in the Windows 2000 through 10 builds. In the Windows 98 and ME builds, attempting
 // to call these functions will result in a compile time error.

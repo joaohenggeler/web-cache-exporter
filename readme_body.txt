@@ -17,7 +17,7 @@ supports the following cache formats:
 
 This tool was developed to aid the recovery and preservation of lost web
 media (games, animations, virtual worlds, etc) whose files might exist
-in old computers where they were viewed/played when they were still
+in old computers where they were viewed or played when they were still
 available.
 
 ======================================================================

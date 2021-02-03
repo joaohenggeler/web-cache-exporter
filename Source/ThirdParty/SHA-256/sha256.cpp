@@ -4,7 +4,7 @@
 // see http://create.stephan-brumme.com/disclaimer.html
 //
 
-// The original code was modified to add the following line (2021-01-30):
+// (2021-02-01): The original file was modified to disable the following warnings.
 #pragma warning(disable : 4244 4530 4995)
 
 #include "sha256.h"

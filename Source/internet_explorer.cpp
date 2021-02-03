@@ -521,7 +521,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter);
 static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter);
 static void export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix);
 
-void export_specific_or_default_internet_explorer_cache(Exporter* exporter)
+void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 {
 	console_print("Exporting Internet Explorer's cache...");
 	

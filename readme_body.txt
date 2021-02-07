@@ -220,7 +220,7 @@ helping me test this tool in older Windows versions.
 knowledge: https://github.com/tomysshadow
 
 ======================================================================
-ACKNOWLEDGMENT
+ACKNOWLEDGMENTS
 ======================================================================
 
 The Web Cache Exporter is made possible thanks to the following third

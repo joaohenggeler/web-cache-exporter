@@ -280,7 +280,7 @@ struct Exporter
 	// - Each cache exporter may use one or more identifiers.
 	const TCHAR* cache_identifier;
 	// - The types of each column as an array of length 'num_csv_columns'.
-	const Csv_Type* csv_column_types;
+	Csv_Type* csv_column_types;
 	// - The number of columns in the CSV file.
 	size_t num_csv_columns;
 
@@ -302,7 +302,7 @@ struct Exporter
 };
 
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-								const Csv_Type* column_types, size_t num_columns);
+								Csv_Type* column_types, size_t num_columns);
 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
 

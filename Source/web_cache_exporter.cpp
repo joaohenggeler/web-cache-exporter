@@ -47,6 +47,10 @@
 	average user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
+
+	@TODO:
+	- Start adding support for the Mozilla cache format.
+	- Investigate the Unity Web Player cache directory.
 */
 
 /*
@@ -838,7 +842,7 @@ int _tmain(int argc, TCHAR* argv[])
 // 
 // @Returns: Nothing.
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-								const Csv_Type* column_types, size_t num_columns)
+								Csv_Type* column_types, size_t num_columns)
 {
 	_ASSERT(count_path_components(cache_identifier) == 1);
 
@@ -1203,9 +1207,15 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 	SSIZE_T file_group_index = -1;
 	SSIZE_T url_group_index = -1;
 
+	TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
+	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
+		bool use_value_from_find_data = (value == NULL && optional_find_data != NULL);
 
 		switch(exporter->csv_column_types[i])
 		{
@@ -1238,7 +1248,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 				_ASSERT(value == NULL);
 				if(file_exists)
 				{
-					column_values[i].value = generate_sha_256_from_file(temporary_arena, full_entry_path);
+					value = generate_sha_256_from_file(temporary_arena, full_entry_path);
 				}
 			} break;
 
@@ -1251,91 +1261,84 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			// @CustomGroups @FindData
 			case(CSV_FILE_EXTENSION):
 			{
-				if(value == NULL) column_values[i].value = skip_to_file_extension(entry_filename);
-				// Note that the value may change here.
-				entry_to_match.file_extension_to_match = column_values[i].value;
+				if(value == NULL) value = skip_to_file_extension(entry_filename);
+				entry_to_match.file_extension_to_match = value;
 			} break;
 
 			// @FindData @UseFunctionParameter
 			case(CSV_FILENAME):
 			{
-				if(value == NULL) column_values[i].value = entry_filename;
+				if(value == NULL) value = entry_filename;
 			} break;
 
 			// @UseFunctionParameter
 			case(CSV_URL):
 			{
-				if(value == NULL) column_values[i].value = entry_url;
+				if(value == NULL) value = entry_url;
 			} break;
 
 			// @UseFunctionParameter
 			case(CSV_LOCATION_ON_CACHE):
 			{
-				if(exporter->should_show_full_paths) column_values[i].value = full_entry_path;
+				if(exporter->should_show_full_paths) value = full_entry_path;
 			} break;
 
 			// @UseFunctionParameter
 			case(CSV_LOCATION_ON_DISK):
 			{
-				if(value == NULL) column_values[i].value = full_entry_path;
+				if(value == NULL) value = full_entry_path;
 			} break;
 
 			// @UseFunctionParameter
 			case(CSV_MISSING_FILE):
 			{
 				_ASSERT(value == NULL);
-				column_values[i].value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+				value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
 			} break;
 
 			// @FindData
 			case(CSV_FILE_SIZE):
 			{
-				if(value == NULL && optional_find_data != NULL)
+				if(use_value_from_find_data)
 				{
 					u64 file_size_value = combine_high_and_low_u32s_into_u64(optional_find_data->nFileSizeHigh, optional_find_data->nFileSizeLow);
-					TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
 					convert_u64_to_string(file_size_value, file_size);
-
-					column_values[i].value = file_size;
-				}	
+					value = file_size;
+				}
 			} break;
 
 			// @FindData
 			case(CSV_LAST_WRITE_TIME):
 			{
-				if(value == NULL && optional_find_data != NULL)
+				if(use_value_from_find_data)
 				{
-					TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					format_filetime_date_time(optional_find_data->ftLastWriteTime, last_write_time);
-
-					column_values[i].value = last_write_time;
+					value = last_write_time;
 				}
 			} break;
 
 			// @FindData
 			case(CSV_CREATION_TIME):
 			{
-				if(value == NULL && optional_find_data != NULL)
+				if(use_value_from_find_data)
 				{
-					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					format_filetime_date_time(optional_find_data->ftCreationTime, creation_time);
-
-					column_values[i].value = creation_time;
+					value = creation_time;
 				}
 			} break;
 
 			// @FindData
 			case(CSV_LAST_ACCESS_TIME):
 			{
-				if(value == NULL && optional_find_data != NULL)
+				if(use_value_from_find_data)
 				{
-					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 					format_filetime_date_time(optional_find_data->ftLastAccessTime, last_access_time);
-
-					column_values[i].value = last_access_time;
+					value = last_access_time;
 				}
 			} break;
 		}
+
+		column_values[i].value = value;
 	}
 
 	entry_to_match.should_match_file_group = (file_group_index != -1);
@@ -1373,24 +1376,24 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 	// For any values that can only be added to the CSV row after copying the file.
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
-		#ifdef DEBUG
-			TCHAR* value = column_values[i].value;
-		#endif
+		TCHAR* value = column_values[i].value;
 
 		switch(exporter->csv_column_types[i])
 		{
 			case(CSV_LOCATION_IN_OUTPUT):
 			{
 				_ASSERT(value == NULL);
-				column_values[i].value = copy_destination_path;
+				value = copy_destination_path;
 			} break;
 
 			case(CSV_COPY_ERROR):
 			{
 				_ASSERT(value == NULL);
-				column_values[i].value = copy_error_code;
+				value = copy_error_code;
 			} break;
 		}
+
+		column_values[i].value = value;
 	}
 
 	if(exporter->should_create_csv && match_allows_for_exporting_entry)

@@ -1993,9 +1993,9 @@ void safe_unmap_view_of_file(void** base_address)
 // The callback function can be defined using the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
 // @CallbackParameters:
-// 1. directory_path - The path to the directory that contains the current object.
-// 2. find_data - A pointer to the WIN32_FIND_DATA structure of the current object.
-// 3. user_data - A pointer to any additional data that was passed to traverse_directory_objects().
+// 1. callback_directory_path - The path to the directory that contains the current object.
+// 2. callback_find_data - A pointer to the WIN32_FIND_DATA structure of the current object.
+// 3. callback_user_data - A pointer to any additional data that was passed to traverse_directory_objects().
 //
 // @CallbackReturns: True to keep traversing, or false to stop searching.
 //
@@ -3128,7 +3128,7 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type* column_types, size_t num_columns)
+void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_types, size_t num_columns)
 {
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{

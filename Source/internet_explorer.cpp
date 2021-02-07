@@ -96,7 +96,7 @@
 static const TCHAR* OUTPUT_NAME = TEXT("IE");
 
 // The order and type of each column in the CSV file. This applies to all supported cache database file format versions.
-static const Csv_Type CSV_COLUMN_TYPES[] =
+static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
@@ -119,7 +119,7 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 static const TCHAR* RAW_OUTPUT_NAME = TEXT("IE-RAW");
 // Notice how we have less information due to not relying on the index/database file. We only know the file's properties.
-static const Csv_Type RAW_CSV_COLUMN_TYPES[] =
+static Csv_Type RAW_CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,

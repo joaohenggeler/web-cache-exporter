@@ -463,7 +463,7 @@ struct Csv_Entry
 };
 
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
-void csv_print_header(Arena* arena, HANDLE csv_file_handle, const Csv_Type* column_types, size_t num_columns);
+void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_types, size_t num_columns);
 void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, size_t num_columns);
 
 // Retrieves the address of a function from a loaded library and sets a given variable to this value.

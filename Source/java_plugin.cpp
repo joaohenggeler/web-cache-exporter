@@ -165,13 +165,10 @@ void export_default_or_specific_java_plugin_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 {
-	TCHAR* filename = callback_find_data->cFileName;
+	TCHAR* filename = callback_info->object_name;
+	TCHAR* full_file_path = callback_info->object_path;
 
-	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, callback_directory_path, filename);
-
-	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 3);
-
+	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
 	TCHAR* cache_version = TEXT("AppletStore");
 
 	Csv_Entry csv_row[] =
@@ -180,13 +177,20 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 		{/* Last Modified Time */}, {/* Expiry Time */},
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */}, {/* Content Type */}, {/* Content Length */}, {/* Content Encoding */},
 		{/* Codebase IP */}, {/* Version */},
-		{short_file_path}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
-	Exporter* exporter = (Exporter*) callback_user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
+	Exporter* exporter = (Exporter*) callback_info->user_data;
+
+	Exporter_Params params = {};
+	params.full_file_path = full_file_path;
+	params.url = NULL;
+	params.filename = filename;
+	params.short_location_on_cache = short_location_on_cache;
+
+	export_cache_entry(exporter, csv_row, &params, callback_info);
 
 	return true;
 }
@@ -333,9 +337,9 @@ struct Find_Filename_Result
 // @Returns: True if the file was not found (to keep searching) or false if it was found (to stop searching).
 static TRAVERSE_DIRECTORY_CALLBACK(find_cached_filename_that_starts_with_callback)
 {
-	Find_Filename_Result* result = (Find_Filename_Result*) callback_user_data;
-	result->was_found = !string_ends_with(callback_find_data->cFileName, TEXT(".idx"))
-					&& SUCCEEDED(StringCchCopy(result->result_buffer, MAX_PATH_CHARS, callback_find_data->cFileName));
+	Find_Filename_Result* result = (Find_Filename_Result*) callback_info->user_data;
+	result->was_found = !string_ends_with(callback_info->object_name, TEXT(".idx"))
+					&& SUCCEEDED(StringCchCopy(result->result_buffer, MAX_PATH_CHARS, callback_info->object_name));
 	return !result->was_found;
 }
 
@@ -368,18 +372,18 @@ static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, c
 static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 {
-	Exporter* exporter = (Exporter*) callback_user_data;
+	Exporter* exporter = (Exporter*) callback_info->user_data;
 	Arena* arena = &(exporter->temporary_arena);
 
 	// Find out what kind of cache location we're in by looking at the directory's name:
 	// - "[...]\cache\javapi\v1.0\file\file.ext"
 	// - "[...]\cache\javapi\v1.0\jar\archive.zip"
 	// Otherwise, we assume that it's version 6, whose directory structure is "[...]\cache\6.0\<Number>\<Random Characters>".
-	TCHAR* directory_name = PathFindFileName(callback_directory_path);
+	TCHAR* directory_name = PathFindFileName(callback_info->directory_path);
 	
 	// For the ".jpi_cache" directory (version 1), where the directory structure follows ".jpi_cache\file\1.0\file.ext" instead.
 	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(previous_directory_path, callback_directory_path, TEXT(".."));
+	PathCombine(previous_directory_path, callback_info->directory_path, TEXT(".."));
 	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
 
 	Location_Type location_type = LOCATION_ALL;
@@ -392,10 +396,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		location_type = LOCATION_ARCHIVES;
 	}
 
-	TCHAR* index_filename = callback_find_data->cFileName;
-	PathCombine(exporter->index_path, callback_directory_path, index_filename);
+	TCHAR* index_filename = callback_info->object_name;
 	Index index = {};
-	read_index_file(arena, exporter->index_path, &index, location_type);
+	read_index_file(arena, callback_info->object_path, &index, location_type);
 
 	// @Docs: According to Java's URL class description: "The URL class does not itself encode or decode
 	// any URL components according to the escaping mechanism defined in RFC2396." - java.net.URL - Java
@@ -406,7 +409,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	TCHAR* filename = NULL;
 	if(partition_url(arena, url, &url_parts))
 	{
-		filename = PathFindFileName(url_parts.path);
+		filename = url_parts.filename;
 	}
 	
 	// @Format: The time information is stored in milliseconds while time_t is measured in seconds.
@@ -495,7 +498,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 				// If that fails, take the time to search on disk for the actual filename.
 				// This applies to the version 1 cache directories that still exist in version 6.
 				TCHAR actual_filename[MAX_PATH_CHARS] = TEXT("");
-				if(find_cached_filename_that_starts_with(callback_directory_path, cached_filename, actual_filename))
+				if(find_cached_filename_that_starts_with(callback_info->directory_path, cached_filename, actual_filename))
 				{
 					StringCchCopy(cached_filename, MAX_PATH_CHARS, actual_filename);
 				}
@@ -516,29 +519,28 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, callback_directory_path, cached_filename);
+	PathCombine(full_file_path, callback_info->directory_path, cached_filename);
 
-	TCHAR* short_file_path = skip_to_last_path_components(full_file_path, 3);
-
-	TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
-	u64 file_size_value = 0;
-	if(get_file_size(full_file_path, &file_size_value))
-	{
-		convert_u64_to_string(file_size_value, file_size);
-	}
+	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
 
 	Csv_Entry csv_row[] =
 	{
-		{/* Filename */}, {/* URL */}, {/* File Extension */}, {file_size},
+		{/* Filename */}, {/* URL */}, {/* File Extension */}, {/* File Size */},
 		{last_modified_time}, {expiry_time},
 		{index.response}, {index.server}, {index.cache_control}, {index.pragma}, {index.content_type}, {content_length}, {index.content_encoding},
 		{index.codebase_ip}, {index.version},
-		{short_file_path}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 	
-	export_cache_entry(exporter, csv_row, full_file_path, url, filename);
+	Exporter_Params params = {};
+	params.full_file_path = full_file_path;
+	params.url = url;
+	params.filename = filename;
+	params.short_location_on_cache = short_location_on_cache;
+
+	export_cache_entry(exporter, csv_row, &params);
 
 	return true;
 }

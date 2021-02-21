@@ -74,6 +74,7 @@ void* retreat_bytes(void* pointer, u64 num_bytes);
 ptrdiff_t pointer_difference(void* a, void* b);
 size_t kilobytes_to_bytes(size_t kilobytes);
 size_t megabytes_to_bytes(size_t megabytes);
+
 u8 swap_byte_order(u8 value);
 s8 swap_byte_order(s8 value);
 u16 swap_byte_order(u16 value);
@@ -82,6 +83,8 @@ u32 swap_byte_order(u32 value);
 s32 swap_byte_order(s32 value);
 u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
+#define SWAP_BYTE_ORDER(variable) variable = swap_byte_order(variable)
+
 bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_compare);
 
 /*
@@ -103,6 +106,7 @@ struct Dos_Date_Time
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
+bool format_time32_t_date_time(__time32_t date_time, TCHAR* formatted_string);
 bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string);
 
 /*
@@ -128,17 +132,23 @@ bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional
 bool strings_are_at_most_equal(const char* str_1, const char* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
 bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
 
-bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_case_insensitive = false);
+bool string_starts_with(const char* str, const char* prefix, bool optional_case_insensitive = false);
+bool string_starts_with(const wchar_t* str, const wchar_t* prefix, bool optional_case_insensitive = false);
 
 bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_insensitive = false);
+
+bool string_contains_char(const char* str, char chr);
+bool string_contains_char(const wchar_t* str, wchar_t chr);
 
 void string_to_uppercase(TCHAR* str);
 
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
 
-// u32 = "0" to "4294967295", s32 = "-2147483648" to "2147483647", MAX = 11 characters
-// u64 = "0" to "18446744073709551615", s64 = "-9223372036854775808" to "9223372036854775807", MAX = 20 characters
+// u16 = "0" to "65535", s16 = "-32768" to "32767", MAX = 6 characters.
+// u32 = "0" to "4294967295", s32 = "-2147483648" to "2147483647", MAX = 11 characters.
+// u64 = "0" to "18446744073709551615", s64 = "-9223372036854775808" to "9223372036854775807", MAX = 20 characters.
+const size_t MAX_INT16_CHARS = 6 + 1;
 const size_t MAX_INT32_CHARS = 11 + 1;
 const size_t MAX_INT64_CHARS = 20 + 1; 
 bool convert_u32_to_string(u32 value, TCHAR* result_string);
@@ -190,12 +200,29 @@ struct Url_Parts
 	TCHAR* path;
 	TCHAR* query;
 	TCHAR* fragment;
+
+	TCHAR* filename;
 };
 
 bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
 TCHAR* decode_url(Arena* arena, const TCHAR* url);
+TCHAR* skip_url_scheme(TCHAR* url);
 void correct_url_path_characters(TCHAR* path);
 bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path);
+
+// @TODO
+struct Http_Headers
+{
+	TCHAR* response;
+	TCHAR* server;
+	TCHAR* cache_control;
+	TCHAR* pragma;
+	TCHAR* content_type;
+	TCHAR* content_length;
+	TCHAR* content_encoding;
+};
+
+void parse_http_headers(Arena* arena, const char* original_headers, size_t headers_size, Http_Headers* result_headers);
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -240,29 +267,62 @@ enum Traversal_Flag
 	TRAVERSE_DIRECTORIES = 1 << 1
 };
 
-#define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(const TCHAR* callback_directory_path, WIN32_FIND_DATA* callback_find_data, void* callback_user_data)
+// @TODO
+struct Traversal_Object_Info
+{
+	const TCHAR* directory_path;
+	TCHAR* object_name;
+	TCHAR* object_path;
+
+	u64 object_size;
+	bool is_directory; // True for directories, and false for files.
+
+	FILETIME creation_time;
+	FILETIME last_access_time;
+	FILETIME last_write_time;
+
+	void* user_data; // Only used for callbacks. Unused for the array elements in Traversal_Result.
+};
+
+const TCHAR* const ALL_OBJECTS_SEARCH_QUERY = TEXT("*");
+
+#define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(Traversal_Object_Info* callback_info)
 typedef TRAVERSE_DIRECTORY_CALLBACK(Traverse_Directory_Callback);
-void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
+void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data);
+
+// @TODO
+struct Traversal_Result
+{
+	int num_objects;
+	Traversal_Object_Info object_info[ANYSIZE_ARRAY];
+};
+
+Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory_path, const TCHAR* search_query,
+											u32 traversal_flags, bool should_traverse_subdirectories);
 
 bool create_directories(const TCHAR* path_to_create, bool optional_resolve_naming_collisions = false, TCHAR* optional_result_path = NULL);
 bool delete_directory_and_contents(const TCHAR* directory_path);
 
-#define _TEMPORARY_NAME_PREFIX TEXT("WCE")
-#define _TEMPORARY_NAME_SEARCH_QUERY _TEMPORARY_NAME_PREFIX TEXT("*")
-const TCHAR* const TEMPORARY_NAME_PREFIX = _TEMPORARY_NAME_PREFIX;
-const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
-void delete_all_temporary_directories(const TCHAR* base_temporary_path);
-bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path, TCHAR* result_file_destination_path, HANDLE* result_handle);
 
-bool create_empty_file(const TCHAR* file_path);
+bool create_empty_file(const TCHAR* file_path, bool overwrite);
+bool write_to_file(HANDLE file_handle, const void* data, u32 data_size);
+bool write_to_file(const TCHAR* file_path, const void* data, u32 data_size);
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
+
 void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator = false, size_t optional_alignment_size = 0);
-bool read_first_file_bytes(	const TCHAR* path, void* file_buffer, u32 num_bytes_to_read,
+
+bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
+						bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
+
+bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
+						bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
+
+bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
 
 TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path);
@@ -394,11 +454,13 @@ enum Csv_Type
 	CSV_FILE_EXTENSION,
 	CSV_FILE_SIZE,
 
-	CSV_LAST_WRITE_TIME,
 	CSV_LAST_MODIFIED_TIME,
 	CSV_CREATION_TIME,
+	CSV_LAST_WRITE_TIME,
 	CSV_LAST_ACCESS_TIME,
 	CSV_EXPIRY_TIME,
+
+	CSV_ACCESS_COUNT,
 
 	CSV_RESPONSE,
 	CSV_SERVER,
@@ -407,8 +469,6 @@ enum Csv_Type
 	CSV_CONTENT_TYPE,
 	CSV_CONTENT_LENGTH,
 	CSV_CONTENT_ENCODING,
-
-	CSV_HITS,
 
 	CSV_LOCATION_ON_CACHE,
 	CSV_CACHE_VERSION,
@@ -421,6 +481,9 @@ enum Csv_Type
 	CSV_CUSTOM_FILE_GROUP,
 	CSV_CUSTOM_URL_GROUP,
 	CSV_SHA_256,
+
+	// For the Mozilla cache format:
+	CSV_FIRST_ACCESS_TIME,
 	
 	// For the Shockwave Plugin:
 	CSV_LIBRARY_SHA_256,
@@ -443,11 +506,12 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 {
 	"None",
 	"Filename", "URL", "File Extension", "File Size",
-	"Last Write Time", "Last Modified Time", "Creation Time", "Last Access Time", "Expiry Time",
+	"Last Modified Time", "Creation Time", "Last Write Time", "Last Access Time", "Expiry Time",
+	"Access Count",
 	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Encoding",
-	"Hits",
 	"Location On Cache", "Cache Version", "Location On Disk",
 	"Missing File", "Location In Output", "Copy Error", "Custom File Group", "Custom URL Group", "SHA-256",
+	"First Access Time",
 	"Library SHA-256",
 	"Director File Type", "Xtra Description", "Xtra Version",
 	"Codebase IP", "Version"
@@ -507,16 +571,14 @@ enum Custom_Error_Code
 
 	void load_kernel32_functions(void);
 	void free_kernel32_functions(void);
-	
-	bool force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path);
 #else
 	#define load_ntdll_functions(...) _STATIC_ASSERT(false)
 	#define free_ntdll_functions(...) _STATIC_ASSERT(false)
 	
 	#define load_kernel32_functions(...) _STATIC_ASSERT(false)
 	#define free_kernel32_functions(...) _STATIC_ASSERT(false)
-
-	#define force_copy_open_file(...) _STATIC_ASSERT(false)
 #endif
+
+bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path);
 
 #endif

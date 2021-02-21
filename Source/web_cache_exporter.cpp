@@ -1,6 +1,7 @@
 #include "web_cache_exporter.h"
 
 #include "internet_explorer.h"
+#include "mozilla_firefox.h"
 #include "flash_plugin.h"
 #include "shockwave_plugin.h"
 #include "java_plugin.h"
@@ -51,6 +52,8 @@
 	@TODO:
 	- Start adding support for the Mozilla cache format.
 	- Investigate the Unity Web Player cache directory.
+	- Add an option to force copy a opened file (-copy-opened-file).
+	- Create a "Scripts" directory that's copied to the release build. This can include useful batch files.
 */
 
 /*
@@ -277,6 +280,10 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 			else if(strings_are_equal(cache_type, TEXT("-ie")))
 			{
 				exporter->cache_type = CACHE_INTERNET_EXPLORER;
+			}
+			else if(strings_are_equal(cache_type, TEXT("-mozilla")))
+			{
+				exporter->cache_type = CACHE_MOZILLA;
 			}
 			else if(strings_are_equal(cache_type, TEXT("-flash")))
 			{
@@ -649,8 +656,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0)
 	{
-		log_print(LOG_INFO, "Startup: Deleting any previous temporary exporter directories with the prefix '%s'.", TEMPORARY_NAME_PREFIX);
-		delete_all_temporary_directories(exporter.windows_temporary_path);
+		delete_all_temporary_exporter_directories(&exporter);
 
 		if(create_temporary_directory(exporter.windows_temporary_path, exporter.exporter_temporary_path))
 		{
@@ -1052,7 +1058,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 
 	bool copy_success = false;
 	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-		copy_success = create_empty_file(full_destination_path);
+		copy_success = create_empty_file(full_destination_path, false);
 	#else
 		copy_success = CopyFile(full_source_path, full_destination_path, TRUE) != FALSE;
 	#endif
@@ -1098,7 +1104,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 		}
 		
 		#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-			copy_success = create_empty_file(full_unique_destination_path);
+			copy_success = create_empty_file(full_unique_destination_path, false);
 		#else
 			copy_success = CopyFile(full_source_path, full_unique_destination_path, TRUE) != FALSE;
 		#endif
@@ -1144,14 +1150,14 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 // - CSV_CUSTOM_URL_GROUP - determined using the 'entry_url' parameter.
 // - CSV_SHA_256 - determined using the 'full_entry_path' parameter.
 //
-// The following values and columns are also changed if the optional parameter 'optional_find_data' is used:
+// The following values and columns are also changed if the optional parameter 'optional_file_info' is used:
 //
 // - CSV_FILE_SIZE - determined using the 'nFileSizeHigh' and 'nFileSizeLow' members.
-// - CSV_LAST_WRITE_TIME - determined using the 'ftLastWriteTime' member.
 // - CSV_CREATION_TIME - determined using the 'ftCreationTime' member.
+// - CSV_LAST_WRITE_TIME - determined using the 'ftLastWriteTime' member.
 // - CSV_LAST_ACCESS_TIME - determined using the 'ftLastAccessTime' member.
 //
-// - CSV_FILENAME - determined using the 'entry_filename' parameter, or the 'cFileName' member if 'optional_find_data' is set.
+// - CSV_FILENAME - determined using the 'entry_filename' parameter, or the 'cFileName' member if 'optional_file_info' is set.
 // - CSV_FILE_EXTENSION - determined using the value above.
 // - CSV_URL - determined using the 'entry_url' parameter.
 // - CSV_LOCATION_ON_DISK - determined using the 'full_entry_path' parameter.
@@ -1172,30 +1178,58 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 // be NULL.
 // 5. entry_filename - The cached file's original filename. This value is used to determine the copy destination's filename. This
 // parameter shouldn't be NULL.
-// 6. optional_find_data - An optional parameter that specifies a WIN32_FIND_DATA structure to use to fill some columns. This value
+// 6. optional_file_info - An optional parameter that specifies a WIN32_FIND_DATA structure to use to fill some columns. This value
 // defaults to NULL.
 // 
 // @Returns: Nothing.
-void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
-						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,
-						WIN32_FIND_DATA* optional_find_data)
+void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params, Traversal_Object_Info* optional_file_info)
 {
-	_ASSERT(full_entry_path != NULL);
+	Arena* temporary_arena = &(exporter->temporary_arena);
 
-	if(entry_filename == NULL && optional_find_data != NULL)
+	// @TODO
+	#define IS_STRING_EMPTY(string) ( ((string) == NULL) || string_is_empty(string) )
+
+	TCHAR* full_entry_path = params->full_file_path;
+	TCHAR* entry_url = params->url;
+	TCHAR* entry_filename = params->filename;
+
+	TCHAR* location_on_cache = NULL;
 	{
-		entry_filename = optional_find_data->cFileName;
+		TCHAR* short_location_on_cache = params->short_location_on_cache;
+		TCHAR* full_location_on_cache = params->full_location_on_cache;
+		if(IS_STRING_EMPTY(full_location_on_cache)) full_location_on_cache = full_entry_path;
+		
+		location_on_cache = (exporter->should_show_full_paths) ? (full_location_on_cache) : (short_location_on_cache);	
 	}
+ 
+	_ASSERT(full_entry_path != NULL);
+	_ASSERT(location_on_cache != NULL);
 
+	if(IS_STRING_EMPTY(entry_filename) && entry_url != NULL)
+	{
+		_ASSERT(!string_is_empty(entry_url));
+
+		Url_Parts url_parts = {};
+		if(partition_url(temporary_arena, entry_url, &url_parts))
+		{
+			entry_filename = url_parts.filename;
+		}
+	}
+	
+	if(IS_STRING_EMPTY(entry_filename) && optional_file_info != NULL)
+	{
+		entry_filename = optional_file_info->object_name;
+	}
+	
 	TCHAR unique_filename[MAX_PATH_CHARS] = TEXT("");
-	if(entry_filename == NULL)
+	if(IS_STRING_EMPTY(entry_filename))
 	{
 		++(exporter->num_nameless_files);
 		StringCchPrintf(unique_filename, MAX_PATH_CHARS, TEXT("__WCE-%Iu"), exporter->num_nameless_files);
 		entry_filename = unique_filename;
 	}
 
-	Arena* temporary_arena = &(exporter->temporary_arena);
+	_ASSERT(!IS_STRING_EMPTY(entry_filename));
 
 	bool file_exists = does_file_exist(full_entry_path);
 	++(exporter->num_processed_files);
@@ -1208,14 +1242,14 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 	SSIZE_T url_group_index = -1;
 
 	TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
-	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
-		bool use_value_from_find_data = (value == NULL && optional_find_data != NULL);
+		bool use_value_from_find_data = (value == NULL && optional_file_info != NULL);
 
 		switch(exporter->csv_column_types[i])
 		{
@@ -1280,13 +1314,15 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			// @UseFunctionParameter
 			case(CSV_LOCATION_ON_CACHE):
 			{
-				if(exporter->should_show_full_paths) value = full_entry_path;
+				_ASSERT(value == NULL);
+				value = location_on_cache;
 			} break;
 
 			// @UseFunctionParameter
 			case(CSV_LOCATION_ON_DISK):
 			{
-				if(value == NULL) value = full_entry_path;
+				_ASSERT(value == NULL);
+				value = full_entry_path;
 			} break;
 
 			// @UseFunctionParameter
@@ -1299,21 +1335,20 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			// @FindData
 			case(CSV_FILE_SIZE):
 			{
-				if(use_value_from_find_data)
+				if(IS_STRING_EMPTY(value))
 				{
-					u64 file_size_value = combine_high_and_low_u32s_into_u64(optional_find_data->nFileSizeHigh, optional_find_data->nFileSizeLow);
+					u64 file_size_value = 0;
+					if(use_value_from_find_data)
+					{
+						file_size_value = optional_file_info->object_size;
+					}
+					else
+					{
+						get_file_size(full_entry_path, &file_size_value);
+					}
+
 					convert_u64_to_string(file_size_value, file_size);
 					value = file_size;
-				}
-			} break;
-
-			// @FindData
-			case(CSV_LAST_WRITE_TIME):
-			{
-				if(use_value_from_find_data)
-				{
-					format_filetime_date_time(optional_find_data->ftLastWriteTime, last_write_time);
-					value = last_write_time;
 				}
 			} break;
 
@@ -1322,8 +1357,18 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			{
 				if(use_value_from_find_data)
 				{
-					format_filetime_date_time(optional_find_data->ftCreationTime, creation_time);
+					format_filetime_date_time(optional_file_info->creation_time, creation_time);
 					value = creation_time;
+				}
+			} break;
+
+			// @FindData
+			case(CSV_LAST_WRITE_TIME):
+			{
+				if(use_value_from_find_data)
+				{
+					format_filetime_date_time(optional_file_info->last_write_time, last_write_time);
+					value = last_write_time;
 				}
 			} break;
 
@@ -1332,7 +1377,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 			{
 				if(use_value_from_find_data)
 				{
-					format_filetime_date_time(optional_find_data->ftLastAccessTime, last_access_time);
+					format_filetime_date_time(optional_file_info->last_access_time, last_access_time);
 					value = last_access_time;
 				}
 			} break;
@@ -1417,6 +1462,114 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
 void terminate_cache_exporter(Exporter* exporter)
 {
 	safe_close_handle(&(exporter->csv_file_handle));
+	clear_temporary_exporter_directory(exporter);
+	clear_arena(&(exporter->temporary_arena));
+}
+
+bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename)
+{
+	*result_file_path = TEXT('\0');
+	if(!exporter->was_temporary_exporter_directory_created) return false;
+	bool create_success = false;
+
+	if(optional_filename != NULL)
+	{
+		PathCombine(result_file_path, exporter->exporter_temporary_path, optional_filename);
+		create_success = create_empty_file(result_file_path, true);
+	}
+	else
+	{
+		create_success = GetTempFileName(exporter->exporter_temporary_path, TEMPORARY_NAME_PREFIX, 0, result_file_path) != 0;
+	}
+
+	return create_success;
+}
+
+// @TODO
+bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, HANDLE* result_file_handle)
+{
+	*result_file_path = TEXT('\0');
+	*result_file_handle = INVALID_HANDLE_VALUE;
+
+	if(!exporter->was_temporary_exporter_directory_created) return false;
+
+	bool create_success = create_empty_temporary_exporter_file(exporter, result_file_path);
+	bool get_handle_success = false;
+
+	if(create_success)
+	{
+		*result_file_handle = CreateFile(	result_file_path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL,
+											CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+
+		get_handle_success = (*result_file_handle != INVALID_HANDLE_VALUE);
+
+		// If we couldn't get the handle, the function will fail, so we'll make sure to delete the file.
+		if(!get_handle_success) DeleteFile(result_file_path);
+	}
+
+	return create_success && get_handle_success;
+}
+
+// @TODO
+bool create_temporary_exporter_directory(Exporter* exporter, TCHAR* result_directory_path)
+{
+	*result_directory_path = TEXT('\0');
+
+	if(!exporter->was_temporary_exporter_directory_created) return false;
+
+	return create_temporary_directory(exporter->exporter_temporary_path, result_directory_path);
+}
+
+// @TODO
+void clear_temporary_exporter_directory(Exporter* exporter)
+{
+	if(!exporter->was_temporary_exporter_directory_created) return;
+
+	Arena* temporary_arena = &(exporter->temporary_arena);
+	Traversal_Result* objects = find_objects_in_directory(	temporary_arena, exporter->exporter_temporary_path,
+															ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES | TRAVERSE_DIRECTORIES, false);
+
+	for(int i = 0; i < objects->num_objects; ++i)
+	{
+		Traversal_Object_Info objects_info = objects->object_info[i];
+		TCHAR* full_object_path = objects_info.object_path;
+
+		if(objects_info.is_directory)
+		{
+			delete_directory_and_contents(full_object_path);
+		}
+		else
+		{
+			DeleteFile(full_object_path);
+		}
+	}
+}
+
+// Deletes every directory in the exporter's main temporary location whose name starts with a specific identifier.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the path to the main directory where every temporary directory is located.
+// 
+// @Returns: Nothing.
+void delete_all_temporary_exporter_directories(Exporter* exporter)
+{
+	Arena* temporary_arena = &(exporter->temporary_arena);
+
+	TCHAR* parent_exporter_temporary_path = exporter->windows_temporary_path;
+	_ASSERT(!string_is_empty(parent_exporter_temporary_path));
+	log_print(LOG_INFO, "Delete All Temporary Directories: Deleting any previous temporary exporter directories with the prefix '%s' located in '%s'.", TEMPORARY_NAME_PREFIX, parent_exporter_temporary_path);
+	Traversal_Result* directories = find_objects_in_directory(	temporary_arena, parent_exporter_temporary_path,
+																TEMPORARY_NAME_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false);
+
+	for(int i = 0; i < directories->num_objects; ++i)
+	{
+		Traversal_Object_Info directory_info = directories->object_info[i];
+		_ASSERT(directory_info.is_directory);
+
+		TCHAR* full_directory_path = directory_info.object_path;
+		log_print(LOG_INFO, "Delete All Temporary Directories: Deleting the temporary directory in '%s'.", full_directory_path);
+		delete_directory_and_contents(full_directory_path);
+	}
 }
 
 /*
@@ -1765,6 +1918,9 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 static void export_all_cache_locations(Exporter* exporter)
 {
 	export_default_or_specific_internet_explorer_cache(exporter);
+	log_print_newline();
+
+	export_default_or_specific_mozilla_firefox_cache(exporter);
 	log_print_newline();
 
 	export_default_or_specific_flash_plugin_cache(exporter);

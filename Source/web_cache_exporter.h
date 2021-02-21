@@ -141,12 +141,13 @@ enum Cache_Type
 	CACHE_EXPLORE = 2,
 
 	CACHE_INTERNET_EXPLORER = 3,
+	CACHE_MOZILLA = 4,
 
-	CACHE_FLASH_PLUGIN = 4,
-	CACHE_SHOCKWAVE_PLUGIN = 5,
-	CACHE_JAVA_PLUGIN = 6,
+	CACHE_FLASH_PLUGIN = 5,
+	CACHE_SHOCKWAVE_PLUGIN = 6,
+	CACHE_JAVA_PLUGIN = 7,
 	
-	NUM_CACHE_TYPES = 7
+	NUM_CACHE_TYPES = 8
 };
 
 // An array that maps the previous values to full names.
@@ -154,7 +155,7 @@ const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 {
 	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
 	
-	TEXT("Internet Explorer"),
+	TEXT("Internet Explorer"), TEXT("Mozilla"),
 
 	TEXT("Flash Plugin"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
 };
@@ -293,6 +294,8 @@ struct Exporter
 	// - The path to the index/database file that contains a cached file's metadata.
 	// - The contents of this path vary between different cache types and versions.
 	TCHAR index_path[MAX_PATH_CHARS];
+	// @TODO
+	const TCHAR* cache_profile;
 
 	// Used to count how many cached files were exported.
 	size_t num_csv_files_created;
@@ -301,15 +304,37 @@ struct Exporter
 	size_t num_nameless_files;
 };
 
+// @TODO
+struct Exporter_Params
+{
+	TCHAR* full_file_path;
+	TCHAR* url;
+	TCHAR* filename;
+
+	TCHAR* short_location_on_cache;
+	TCHAR* full_location_on_cache;
+};
+
 void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
 								Csv_Type* column_types, size_t num_columns);
 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
 
-void export_cache_entry(Exporter* exporter, Csv_Entry* column_values,
-						TCHAR* full_entry_path, TCHAR* entry_url, TCHAR* entry_filename,
-						WIN32_FIND_DATA* optional_find_data = NULL);
+void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params, Traversal_Object_Info* optional_file_info = NULL);
 
 void terminate_cache_exporter(Exporter* exporter);
+
+#define _TEMPORARY_NAME_PREFIX TEXT("WCE")
+#define _TEMPORARY_NAME_SEARCH_QUERY _TEMPORARY_NAME_PREFIX TEXT("*")
+const TCHAR* const TEMPORARY_NAME_PREFIX = _TEMPORARY_NAME_PREFIX;
+const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
+#undef _TEMPORARY_NAME_PREFIX
+#undef _TEMPORARY_NAME_SEARCH_QUERY
+
+bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename = NULL);
+bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, HANDLE* result_file_handle);
+bool create_temporary_exporter_directory(Exporter* exporter, TCHAR* result_directory_path);
+void clear_temporary_exporter_directory(Exporter* exporter);
+void delete_all_temporary_exporter_directories(Exporter* exporter);
 
 #endif

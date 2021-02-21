@@ -13,7 +13,7 @@ static const TCHAR* OUTPUT_NAME = TEXT("EXPLORE");
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_LOCATION_ON_DISK, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
@@ -27,22 +27,26 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 {
-	TCHAR* filename = callback_find_data->cFileName;
-
-	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, callback_directory_path, filename);
+	TCHAR* filename = callback_info->object_name;
+	TCHAR* full_file_path = callback_info->object_path;
 
 	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
-		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
+		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
 		{/* Location On Disk */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
-	Exporter* exporter = (Exporter*) callback_user_data;
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
+	Exporter* exporter = (Exporter*) callback_info->user_data;
+
+	Exporter_Params params = {};
+	params.full_file_path = full_file_path;
+	params.url = NULL;
+	params.filename = filename;
+
+	export_cache_entry(exporter, csv_row, &params, callback_info);
 
 	return true;
 }

@@ -427,7 +427,7 @@ END
 BEGIN_URL_GROUP Mozilla
 
 	BEGIN_DOMAINS
-		mozilla.org
+		mozilla.*
 	END
 
 END

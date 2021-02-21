@@ -39,7 +39,7 @@ static const TCHAR* OUTPUT_NAME = TEXT("SW");
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-	CSV_LAST_WRITE_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_DIRECTOR_FILE_TYPE, CSV_XTRA_DESCRIPTION, CSV_XTRA_VERSION,
 	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
@@ -203,31 +203,31 @@ void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 
 		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
 
-		Find_Shockwave_Files_Params params = {};
-		params.exporter = exporter;
-		params.location_identifier = TEXT("<Temporary>");
+		Find_Shockwave_Files_Params file_params = {};
+		file_params.exporter = exporter;
+		file_params.location_identifier = TEXT("<Temporary>");
 
-		params.is_xtra = false;
+		file_params.is_xtra = false;
 		set_exporter_output_copy_subdirectory(exporter, TEXT("Cache"));
-		traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, &params);
+		traverse_directory_objects(exporter->cache_path, TEXT("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, &file_params);
 		
-		params.is_xtra = true;
+		file_params.is_xtra = true;
 		set_exporter_output_copy_subdirectory(exporter, TEXT("Xtras"));
-		traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);
+		traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);
 
 		if(exporter->is_exporting_from_default_locations)
 		{
 			#define TRAVERSE_APPDATA_XTRA_FILES(path, identifier)\
 			do\
 			{\
-				params.location_identifier = identifier;\
+				file_params.location_identifier = identifier;\
 				log_print(LOG_INFO, "Shockwave Plugin: Exporting Xtras from '%s'.", path);\
 				\
 				PathCombine(exporter->cache_path, path, TEXT("Macromedia"));\
-				traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);\
+				traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);\
 				\
 				PathCombine(exporter->cache_path, path, TEXT("Adobe"));\
-				traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &params);\
+				traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);\
 			} while(false, false)
 
 			TRAVERSE_APPDATA_XTRA_FILES(exporter->appdata_path, TEXT("<AppData>"));
@@ -246,26 +246,26 @@ void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 {
-	Find_Shockwave_Files_Params* params = (Find_Shockwave_Files_Params*) callback_user_data;
+	Find_Shockwave_Files_Params* file_params = (Find_Shockwave_Files_Params*) callback_info->user_data;
 
-	Exporter* exporter = params->exporter;
+	Exporter* exporter = file_params->exporter;
 	Arena* arena = &(exporter->temporary_arena);
 
-	TCHAR* filename = callback_find_data->cFileName;
+	TCHAR* filename = callback_info->object_name;
 
 	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_file_path, callback_directory_path, filename);
+	PathCombine(full_file_path, callback_info->directory_path, filename);
 
-	TCHAR* director_file_type = (params->is_xtra) ? (TEXT("Xtra")) : (get_director_file_type_from_file_signature(full_file_path));
+	TCHAR* director_file_type = (file_params->is_xtra) ? (TEXT("Xtra")) : (get_director_file_type_from_file_signature(full_file_path));
 
-	TCHAR short_file_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
 	TCHAR* xtra_description = NULL;
 	TCHAR* xtra_version = NULL;
 
-	if(params->is_xtra)
+	if(file_params->is_xtra)
 	{
-		PathCombine(short_file_path, params->location_identifier, TEXT("[...]"));
-		PathAppend(short_file_path, skip_to_last_path_components(full_file_path, 3));
+		PathCombine(short_location_on_cache, file_params->location_identifier, TEXT("[...]"));
+		PathAppend(short_location_on_cache, skip_to_last_path_components(full_file_path, 3));
 
 		if(!get_file_info(arena, full_file_path, INFO_FILE_DESCRIPTION, &xtra_description))
 		{
@@ -279,20 +279,26 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	}
 	else
 	{
-		PathCombine(short_file_path, params->location_identifier, filename);
+		PathCombine(short_location_on_cache, file_params->location_identifier, filename);
 	}
 
 	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
-		{/* Last Write Time */}, {/* Creation Time */}, {/* Last Access Time */},
+		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
 		{director_file_type}, {xtra_description}, {xtra_version},
-		{short_file_path}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
-	export_cache_entry(exporter, csv_row, full_file_path, NULL, filename, callback_find_data);
+	Exporter_Params exporter_params = {};
+	exporter_params.full_file_path = full_file_path;
+	exporter_params.url = NULL;
+	exporter_params.filename = filename;
+	exporter_params.short_location_on_cache = short_location_on_cache;
+
+	export_cache_entry(exporter, csv_row, &exporter_params, callback_info);
 
 	return true;
 }

@@ -565,7 +565,7 @@ bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_
 */
 
 // Converts a date time value to a string with the format "YYYY-MM-DD hh:mm:ss".
-// Supported date time types and structures: FILETIME, Dos_Date_Time, __time64_t.
+// Supported date time types and structures: FILETIME, Dos_Date_Time, __time32_t, __time64_t.
 //
 // @Parameters:
 // 1. date_time - The date time value to format. If this value is zero, the resulting string will be empty.
@@ -611,6 +611,27 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Format Dos Date Time: Failed to format the DOS date time (date = %I32u, time = %I32u) with the error code %lu..", date_time.date, date_time.time, GetLastError());
+		*formatted_string = TEXT('\0');
+	}
+
+	return success;
+}
+
+bool format_time32_t_date_time(__time32_t date_time, TCHAR* formatted_string)
+{
+	if(date_time == 0)
+	{
+		*formatted_string = TEXT('\0');
+		return true;
+	}
+
+	struct tm time = {};
+	bool success = (_gmtime32_s(&time, &date_time) == 0)
+				&& (_tcsftime(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%Y-%m-%d %H:%M:%S"), &time) > 0);
+
+	if(!success)
+	{
+		log_print(LOG_ERROR, "Format Time32_t: Failed to format the time32_t date time (time = %I32u) with the error code %d.", date_time, errno);
 		*formatted_string = TEXT('\0');
 	}
 
@@ -754,10 +775,16 @@ bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_
 // This value defaults to false.
 //
 // @Returns: True if the string begins with that prefix. Otherwise, false.
-bool string_starts_with(const TCHAR* str, const TCHAR* prefix, bool optional_case_insensitive)
+bool string_starts_with(const char* str, const char* prefix, bool optional_case_insensitive)
 {
-	if(optional_case_insensitive) 	return _tcsncicmp(str, prefix, _tcslen(prefix)) == 0;
-	else 							return _tcsnccmp(str, prefix, _tcslen(prefix)) == 0;
+	if(optional_case_insensitive) 	return _strnicmp(str, prefix, string_length(prefix)) == 0;
+	else 							return strncmp(str, prefix, string_length(prefix)) == 0;
+}
+
+bool string_starts_with(const wchar_t* str, const wchar_t* prefix, bool optional_case_insensitive)
+{
+	if(optional_case_insensitive) 	return _wcsnicmp(str, prefix, string_length(prefix)) == 0;
+	else 							return wcsncmp(str, prefix, string_length(prefix)) == 0;
 }
 
 // Checks if a string ends with a given suffix.
@@ -777,6 +804,23 @@ bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_
 
 	const TCHAR* suffix_in_str = str + str_length - suffix_length;
 	return strings_are_equal(suffix_in_str, suffix, optional_case_insensitive);
+}
+
+// Checks if a string contains a specific character.
+//
+// @Parameters:
+// 1. str - The string to check.
+// 2. chars - The character to search for.
+//
+// @Returns: True if the character appears in the string. Otherwise, false.
+bool string_contains_char(const char* str, char chr)
+{
+	return strchr(str, chr) != NULL;
+}
+
+bool string_contains_char(const wchar_t* str, wchar_t chr)
+{
+	return wcschr(str, chr) != NULL;
 }
 
 // Converts a string to uppercase.
@@ -1228,10 +1272,10 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	// end of the string (if there's no query).
 	TCHAR* query_in_path = _tcschr(remaining_url, TEXT('?'));
 	TCHAR* fragment_in_path = _tcschr(remaining_url, TEXT('#'));
-	// If there's a fragment but no query symbol, or if both exist and the fragment appears before the query.
+	// Check if there's a fragment but no query symbol, or if both exist and the fragment appears before the query.
 	// For example, "http://www.example.com/path#top" or "http://www.example.com/path#top?".
-	bool does_fragment_appear_before_query = (fragment_in_path != NULL && query_in_path == NULL)
-							|| (fragment_in_path != NULL && query_in_path != NULL && fragment_in_path < query_in_path);
+	bool does_fragment_appear_before_query = 	(fragment_in_path != NULL && query_in_path == NULL)
+											|| 	(fragment_in_path != NULL && query_in_path != NULL && fragment_in_path < query_in_path);
 
 	TCHAR* path = _tcstok_s(NULL, TEXT("?#"), &remaining_url);
 	// We'll allow empty paths because the cache's index/database file might store some of them like this.
@@ -1241,6 +1285,21 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	if(path == NULL) path = TEXT("");
 	url_parts->path = push_string_to_arena(arena, path);
 
+	// Search for the resource's name starting at the end of the path.
+	TCHAR* last_forward_slash = _tcsrchr(path, TEXT('/'));
+	TCHAR* last_backslash = _tcsrchr(path, TEXT('\\'));
+
+	// Use whichever separator appears last in the path. For example:
+	// - "http://www.example.com/path/file.ext" -> "path/file.ext" 		-> "file.ext"
+	// - "file:///C:\Path\File.ext" 			-> "C:\Path\File.ext" 	-> "File.ext"
+	// - "http://www.example.com/" 				-> "" 					-> ""
+	// - "http://www.example.com"				-> "" 					-> ""
+	last_forward_slash = (last_forward_slash != NULL) ? (last_forward_slash + 1) : (path);
+	last_backslash = (last_backslash != NULL) ? (last_backslash + 1) : (path);
+	
+	TCHAR* filename = (last_forward_slash > last_backslash) ? (last_forward_slash) : (last_backslash);
+	url_parts->filename = push_string_to_arena(arena, filename);
+
 	TCHAR* query = (does_fragment_appear_before_query) ? (NULL) : (_tcstok_s(NULL, TEXT("#"), &remaining_url));
 	TCHAR* fragment = (!string_is_empty(remaining_url)) ? (remaining_url) : (NULL);
 
@@ -1249,6 +1308,7 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	if(fragment != NULL) url_parts->fragment = push_string_to_arena(arena, fragment);
 
 	_ASSERT(url_parts->path != NULL);
+	_ASSERT(url_parts->filename != NULL);
 
 	return true;
 }
@@ -1336,6 +1396,22 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 	}
 
 	return tchar_url;
+}
+
+// @TODO
+TCHAR* skip_url_scheme(TCHAR* url)
+{
+	while(*url != TEXT('\0'))
+	{
+		if(*url == TEXT(':'))
+		{
+			++url;
+			break;
+		}
+		++url;
+	}
+	
+	return url;
 }
 
 // Corrects the path extracted from a URL (host and resource path) so it may be used by certain functions from the Win32 API (like
@@ -1497,6 +1573,96 @@ bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 	}
 
 	return success;
+}
+
+// Parses specific headers used by the cache exporters from an HTTP response.
+//
+// This function assumes that the headers use ASCII as their character encoding.
+//
+// @Parameters:
+// 1. arena -  The Arena structure that receives the various headers' values as strings.
+// 2. original_headers - A narrow ASCII string that contains the HTTP headers. This string isn't necessarily null terminated.
+// 3. headers_size - The size of the headers string in bytes. This function does nothing if this value is zero.
+// The remaining parameters contain the address of the string in the Arena structure that contains the value of their respective
+// header value:
+// 4. result_headers - The structure that receives the parsed HTTP headers.
+//
+// @Returns: Nothing.
+void parse_http_headers(Arena* arena, const char* original_headers, size_t headers_size, Http_Headers* result_headers)
+{
+	ZeroMemory(result_headers, sizeof(Http_Headers));
+
+	if(headers_size == 0) return;
+
+	// The headers aren't necessarily null terminated.
+	char* headers = push_and_copy_to_arena(arena, headers_size + 1, char, original_headers, headers_size);
+	char* end_of_string = (char*) advance_bytes(headers, headers_size);
+	*end_of_string = '\0';
+
+	// @TODO
+	while(*headers != '\0' && !string_starts_with(headers, "HTTP", true))
+	{
+		headers = skip_to_next_string(headers);
+	}
+
+	const char* line_delimiters = "\r\n";
+	char* next_headers_token = NULL;
+	char* line = strtok_s(headers, line_delimiters, &next_headers_token);
+	bool is_first_line = true;
+
+	while(line != NULL)
+	{
+		// Keep the first line intact since it's the server's response (e.g. "HTTP/1.1 200 OK"),
+		// and not a key-value pair.
+		if(is_first_line)
+		{
+			is_first_line = false;
+			result_headers->response = convert_ansi_string_to_tchar(arena, line);
+		}
+		// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
+		// where "Content-Type" is the key, and "text/html" the value).
+		else
+		{
+			char* next_field_token = NULL;
+			char* key = strtok_s(line, ":", &next_field_token);
+			char* value = skip_leading_whitespace(next_field_token);
+			
+			if(key != NULL && value != NULL)
+			{
+				if(strings_are_equal(key, "server", true))
+				{
+					result_headers->server = convert_ansi_string_to_tchar(arena, value);
+				}
+				else if(strings_are_equal(key, "cache-control", true))
+				{
+					result_headers->cache_control = convert_ansi_string_to_tchar(arena, value);
+				}
+				else if(strings_are_equal(key, "pragma", true))
+				{
+					result_headers->pragma = convert_ansi_string_to_tchar(arena, value);
+				}
+				else if(strings_are_equal(key, "content-type", true))
+				{
+					result_headers->content_type = convert_ansi_string_to_tchar(arena, value);
+				}
+				else if(strings_are_equal(key, "content-length", true))
+				{
+					result_headers->content_length = convert_ansi_string_to_tchar(arena, value);
+				}
+				else if(strings_are_equal(key, "content-encoding", true))
+				{
+					result_headers->content_encoding = convert_ansi_string_to_tchar(arena, value);
+				}
+			}
+			else
+			{
+				log_print(LOG_WARNING, "Parse Cache Headers: The following header line could not be separated into a key and value pair: '%hs'.", line);
+			}
+
+		}
+
+		line = strtok_s(NULL, line_delimiters, &next_headers_token);
+	}
 }
 
 /*
@@ -1898,7 +2064,7 @@ bool get_file_size(const TCHAR* file_path, u64* result_file_size)
 
 	HANDLE file_handle = CreateFile(file_path,
 									GENERIC_READ,
-									0,
+									FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
 									NULL,
 									OPEN_EXISTING,
 									0,
@@ -1993,18 +2159,16 @@ void safe_unmap_view_of_file(void** base_address)
 // The callback function can be defined using the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
 // @CallbackParameters:
-// 1. callback_directory_path - The path to the directory that contains the current object.
-// 2. callback_find_data - A pointer to the WIN32_FIND_DATA structure of the current object.
-// 3. callback_user_data - A pointer to any additional data that was passed to traverse_directory_objects().
+// 1. callback_info - A pointer to a structure containing various information about the object (name, path, properties, user data).
 //
 // @CallbackReturns: True to keep traversing, or false to stop searching.
 //
 // @Returns: Nothing.
-void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
+void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search_query,
 								u32 traversal_flags, bool should_traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data)
 {
-	if(string_is_empty(path)) return;
+	if(string_is_empty(directory_path)) return;
 
 	bool should_continue_traversing = true;
 
@@ -2013,7 +2177,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 	*/
 
 	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(search_path, path, search_query);
+	PathCombine(search_path, directory_path, search_query);
 
 	WIN32_FIND_DATA find_data = {};
 	HANDLE search_handle = FindFirstFile(search_path, &find_data);
@@ -2030,7 +2194,25 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 
 			if(should_process_object)
 			{
-				should_continue_traversing = callback_function(path, &find_data, user_data);
+				TCHAR full_path[MAX_PATH_CHARS] = TEXT("");
+				PathCombine(full_path, directory_path, filename);
+
+				Traversal_Object_Info info = {};
+				
+				info.directory_path = directory_path;
+				info.object_name = filename;
+				info.object_path = full_path;
+
+				info.object_size = combine_high_and_low_u32s_into_u64(find_data.nFileSizeHigh, find_data.nFileSizeLow);
+				info.is_directory = is_directory;
+
+				info.creation_time = find_data.ftCreationTime;
+				info.last_access_time = find_data.ftLastAccessTime;
+				info.last_write_time = find_data.ftLastWriteTime;
+
+				info.user_data = user_data;
+
+				should_continue_traversing = callback_function(&info);
 				if(!should_continue_traversing) break;
 			}
 		}
@@ -2046,7 +2228,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 
 	if(should_traverse_subdirectories && should_continue_traversing)
 	{
-		PathCombine(search_path, path, TEXT("*"));
+		PathCombine(search_path, directory_path, TEXT("*"));
 		search_handle = FindFirstFile(search_path, &find_data);
 		
 		found_object = search_handle != INVALID_HANDLE_VALUE;
@@ -2059,7 +2241,7 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 				if(is_directory)
 				{
 					TCHAR subdirectory_path[MAX_PATH_CHARS] = TEXT("");
-					PathCombine(subdirectory_path, path, filename);
+					PathCombine(subdirectory_path, directory_path, filename);
 
 					traverse_directory_objects(	subdirectory_path, search_query,
 												traversal_flags, should_traverse_subdirectories,
@@ -2072,6 +2254,76 @@ void traverse_directory_objects(const TCHAR* path, const TCHAR* search_query,
 
 		safe_find_close(&search_handle);		
 	}
+}
+
+struct Find_Objects_Params
+{
+	int expected_num_objects;
+
+	Arena* arena;
+	int current_num_objects;
+	Traversal_Result* result;
+};
+
+// @TODO
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: True.
+static TRAVERSE_DIRECTORY_CALLBACK(count_objects_callback)
+{
+	Find_Objects_Params* params = (Find_Objects_Params*) callback_info->user_data;
+	++(params->expected_num_objects);
+	return true;
+}
+
+static TRAVERSE_DIRECTORY_CALLBACK(find_objects_callback)
+{
+	Find_Objects_Params* params = (Find_Objects_Params*) callback_info->user_data;
+	++(params->current_num_objects);
+
+	if(params->current_num_objects > params->expected_num_objects) return false;
+
+	Arena* arena = params->arena;
+	Traversal_Result* result = params->result;
+
+	Traversal_Object_Info* object_info = &(result->object_info[result->num_objects]);
+	++(result->num_objects);
+
+	*object_info = *callback_info;
+	object_info->directory_path = push_string_to_arena(arena, callback_info->directory_path);
+	object_info->object_name = push_string_to_arena(arena, callback_info->object_name);
+	object_info->object_path = push_string_to_arena(arena, callback_info->object_path);
+	object_info->user_data = NULL;
+
+	return true;
+}
+
+// @TODO
+Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory_path, const TCHAR* search_query,
+											u32 traversal_flags, bool should_traverse_subdirectories)
+{
+	Find_Objects_Params params = {};
+	traverse_directory_objects(	directory_path, search_query,
+								traversal_flags, should_traverse_subdirectories,
+								count_objects_callback, &params);
+
+	size_t result_size = sizeof(Traversal_Result) + MAX(params.expected_num_objects - 1, 0) * sizeof(Traversal_Object_Info);
+	Traversal_Result* result = push_arena(arena, result_size, Traversal_Result);
+	result->num_objects = 0;
+
+	params.arena = arena;
+	params.result = result;
+	traverse_directory_objects(	directory_path, search_query,
+								traversal_flags, should_traverse_subdirectories,
+								find_objects_callback, &params);
+
+	if(result->num_objects != params.expected_num_objects)
+	{
+		log_print(LOG_WARNING, "Find Objects In Directory: Found %d objects when %d were expected in the directory '%s'.", result->num_objects, params.expected_num_objects, directory_path);
+	}
+
+	return result;
 }
 
 // Creates a directory given its path, and any intermediate directories that don't exist.
@@ -2257,76 +2509,6 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	return create_success;
 }
 
-// Called every time a directory is found in a base temporary location. Used by delete_all_temporary_directories() to delete
-// every temporary exporter directory.
-//
-// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
-//
-// @Returns: True.
-static TRAVERSE_DIRECTORY_CALLBACK(find_temporary_directories_callback)
-{
-	TCHAR full_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(full_directory_path, callback_directory_path, callback_find_data->cFileName);
-	log_print(LOG_INFO, "Find Temporary Directories Callback: Deleting the temporary directory in '%s'.", full_directory_path);
-	delete_directory_and_contents(full_directory_path);
-	return true;
-}
-
-// Deletes every directory in a given location whose name starts with the exporter's identifier.
-//
-// @Parameters:
-// 1. base_temporary_path - The base path where the directories will be searched and deleted from.
-// 
-// @Returns: Nothing.
-void delete_all_temporary_directories(const TCHAR* base_temporary_path)
-{
-	traverse_directory_objects(	base_temporary_path, TEMPORARY_NAME_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false,
-								find_temporary_directories_callback, NULL);
-}
-
-// Copies a file to a temporary location with a unique name, and returns the destination path and file handle.
-// The file is deleted when this handle is closed. This ensures that, even if the program crashes, Windows closes the handle
-// and the file is deleted.
-//
-// @Parameters:
-// 1. file_source_path - The source path of the file to copy.
-// 2. base_temporary_path - The base path where the file will be copied to.
-// 3. result_file_destination_path - The resulting destination path for the temporary file.
-// 4. result_handle - The resulting handle for the temporary file. This handle has the FILE_FLAG_DELETE_ON_CLOSE flag set.
-//
-// @Returns: True if the file was copied and its handle was retrieved successfully. Otherwise, false.
-// If it fails to retrieve the handle, this function will delete the copied file and return false.
-bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_temporary_path,
-							TCHAR* result_file_destination_path, HANDLE* result_handle)
-{
-	*result_file_destination_path = TEXT('\0');
-	*result_handle = INVALID_HANDLE_VALUE;
-
-	bool copy_success = false;
-	bool get_handle_success = false;
-
-	copy_success = GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, 0, result_file_destination_path) != 0
-					&& CopyFile(file_source_path, result_file_destination_path, FALSE) != FALSE;
-
-	if(copy_success)
-	{
-		*result_handle = CreateFile(result_file_destination_path,
-									GENERIC_READ,
-									0,
-									NULL,
-									OPEN_EXISTING,
-									FILE_FLAG_DELETE_ON_CLOSE,
-									NULL);
-
-		get_handle_success = *result_handle != INVALID_HANDLE_VALUE;
-
-		// If we couldn't get the handle, the function will fail, so we'll make sure to delete the file.
-		if(!get_handle_success) DeleteFile(result_file_destination_path);
-	}
-
-	return copy_success && get_handle_success;
-}
-
 // Creates an empty file with normal attributes.
 //
 // @Parameters:
@@ -2334,17 +2516,55 @@ bool copy_to_temporary_file(const TCHAR* file_source_path, const TCHAR* base_tem
 //
 // @Returns: True if the file was created successfully. Otherwise, false. This function fails if the file in the specified
 // path already exists. In this case, GetLastError() returns ERROR_FILE_EXISTS.
-bool create_empty_file(const TCHAR* file_path)
+bool create_empty_file(const TCHAR* file_path, bool overwrite)
 {
-	HANDLE empty_file = CreateFile(file_path, 0, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+	// @TODO
+	DWORD creation_disposition = (overwrite) ? (CREATE_ALWAYS) : (CREATE_NEW);
+	HANDLE file_handle = CreateFile(file_path, 0, 0, NULL, creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
 	DWORD error_code = GetLastError();
 	
-	bool success = empty_file != INVALID_HANDLE_VALUE;
-	safe_close_handle(&empty_file);
+	bool success = file_handle != INVALID_HANDLE_VALUE;
+	safe_close_handle(&file_handle);
 
 	// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
 	// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
 	SetLastError(error_code);
+	return success;
+}
+
+// @TODO
+bool write_to_file(HANDLE file_handle, const void* data, u32 data_size)
+{
+	bool success = false;
+	DWORD num_bytes_written = 0;
+	
+	if(WriteFile(file_handle, data, data_size, &num_bytes_written, NULL) != FALSE)
+	{
+		success = (num_bytes_written == data_size);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Write To File: Failed to write %I32u bytes with the error code %lu.", data_size, GetLastError());
+	}
+
+	return success;
+}
+
+// @TODO
+bool write_to_file(const TCHAR* file_path, const void* data, u32 data_size)
+{
+	bool success = false;
+	HANDLE file_handle = CreateFile(file_path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		success = write_to_file(file_handle, data, data_size);
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Write To File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+	}
+
 	return success;
 }
 
@@ -2458,13 +2678,7 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 	// PAGE_WRITECOPY - "The files specified must have been created with the GENERIC_READ and GENERIC_WRITE access rights."
 	// - CreateFileMapping - Win32 API Reference.
 	DWORD desired_access = (optional_read_only) ? (GENERIC_READ) : (GENERIC_READ | GENERIC_WRITE);
-	HANDLE file_handle = CreateFile(file_path,
-									desired_access,
-									0,
-									NULL,
-									OPEN_EXISTING,
-									0,
-									NULL);
+	HANDLE file_handle = CreateFile(file_path, desired_access, 0, NULL, OPEN_EXISTING, 0, NULL);
 
 	*result_file_handle = file_handle;
 
@@ -2504,7 +2718,7 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 
 	HANDLE file_handle = CreateFile(file_path,
 									GENERIC_READ,
-									0,
+									FILE_SHARE_READ,
 									NULL,
 									OPEN_EXISTING,
 									0,
@@ -2585,31 +2799,46 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 // 1. The requested number of bytes is zero.
 // 2. The path to the file is empty or NULL.
 // 3. It read fewer bytes than the specified value and optional_allow_reading_fewer_bytes is false or not specified.
+bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
+						bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
+{
+	if(file_handle == INVALID_HANDLE_VALUE || num_bytes_to_read == 0) return false;
+
+	OVERLAPPED overlapped = {};
+	u32 offset_high = 0;
+	u32 offset_low = 0;
+	separate_u64_into_high_and_low_u32s(file_offset, &offset_high, &offset_low);
+	overlapped.OffsetHigh = offset_high;
+	overlapped.Offset = offset_low;
+
+	DWORD num_bytes_read = 0;
+	bool success = (ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, &overlapped) != FALSE)
+				&& ( (num_bytes_read == num_bytes_to_read) || optional_allow_reading_fewer_bytes );
+
+	if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = num_bytes_read;
+	return success;
+}
+
+// @TODO
+bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
+						bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
+{
+	if(file_path == NULL || string_is_empty(file_path) || num_bytes_to_read == 0) return false;
+
+	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+	
+	bool success = read_file_chunk(	file_handle, file_buffer, num_bytes_to_read, file_offset,
+									optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
+	
+	safe_close_handle(&file_handle);
+	return success;
+}
+
+// @TODO
 bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
-	if(num_bytes_to_read == 0 || file_path == NULL || string_is_empty(file_path)) return false;
-
-	bool success = false;
-	HANDLE file_handle = CreateFile( file_path,
-								     GENERIC_READ,
-								     FILE_SHARE_READ,
-								     NULL,
-								     OPEN_EXISTING,
-								     0,
-								     NULL);
-
-	if(file_handle != INVALID_HANDLE_VALUE)
-	{
-		DWORD num_bytes_read = 0;
-		success = ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, NULL)
-				&& ( (num_bytes_read == num_bytes_to_read) || optional_allow_reading_fewer_bytes );
-		safe_close_handle(&file_handle);
-
-		if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = num_bytes_read;
-	}
-
-	return success;
+	return read_file_chunk(file_path, file_buffer, num_bytes_to_read, 0, optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
 }
 
 // Generates the SHA-256 hash of a file.
@@ -2627,7 +2856,7 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 
 	HANDLE file_handle = CreateFile(file_path,
 									GENERIC_READ,
-									0,
+									FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
 									NULL,
 									OPEN_EXISTING,
 									0,
@@ -3615,6 +3844,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	//
 	// @Compatibility: Compiles in the Windows 2000 to 10 builds, though it was only made to work in Windows 7 to 10.
 	//
+	// A wrapper version of this function that works in the Windows 98 to 10 builds and that first tries to use CopyFile() can be
+	// found in the copy_open_file() function.
+	//
 	// @Parameters:
 	// 1. arena - The Arena structure where the file buffer and any intermediary information about the currently opened handles
 	// is stored.
@@ -3626,7 +3858,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// 1. The file specified in copy_source_path exists and is currently open by another process.
 	// 2. The number of bytes written to disk matches the number of bytes read using the duplicated file handle.
 	// 3. The number of bytes written to disk matches the source file's real size.
-	bool force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
+	static bool force_copy_open_file(Arena* arena, const wchar_t* copy_source_path, const wchar_t* copy_destination_path)
 	{
 		bool copy_success = false;
 
@@ -3744,6 +3976,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 						total_bytes_read += num_bytes_read;
 					
 						DWORD num_bytes_written = 0;
+						// @TODO: Write failure
 						if(WriteFile(destination_file_handle, file_buffer, num_bytes_read, &num_bytes_written, NULL))
 						{
 							total_bytes_written += num_bytes_written;
@@ -3799,3 +4032,38 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	}
 
 #endif
+
+// @TODO
+bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path)
+{
+	bool copy_success = CopyFile(copy_source_path, copy_destination_path, FALSE) != FALSE;
+
+	if(!copy_success)
+	{
+		DWORD error_code = GetLastError();
+
+		if( (error_code == ERROR_FILE_NOT_FOUND) || (error_code == ERROR_PATH_NOT_FOUND) )
+		{
+			log_print(LOG_ERROR, "Copy Open File: Failed to copy '%s' to '%s' since the file or path could not be found.", copy_source_path, copy_destination_path);
+		}
+		else if(error_code == ERROR_SHARING_VIOLATION)
+		{
+			#ifndef BUILD_9X
+				log_print(LOG_INFO, "Copy Open File: Attempting to forcibly copy the file '%s' since its being used by another process.", copy_source_path);
+				copy_success = force_copy_open_file(arena, copy_source_path, copy_destination_path);
+				if(!copy_success)
+				{
+					log_print(LOG_ERROR, "Copy Open File: Failed to forcibly copy the file '%s'.", copy_source_path);
+				}
+			#else
+				log_print(LOG_ERROR, "Copy Open File: Failed to copy the file '%s' since its being used by another process.", copy_source_path);
+			#endif
+		}
+		else
+		{
+			log_print(LOG_INFO, "Copy Open File: Failed to copy the file '%s' normally with the error code %lu.", copy_source_path, error_code);
+		}
+	}
+
+	return copy_success;
+}

@@ -62,7 +62,7 @@ void export_default_or_specific_flash_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Flash Plugin's cache...");
 	
-	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_FLASH_PLUGIN, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
@@ -72,7 +72,7 @@ void export_default_or_specific_flash_plugin_cache(Exporter* exporter)
 		log_print(LOG_INFO, "Flash Plugin: Exporting the cache and videos from '%s'.", exporter->cache_path);
 		
 		set_exporter_output_copy_subdirectory(exporter, TEXT("Cache"));
-		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_flash_cache_files_callback, exporter);
+		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_flash_cache_files_callback, exporter);
 		
 		if(exporter->is_exporting_from_default_locations)
 		{
@@ -80,7 +80,7 @@ void export_default_or_specific_flash_plugin_cache(Exporter* exporter)
 			// traversal already includes these video files.
 			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
 			set_exporter_output_copy_subdirectory(exporter, TEXT("Videos"));
-			traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, false, find_flash_video_files_callback, exporter);
+			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, false, find_flash_video_files_callback, exporter);
 		}
 
 		log_print(LOG_INFO, "Flash Plugin: Finished exporting the cache.");
@@ -119,11 +119,16 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 			char* metadata_file = (char*) read_entire_file(arena, metadata_file_path, &metadata_file_size, true);
 			if(metadata_file != NULL)
 			{
+				// @FormatVersion: Flash Player 9 and later.
+				// @ByteOrder: None. The data is stored as null terminated ASCII strings.
+				// @CharacterEncoding: ASCII.
+				// @DateTimeFormat: Unix time.
+
 				// @Format: Each HEU metadata file contains a few null terminated strings with information about
 				// its respective SWZ file (which packages a shared Flash library).
 				char* first_in_file 				= metadata_file;
 				char* last_modified_time_in_file 	= skip_to_next_string(first_in_file);
-				char* access_count_in_file 				= skip_to_next_string(last_modified_time_in_file);
+				char* access_count_in_file 			= skip_to_next_string(last_modified_time_in_file);
 				char* library_sha_256_in_file 		= skip_to_next_string(access_count_in_file);
 				char* fifth_in_file 				= skip_to_next_string(library_sha_256_in_file);
 				fifth_in_file;
@@ -154,7 +159,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params params = {};
-	params.full_file_path = full_file_path;
+	params.copy_file_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
@@ -180,31 +185,30 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 						&& memory_is_equal(signature_buffer, "FLV", SIGNATURE_BUFFER_SIZE);
 
 	// Skip non-FLV files.
-	if(is_flv_file)
+	if(!is_flv_file) return true;
+
+	TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
+	PathCombine(short_location_on_cache, TEXT("<Temporary>"), filename);
+
+	Csv_Entry csv_row[] =
 	{
-		TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
-		PathCombine(short_location_on_cache, TEXT("<Temporary>"), filename);
+		{/* Filename */}, {/* File Extension */}, {/* File Size */},
+		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
+		{/* Access Count */}, {/* Library SHA-256 */},
+		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Custom File Group */}, {/* SHA-256 */}
+	};
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
-		Csv_Entry csv_row[] =
-		{
-			{/* Filename */}, {/* File Extension */}, {/* File Size */},
-			{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
-			{/* Access Count */}, {/* Library SHA-256 */},
-			{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
-			{/* Custom File Group */}, {/* SHA-256 */}
-		};
-		_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
+	Exporter* exporter = (Exporter*) callback_info->user_data;
 
-		Exporter* exporter = (Exporter*) callback_info->user_data;
+	Exporter_Params params = {};
+	params.copy_file_path = full_file_path;
+	params.url = NULL;
+	params.filename = filename;
+	params.short_location_on_cache = short_location_on_cache;
 
-		Exporter_Params params = {};
-		params.full_file_path = full_file_path;
-		params.url = NULL;
-		params.filename = filename;
-		params.short_location_on_cache = short_location_on_cache;
-
-		export_cache_entry(exporter, csv_row, &params, callback_info);	
-	}
+	export_cache_entry(exporter, csv_row, &params, callback_info);	
 
 	return true;
 }

@@ -9,8 +9,6 @@
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-
-
 // A structure that represents a memory arena of with a given capacity in bytes. The 'available_memory' member points to the next free
 // memory location.
 // See: create_arena() and aligned_push_arena().
@@ -29,7 +27,7 @@ struct Arena
 };
 
 // A helper constant used to mark uninitialized or destroyed memory arenas.
-const Arena NULL_ARENA = {0, 0, NULL, 0, {}};
+const Arena NULL_ARENA = {};
 
 bool create_arena(Arena* arena, size_t total_size);
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size);
@@ -51,7 +49,7 @@ bool destroy_arena(Arena* arena);
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-#define WHILE_TRUE(...) for(;;)
+#define WHILE_TRUE() for(;;)
 #define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
 #define IS_POWER_OF_TWO(value) ( ((value) > 0) && (( (value) & ((value) - 1) ) == 0) )
@@ -106,7 +104,6 @@ struct Dos_Date_Time
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
-bool format_time32_t_date_time(__time32_t date_time, TCHAR* formatted_string);
 bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string);
 
 /*
@@ -141,6 +138,7 @@ bool string_contains_char(const char* str, char chr);
 bool string_contains_char(const wchar_t* str, wchar_t chr);
 
 void string_to_uppercase(TCHAR* str);
+void string_unescape(TCHAR* str);
 
 char* skip_leading_whitespace(char* str);
 wchar_t* skip_leading_whitespace(wchar_t* str);
@@ -158,14 +156,14 @@ bool convert_s64_to_string(s64 value, TCHAR* result_string);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
 
-// Any code page identifiers that don't have a readily available macro or constant. Used by MultiByteToWideChar() and WideCharToMultiByte() in the Win32 API,
-// and also convert_code_page_string_to_tchar().
+// Any code page identifiers that don't have a readily available macro or constant. May be used by MultiByteToWideChar() and WideCharToMultiByte()
+// in the Win32 API, and also convert_code_page_string_to_tchar().
 enum Code_Page
 {
 	CP_UTF16_LE = 1200,
 	CP_UTF16_BE = 1201,
 	CP_UTF32_LE = 12000,
-	CP_UTF32_BE = 12001
+	CP_UTF32_BE = 12001,
 };
 
 TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string);
@@ -210,7 +208,8 @@ TCHAR* skip_url_scheme(TCHAR* url);
 void correct_url_path_characters(TCHAR* path);
 bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path);
 
-// @TODO
+// Any relevant fields we want to retrieve from HTTP headers.
+// See: parse_http_headers().
 struct Http_Headers
 {
 	TCHAR* response;
@@ -219,6 +218,7 @@ struct Http_Headers
 	TCHAR* pragma;
 	TCHAR* content_type;
 	TCHAR* content_length;
+	TCHAR* content_range;
 	TCHAR* content_encoding;
 };
 
@@ -233,11 +233,14 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 */
 
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
-const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
+const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(TCHAR);
 
 TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
 TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components);
 int count_path_components(const TCHAR* path);
+TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index);
+//bool path_append_if_missing(TCHAR* path, const TCHAR* path_to_add);
+//bool path_ends_with(const TCHAR* path, const TCHAR* suffix);
 bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_result_path_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
@@ -252,6 +255,10 @@ void correct_reserved_path_components(TCHAR* path);
 	>>>>>>>>>>>>>>>>>>>>
 */
 
+HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
+HANDLE create_directory_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
+bool do_handles_refer_to_the_same_file_or_directory(HANDLE file_handle_1, HANDLE file_handle_2);
+bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path_2);
 bool does_file_exist(const TCHAR* file_path);
 bool does_directory_exist(const TCHAR* directory_path);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
@@ -264,10 +271,11 @@ void safe_unmap_view_of_file(void** base_address);
 enum Traversal_Flag
 {
 	TRAVERSE_FILES = 1 << 0,
-	TRAVERSE_DIRECTORIES = 1 << 1
+	TRAVERSE_DIRECTORIES = 1 << 1,
 };
 
-// @TODO
+// Information (paths, sizes, date times, etc) about each traversed object (directory or file).
+// See: traverse_directory_objects() and find_objects_in_directory().
 struct Traversal_Object_Info
 {
 	const TCHAR* directory_path;
@@ -292,7 +300,8 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 								u32 traversal_flags, bool should_traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data);
 
-// @TODO
+// An array with information about each object.
+// See: find_objects_in_directory().
 struct Traversal_Result
 {
 	int num_objects;
@@ -308,8 +317,6 @@ bool delete_directory_and_contents(const TCHAR* directory_path);
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path);
 
 bool create_empty_file(const TCHAR* file_path, bool overwrite);
-bool write_to_file(HANDLE file_handle, const void* data, u32 data_size);
-bool write_to_file(const TCHAR* file_path, const void* data, u32 data_size);
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
 void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
@@ -324,6 +331,12 @@ bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_t
 
 bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
+
+bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* optional_result_num_bytes_written = NULL);
+
+bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 num_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle);
+
+bool empty_file(HANDLE file_handle);
 
 TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path);
 
@@ -347,7 +360,7 @@ enum File_Info_Type
 	INFO_ORIGINAL_FILENAME = 10,
 	INFO_SPECIAL_BUILD = 11,
 
-	NUM_FILE_INFO_TYPES = 12
+	NUM_FILE_INFO_TYPES = 12,
 };
 
 // An array that maps the previous values to ANSI strings.
@@ -371,7 +384,7 @@ enum Log_Type
 	LOG_ERROR = 3,
 	LOG_DEBUG = 4,
 
-	NUM_LOG_TYPES = 5
+	NUM_LOG_TYPES = 5,
 };
 
 // An array that maps the previous values to TCHAR strings. These strings will appear at the beginning of every log line.
@@ -468,22 +481,26 @@ enum Csv_Type
 	CSV_PRAGMA,
 	CSV_CONTENT_TYPE,
 	CSV_CONTENT_LENGTH,
+	CSV_CONTENT_RANGE,
 	CSV_CONTENT_ENCODING,
 
-	CSV_LOCATION_ON_CACHE,
+	CSV_CACHE_ORIGIN,
 	CSV_CACHE_VERSION,
-	CSV_LOCATION_ON_DISK,
 
-	// Set automatically - cannot be overridden.
+	// Set automatically:
+	CSV_LOCATION_ON_CACHE,
+	CSV_LOCATION_ON_DISK,
 	CSV_MISSING_FILE,
+	
 	CSV_LOCATION_IN_OUTPUT,
 	CSV_COPY_ERROR,
+	
 	CSV_CUSTOM_FILE_GROUP,
 	CSV_CUSTOM_URL_GROUP,
 	CSV_SHA_256,
 
 	// For the Mozilla cache format:
-	CSV_FIRST_ACCESS_TIME,
+	CSV_REQUEST_ORIGIN,
 	
 	// For the Shockwave Plugin:
 	CSV_LIBRARY_SHA_256,
@@ -497,7 +514,7 @@ enum Csv_Type
 	CSV_CODEBASE_IP,
 	CSV_VERSION,
 
-	NUM_CSV_TYPES
+	NUM_CSV_TYPES,
 };
 
 // An array that maps the previous values to UTF-8 strings. Used to write the columns' names directly to the CSV file
@@ -505,13 +522,18 @@ enum Csv_Type
 const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 {
 	"None",
+	
 	"Filename", "URL", "File Extension", "File Size",
 	"Last Modified Time", "Creation Time", "Last Write Time", "Last Access Time", "Expiry Time",
 	"Access Count",
-	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Encoding",
-	"Location On Cache", "Cache Version", "Location On Disk",
-	"Missing File", "Location In Output", "Copy Error", "Custom File Group", "Custom URL Group", "SHA-256",
-	"First Access Time",
+	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Range", "Content Encoding",
+	"Cache Origin", "Cache Version",
+	
+	"Location On Cache", "Location On Disk", "Missing File",
+	"Location In Output", "Copy Error",
+	"Custom File Group", "Custom URL Group", "SHA-256",
+	
+	"Request Origin",
 	"Library SHA-256",
 	"Director File Type", "Xtra Description", "Xtra Version",
 	"Codebase IP", "Version"
@@ -558,8 +580,10 @@ do\
 enum Custom_Error_Code
 {
 	// For copy_file_using_url_directory_structure().
-	CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS = CUSTOM_WIN32_ERROR_CODE(0),
-	CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION = CUSTOM_WIN32_ERROR_CODE(1)
+	CUSTOM_ERROR_EMPTY_OR_NULL_SOURCE_PATH 					= CUSTOM_WIN32_ERROR_CODE(1),
+	CUSTOM_ERROR_FAILED_TO_BUILD_VALID_DESTINATION_PATH 	= CUSTOM_WIN32_ERROR_CODE(2),
+	CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS 				= CUSTOM_WIN32_ERROR_CODE(3),
+	CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION 				= CUSTOM_WIN32_ERROR_CODE(4),
 };
 
 // These functions are only meant to be used in the Windows 2000 through 10 builds. In the Windows 98 and ME builds, attempting
@@ -580,5 +604,107 @@ enum Custom_Error_Code
 #endif
 
 bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path);
+
+// @TODO
+#ifdef DEBUG
+	void debug_measure_time(bool is_start, const char* identifier);
+	#define DEBUG_BEGIN_MEASURE_TIME(identifier) debug_measure_time(true, identifier)
+	#define DEBUG_END_MEASURE_TIME() debug_measure_time(false, NULL)
+#else
+	#define DEBUG_BEGIN_MEASURE_TIME(...)
+	#define DEBUG_END_MEASURE_TIME(...)
+#endif
+
+// Any structs or functions that use templates:
+
+// @TODO
+template<typename Char_Type>
+struct String_Array
+{
+	int num_strings;
+	Char_Type* strings[ANYSIZE_ARRAY];
+};
+
+// @TODO
+template<typename Char_Type>
+String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_Type* delimiters, int optional_max_splits = -1)
+{
+	_ASSERT(string_length(delimiters) >= 1);
+	_ASSERT(optional_max_splits >= -1);
+
+	String_Array<Char_Type>* result = push_arena(arena, sizeof(String_Array<Char_Type>), String_Array<Char_Type>);
+	result->num_strings = 0;
+
+	if(optional_max_splits == 0)
+	{
+		if(!string_is_empty(str))
+		{
+			result->strings[0] = str;
+			++(result->num_strings);
+		}
+		
+		return result;
+	}
+
+	size_t num_string_chars = string_length(str);
+	size_t num_delimiter_chars = string_length(delimiters);
+
+	Char_Type* last_value_begin = str;
+
+	for(size_t i = 0; i < num_string_chars; ++i)
+	{
+		for(size_t j = 0; j < num_delimiter_chars; ++j)
+		{
+			if(str[i] == delimiters[j])
+			{
+				str[i] = '\0';
+				
+				// Skip any empty values caused by multiple delimiters in a row.
+				if(!string_is_empty(last_value_begin))
+				{
+					if(result->num_strings > 0)
+					{
+						push_arena(arena, sizeof(Char_Type*), u8);
+					}
+
+					result->strings[result->num_strings] = last_value_begin;
+					++(result->num_strings);
+				}
+
+				last_value_begin = str + i + 1;
+				break;
+			}
+		}
+
+		if(optional_max_splits != -1 && result->num_strings >= optional_max_splits)
+		{
+			break;
+		}
+	}
+
+	if(!string_is_empty(last_value_begin))
+	{
+		// Add the remainder of the string (which might include delimiters) as
+		// the last value.
+		if(result->num_strings > 0)
+		{
+			push_arena(arena, sizeof(Char_Type*), u8);
+		}
+
+		result->strings[result->num_strings] = last_value_begin;
+		++(result->num_strings);
+		last_value_begin = NULL;
+	}
+
+	return result;
+}
+
+// @TODO
+template<typename Char_Type>
+String_Array<Char_Type>* split_string(Arena* arena, const Char_Type* str, const Char_Type* delimiters, int optional_max_splits = -1)
+{
+	TCHAR* str_copy = push_string_to_arena(arena, str);
+	return split_string(arena, str_copy, delimiters, optional_max_splits);
+}
 
 #endif

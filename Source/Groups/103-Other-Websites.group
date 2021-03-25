@@ -41,6 +41,14 @@ BEGIN_URL_GROUP AOL
 
 END
 
+BEGIN_URL_GROUP Apple
+
+	BEGIN_DOMAINS
+		apple.com
+	END
+
+END
+
 BEGIN_URL_GROUP Ask.com
 
 	BEGIN_DOMAINS
@@ -85,6 +93,22 @@ BEGIN_URL_GROUP BrotherSoft
 
 	BEGIN_DOMAINS
 		brothersoft.com
+	END
+
+END
+
+BEGIN_URL_GROUP Cloudflare
+
+	BEGIN_DOMAINS
+		cloudflare.com
+	END
+
+END
+
+BEGIN_URL_GROUP CloudFront
+
+	BEGIN_DOMAINS
+		cloudfront.net
 	END
 
 END
@@ -139,10 +163,18 @@ BEGIN_URL_GROUP Digg
 
 END
 
+BEGIN_URL_GROUP DigiCert
+
+	BEGIN_DOMAINS
+		digicert.com
+	END
+
+END
+
 BEGIN_URL_GROUP Discord
 
 	BEGIN_DOMAINS
-		discordapp.com
+		discordapp.*
 		discord.*
 	END
 
@@ -240,6 +272,15 @@ BEGIN_URL_GROUP GeoCities
 
 END
 
+BEGIN_URL_GROUP GitHub
+
+	BEGIN_DOMAINS
+		github.*
+		githubusercontent.com
+	END
+
+END
+
 BEGIN_URL_GROUP Gmail
 
 	BEGIN_DOMAINS
@@ -253,6 +294,14 @@ BEGIN_URL_GROUP The Go Network
 
 	BEGIN_DOMAINS
 		go.com
+	END
+
+END
+
+BEGIN_URL_GROUP GoDaddy
+
+	BEGIN_DOMAINS
+		godaddy.com
 	END
 
 END
@@ -285,6 +334,7 @@ BEGIN_URL_GROUP Google
 		ggpht.*
 		gmodules.*
 		goo.gl
+		ocsp.pki.goog
 	END
 
 END
@@ -325,6 +375,15 @@ BEGIN_URL_GROUP Internet Archive
 
 	BEGIN_DOMAINS
 		archive.org
+	END
+
+END
+
+BEGIN_URL_GROUP Java
+
+	BEGIN_DOMAINS
+		java.com
+		javasoft.com
 	END
 
 END
@@ -411,6 +470,7 @@ BEGIN_URL_GROUP Metacafe
 
 	BEGIN_DOMAINS
 		metacafe.com
+		mcstatic.com
 	END
 
 END
@@ -464,6 +524,14 @@ BEGIN_URL_GROUP Netscape
 
 	BEGIN_DOMAINS
 		netscape.com
+	END
+
+END
+
+BEGIN_URL_GROUP Oracle
+
+	BEGIN_DOMAINS
+		oracle.com
 	END
 
 END
@@ -541,6 +609,7 @@ BEGIN_URL_GROUP SoundCloud
 
 	BEGIN_DOMAINS
 		soundcloud.com
+		sndcdn.com
 	END
 
 END
@@ -549,6 +618,15 @@ BEGIN_URL_GROUP Spotify
 
 	BEGIN_DOMAINS
 		spotify.com
+		scdn.co
+	END
+
+END
+
+BEGIN_URL_GROUP Sun Microsystems
+
+	BEGIN_DOMAINS
+		sun.com
 	END
 
 END
@@ -658,6 +736,14 @@ BEGIN_URL_GROUP Zombo.com
 
 	BEGIN_DOMAINS
 		zombo.com
+	END
+
+END
+
+BEGIN_URL_GROUP Zoom
+
+	BEGIN_DOMAINS
+		zoom.us
 	END
 
 END

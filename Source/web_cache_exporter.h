@@ -133,7 +133,9 @@ typedef unsigned __int64 u64;
 typedef float float32;
 typedef double float64;
 
-// The cache types of the support web browser and web plugins.
+typedef SSIZE_T ssize_t;
+
+// The cache types of the supported web browser and web plugins.
 enum Cache_Type
 {
 	CACHE_UNKNOWN = 0,
@@ -165,10 +167,13 @@ const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
 struct Exporter;
 #include "custom_groups.h"
 
+// A structure that represents a user profile and that contains the locations of any system directories used by each cache exporter.
+// See: load_external_locations().
 struct Profile
 {
 	TCHAR* name;
 
+	TCHAR* drive_path;
 	TCHAR* windows_path;
 	TCHAR* windows_temporary_path;
 	TCHAR* user_profile_path;
@@ -178,6 +183,8 @@ struct Profile
 	TCHAR* wininet_cache_path;
 };
 
+// An array of user profile locations to export.
+// See: load_external_locations().
 struct External_Locations
 {
 	u32 num_profiles;
@@ -207,15 +214,18 @@ struct Exporter
 	// Whether or not the path to the external locations file was specified in the CACHE_ALL export option,
 	// along with the path itself.
 	bool should_load_external_locations;
-	TCHAR external_locations_path[MAX_PATH_CHARS];
+	TCHAR external_locations_file_path[MAX_PATH_CHARS];
 	// The name of the profile whose cache is current being exported. 
 	TCHAR* current_profile_name;
-
+	
 	// The export command line arguments.
-	Cache_Type cache_type;
+	Cache_Type command_line_cache_type;
 	TCHAR cache_path[MAX_PATH_CHARS];
 	TCHAR output_path[MAX_PATH_CHARS];
 	bool is_exporting_from_default_locations;
+
+	// @TODO
+	Cache_Type current_cache_type;
 
 	// The current Windows version. Used to determine how much memory to allocate for the temporary memory.
 	OSVERSIONINFO os_version;
@@ -240,6 +250,8 @@ struct Exporter
 	
 	// The absolute paths to relevant Windows locations. These are used to find the default cache directories.
 	// @DefaultCacheLocations:
+	TCHAR drive_path[MAX_PATH_CHARS];
+	// - 98, ME, 2000, XP, Vista, 7, 8.1, 10	C:\ 
 	TCHAR windows_path[MAX_PATH_CHARS];
 	// - 98, ME, XP, Vista, 7, 8.1, 10 			C:\WINDOWS
 	// - 2000 									C:\WINNT
@@ -294,20 +306,25 @@ struct Exporter
 	// - The path to the index/database file that contains a cached file's metadata.
 	// - The contents of this path vary between different cache types and versions.
 	TCHAR index_path[MAX_PATH_CHARS];
-	// @TODO
-	const TCHAR* cache_profile;
+	// - The current browser name.
+	TCHAR* browser_name;
+	// - The current browser profile.
+	TCHAR* browser_profile;
 
 	// Used to count how many cached files were exported.
-	size_t num_csv_files_created;
-	size_t num_processed_files;
-	size_t num_copied_files;
-	size_t num_nameless_files;
+	int total_csv_files_created;
+	int total_processed_files;
+	int total_copied_files;
+
+	int num_assigned_filenames;
+	int total_assigned_filenames;
 };
 
-// @TODO
+// The basic parameters used to build the output locations and fill certain CSV columns for each cache exporter.
+// See: export_cache_entry().
 struct Exporter_Params
 {
-	TCHAR* full_file_path;
+	TCHAR* copy_file_path;
 	TCHAR* url;
 	TCHAR* filename;
 
@@ -315,8 +332,7 @@ struct Exporter_Params
 	TCHAR* full_location_on_cache;
 };
 
-void initialize_cache_exporter(	Exporter* exporter, const TCHAR* cache_identifier,
-								Csv_Type* column_types, size_t num_columns);
+void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns);
 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
 
@@ -333,8 +349,9 @@ const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 
 bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename = NULL);
 bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, HANDLE* result_file_handle);
-bool create_temporary_exporter_directory(Exporter* exporter, TCHAR* result_directory_path);
 void clear_temporary_exporter_directory(Exporter* exporter);
 void delete_all_temporary_exporter_directories(Exporter* exporter);
+
+bool resolve_exporter_external_locations_path(Exporter* exporter, const TCHAR* path, TCHAR* result_path);
 
 #endif

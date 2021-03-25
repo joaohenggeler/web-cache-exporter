@@ -51,6 +51,8 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // found by reading and interpreting their first bytes.
 
 /*
+	@ByteOrder: Big and Little Endian.
+
 	struct Partial_Rifx_Chunk
 	{
 		u32 id;
@@ -194,7 +196,7 @@ void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Shockwave Plugin's cache...");
 
-	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_SHOCKWAVE_PLUGIN, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
@@ -232,6 +234,8 @@ void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 
 			TRAVERSE_APPDATA_XTRA_FILES(exporter->appdata_path, TEXT("<AppData>"));
 			TRAVERSE_APPDATA_XTRA_FILES(exporter->local_low_appdata_path, TEXT("<Local Low AppData>"));
+
+			#undef TRAVERSE_APPDATA_XTRA_FILES
 		}
 
 		log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");	
@@ -293,7 +297,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params exporter_params = {};
-	exporter_params.full_file_path = full_file_path;
+	exporter_params.copy_file_path = full_file_path;
 	exporter_params.url = NULL;
 	exporter_params.filename = filename;
 	exporter_params.short_location_on_cache = short_location_on_cache;

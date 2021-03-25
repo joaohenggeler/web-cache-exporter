@@ -128,6 +128,9 @@ BEGIN_FILE_GROUP Binary
 
 	BEGIN_MIME_TYPES
 		application/octet-stream
+		binary/
+		; Matches:
+		; binary/octet-stream
 	END
 
 END

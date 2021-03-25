@@ -62,10 +62,10 @@
 	- Cached Files: <Cache Location>\IE\<8 Character Directory>
 	- Database File: <Cache Location>\..\WebCache\WebCacheV01.dat or WebCacheV24.dat
 
-	@Resources: Previous reverse engineering efforts that specify how the INDEX.DAT file format (IE 4 to 9) should be processed.
-	Note that we don't handle the entirety of these formats (INDEX.DAT or ESE databases). We only process the subset of the file
+	@Resources: Previous reverse engineering efforts that specify how the index.dat file format (IE 4 to 9) should be processed.
+	Note that we don't handle the entirety of these formats (index.dat or ESE databases). We only process the subset of the file
 	formats that is useful for this application. Any used members in the data structures that represent the various parts of the
-	INDEX.DAT file are marked with @Used.
+	index.dat file are marked with @Used.
 	
 	[GC] "The INDEX.DAT File Format"
 	--> http://www.geoffchappell.com/studies/windows/ie/wininet/api/urlcache/indexdat.htm
@@ -128,7 +128,10 @@ static const size_t RAW_CSV_NUM_COLUMNS = _countof(RAW_CSV_COLUMN_TYPES);
 
 // ----------------------------------------------------------------------------------------------------
 
+// @FormatVersion: Internet Explorer 4 to 9 (index.dat).
 // @ByteOrder: Little Endian.
+// @CharacterEncoding: ASCII. There is some data in the index.dat file that uses UTF-16 LE (according to [JM]), but we don't handle those parts.
+// @DateTimeFormat: FILETIME and DOS date time.
 
 // @Format: Various constants for the index.dat file.
 static const size_t NUM_SIGNATURE_CHARS = 28;
@@ -426,8 +429,9 @@ static void convert_u32_to_dos_date_time(u32 value, Dos_Date_Time* dos_date_time
 // Internet Files directory.
 //
 // @Returns: Nothing.
+
+static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback);
 static void export_internet_explorer_4_to_9_cache(Exporter* exporter);
-static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter);
 static void export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix);
 
 void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
@@ -436,7 +440,7 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 	
 	bool ie_4_to_9_cache_exists = false;
 
-	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_INTERNET_EXPLORER, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
@@ -492,7 +496,7 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 
 	if(ie_4_to_9_cache_exists)
 	{
-		initialize_cache_exporter(exporter, RAW_OUTPUT_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
+		initialize_cache_exporter(exporter, CACHE_INTERNET_EXPLORER, RAW_OUTPUT_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
 		{
 			if(exporter->is_exporting_from_default_locations)
 			{
@@ -502,7 +506,8 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 			log_print_newline();
 			log_print(LOG_INFO, "Raw Internet Explorer 4 to 9: Exporting the raw cached files from '%s'.", exporter->cache_path);
 
-			export_raw_internet_explorer_4_to_9_cache(exporter);		
+			traverse_directory_objects(	exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true,
+										find_internet_explorer_4_to_9_cache_files_callback, exporter);
 		}
 		terminate_cache_exporter(exporter);		
 	}
@@ -511,21 +516,8 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 	log_print(LOG_INFO, "Internet Explorer: Finished exporting the cache.");
 }
 
-// Exports Internet Explorer 4 through 9's cache from a given location without using the index.dat file. This will be used to perform
-// a "raw" export, were the files are copied and the CSV is created without relying on the metadata in the index.dat file.
-//
-// @Parameters:
-// 1. exporter - The Exporter structure which contains information on how Internet Explorer's cache should be exported.
-//
-// @Returns: Nothing.
-static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback);
-static void export_raw_internet_explorer_4_to_9_cache(Exporter* exporter)
-{
-	traverse_directory_objects(	exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true,
-								find_internet_explorer_4_to_9_cache_files_callback, exporter);
-}
-
-// Called every time a file is found in Internet Explorer 4 to 9's cache directory.
+// Called every time a file is found in Internet Explorer 4 to 9's cache directory. Used to perform a "raw" export, were the files are copied
+// and the CSV is created without relying on the metadata in the index.dat file.
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
@@ -556,7 +548,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.full_file_path = full_file_path;
+	params.copy_file_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
@@ -590,7 +582,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 		else if(error_code == ERROR_SHARING_VIOLATION)
 		{
-			log_print(LOG_INFO, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a temporary copy.");
+			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a temporary copy.");
 		
 			TCHAR temporary_index_path[MAX_PATH_CHARS] = TEXT("");
 			bool copy_success = create_empty_temporary_exporter_file(exporter, temporary_index_path)
@@ -887,6 +879,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 					else
 					{
+						// Any other unknown indexes.
 						short_location_on_cache_pointer = TEXT("<?>");
 						log_print(LOG_WARNING, "Internet Explorer 4 to 9: Unknown cache directory index 0x%02X for file '%s' with the following URL: '%s'.", cache_directory_index, filename, url);
 					}
@@ -921,6 +914,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					// @Alias: 'short_location_on_cache_pointer' may alias 'short_location_on_cache'.
 					PathCombine(short_location_on_cache, format_version_prefix, short_location_on_cache_pointer);
 
+					#undef CLEAR_DEALLOCATED_VALUE
+					#undef GET_URL_ENTRY_MEMBER
+					#undef GET_URL_ENTRY_FILETIME_MEMBER
+					#undef GET_URL_ENTRY_DOS_DATE_TIME_MEMBER
+
 					Csv_Entry csv_row[] =
 					{
 						{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
@@ -939,7 +937,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 
 					Exporter_Params params = {};
-					params.full_file_path = full_file_path;
+					params.copy_file_path = full_file_path;
 					params.url = url;
 					params.filename = filename;
 					params.short_location_on_cache = short_location_on_cache;
@@ -1426,11 +1424,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	// @Compatibility: Windows 2000 to 10 only.
 	//
 	// @Parameters:
-	// @TODO
-	// 1. instance - The address of the ESE instance to terminate. This value will be set to JET_instanceNil.
-	// 2. session_id - The address of the ESE session ID to end. This value will be set to JET_sesidNil.
-	// 3. database_id - The address of the database ID to close and detach. This value will be set to JET_dbidNil.
-	// 4. containers_table_id - The address of the Containers table ID to close. This value will be set to JET_tableidNil.
+	// 1. exporter - The Exporter structure that is used to clear the temporary exporter directory of any copied ESE files.
+	// 2. instance - The address of the ESE instance to terminate. This value will be set to JET_instanceNil.
+	// 3. session_id - The address of the ESE session ID to end. This value will be set to JET_sesidNil.
+	// 4. database_id - The address of the database ID to close and detach. This value will be set to JET_dbidNil.
+	// 5. containers_table_id - The address of the Containers table ID to close. This value will be set to JET_tableidNil.
 	//
 	// @Returns: Nothing.
 	static void ese_clean_up(Exporter* exporter, JET_INSTANCE* instance, JET_SESID* session_id, JET_DBID* database_id, JET_TABLEID* containers_table_id)
@@ -1537,7 +1535,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 		// Find and copy every ESE file in the database's directory to our temporary one.
 		Traversal_Result* database_files = find_objects_in_directory(arena, index_directory_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, false);
-		bool copy_success = (database_files->num_objects > 0);
+		int num_copy_failures = 0;
 
 		wchar_t temporary_database_path[MAX_PATH_CHARS] = L"";
 
@@ -1550,14 +1548,13 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			wchar_t copy_destination_path[MAX_PATH_CHARS] = L"";
 			
 			log_print(LOG_INFO, "Internet Explorer 10 to 11: Copying the ESE file '%ls' to the temporary exporter directory.", filename);
-			copy_success = copy_success
-						&& create_empty_temporary_exporter_file(exporter, copy_destination_path, filename)
-						&& copy_open_file(arena, copy_source_path, copy_destination_path);
+			bool copy_success = create_empty_temporary_exporter_file(exporter, copy_destination_path, filename)
+								&& copy_open_file(arena, copy_source_path, copy_destination_path);
 
 			if(!copy_success)
 			{
+				++num_copy_failures;
 				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the ESE file '%ls' to the temporary exporter directory.", filename);
-				break;
 			}
 			else if(strings_are_equal(index_filename, filename, true))
 			{
@@ -1565,10 +1562,9 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 			}
 		}
 
-		if(!copy_success)
+		if(num_copy_failures > 0)
 		{
-			log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy all ESE files to the temporary exporter directory. No files will be exported from this cache.");
-			return;
+			log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to copy %d ESE files to the temporary exporter directory.", num_copy_failures);
 		}
 
 		if(string_is_empty(temporary_database_path))
@@ -1578,6 +1574,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 
 		log_print(LOG_INFO, "Internet Explorer 10 to 11: Reading the information contained in the temporary ESE database file '%ls'.", temporary_database_path);
+
+		// @FormatVersion: Internet Explorer 10 to 11 (ESE database).
+		// @ByteOrder: Little Endian. We won't have to deal with the database file directly since we're using the ESE API.
+		// @CharacterEncoding: UTF-16 LE. Although it can also be ASCII according to the ESE API reference, we will always assume it's UTF-16 LE.
+		// @DateTimeFormat: FILETIME.
 
 		// Read the ESE database that was copied to our temporary directory.
 		JET_ERR error_code = JET_errSuccess;
@@ -1617,8 +1618,12 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		}
 		
 		// Set the required system parameters so the recovery process is attempted.
-		// @Docs: The system parameters that use this path must end in a backslash.
+		
+		// @Docs: The system parameters that specify paths must be at most 246 characters in length (260 - 14);
+		const size_t MAX_TEMPORARY_PATH_CHARS = MAX_PATH_CHARS - 14;
 		wchar_t temporary_directory_path[MAX_TEMPORARY_PATH_CHARS] = L"";
+		
+		// @Docs: The system parameters that use this path must end in a backslash.
 		StringCchCopyW(temporary_directory_path, MAX_TEMPORARY_PATH_CHARS, temporary_database_path);
 		PathAppendW(temporary_directory_path, L"..");
 		StringCchCatW(temporary_directory_path, MAX_TEMPORARY_PATH_CHARS, L"\\");
@@ -2004,7 +2009,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 									Exporter_Params params = {};
-									params.full_file_path = full_file_path;
+									params.copy_file_path = full_file_path;
 									params.url = url;
 									params.filename = filename;
 									params.short_location_on_cache = short_location_on_cache_with_prefix;

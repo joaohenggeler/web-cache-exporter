@@ -42,7 +42,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.full_file_path = full_file_path;
+	params.copy_file_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 
@@ -62,10 +62,10 @@ void export_explored_files(Exporter* exporter)
 {
 	console_print("Exploring and exporting the files from '%s'...", exporter->cache_path);
 
-	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_EXPLORE, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);
-		traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, explore_files_callback, exporter);
+		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, explore_files_callback, exporter);
 		log_print(LOG_INFO, "Explore Files: Finished exporting the files.");
 	}
 	terminate_cache_exporter(exporter);

@@ -95,34 +95,19 @@ BEGIN_FILE_GROUP JavaScript
 
 END
 
-BEGIN_FILE_GROUP VBScript
-
-	BEGIN_MIME_TYPES
-		text/vbscript
-	END
-
-	BEGIN_FILE_EXTENSIONS
-		vbs
-	END
-
-END
-
-BEGIN_FILE_GROUP JSON
-
-	BEGIN_MIME_TYPES
-		application/json
-	END
-
-	BEGIN_FILE_EXTENSIONS
-		json
-	END
-
-END
-
 BEGIN_FILE_GROUP Channel Definition Format
 
 	BEGIN_FILE_EXTENSIONS
 		cdf
+	END
+
+END
+
+BEGIN_FILE_GROUP Configuration
+
+	BEGIN_FILE_EXTENSIONS
+		ini
+		inf
 	END
 
 END
@@ -139,21 +124,43 @@ BEGIN_FILE_GROUP HTML Component
 
 END
 
-BEGIN_FILE_GROUP XML
-
-	BEGIN_FILE_SIGNATURES
-		; Removed since it would result in too many false positives (e.g. SVG files).
-		; "<?xml "
-		; 3C 3F 78 6D 6C 20
-	END
+BEGIN_FILE_GROUP JSON
 
 	BEGIN_MIME_TYPES
-		text/xml
-		application/xml
+		application/json
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		xml
+		json
+	END
+
+END
+
+BEGIN_FILE_GROUP MPEG-DASH
+
+	BEGIN_MIME_TYPES
+		application/dash
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		mpd
+	END
+
+END
+
+BEGIN_FILE_GROUP Playlist
+
+	BEGIN_MIME_TYPES
+		application/vnd.apple.mpegurl
+		application/mpegurl
+		application/x-mpegurl
+		audio/mpegurl
+		audio/x-mpegurl
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		m3u
+		m3u8
 	END
 
 END
@@ -176,11 +183,33 @@ BEGIN_FILE_GROUP Rich Text Format
 
 END
 
-BEGIN_FILE_GROUP Configuration
+BEGIN_FILE_GROUP VBScript
+
+	BEGIN_MIME_TYPES
+		text/vbscript
+	END
 
 	BEGIN_FILE_EXTENSIONS
-		ini
-		inf
+		vbs
+	END
+
+END
+
+BEGIN_FILE_GROUP XML
+
+	BEGIN_FILE_SIGNATURES
+		; Removed since it would result in too many false positives (e.g. SVG files).
+		; "<?xml "
+		; 3C 3F 78 6D 6C 20
+	END
+
+	BEGIN_MIME_TYPES
+		text/xml
+		application/xml
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		xml
 	END
 
 END

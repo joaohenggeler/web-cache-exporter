@@ -54,9 +54,9 @@
 		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = NULL;
 		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 0;
 	#else
-		static void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = (void*) 0x10000000;
-		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = (void*) 0x50000000;
-		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 0x01000000;
+		static void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = 	(void*) 0x10000000;
+		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = 	(void*) 0x50000000;
+		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 			0x02000000;
 	#endif
 
 	// In the debug builds, we'll set the arena's memory to specific values so it's easier to keep track of allocations
@@ -565,7 +565,7 @@ bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_
 */
 
 // Converts a date time value to a string with the format "YYYY-MM-DD hh:mm:ss".
-// Supported date time types and structures: FILETIME, Dos_Date_Time, __time32_t, __time64_t.
+// Supported date time types and structures: FILETIME, Dos_Date_Time, __time64_t.
 //
 // @Parameters:
 // 1. date_time - The date time value to format. If this value is zero, the resulting string will be empty.
@@ -611,27 +611,6 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Format Dos Date Time: Failed to format the DOS date time (date = %I32u, time = %I32u) with the error code %lu..", date_time.date, date_time.time, GetLastError());
-		*formatted_string = TEXT('\0');
-	}
-
-	return success;
-}
-
-bool format_time32_t_date_time(__time32_t date_time, TCHAR* formatted_string)
-{
-	if(date_time == 0)
-	{
-		*formatted_string = TEXT('\0');
-		return true;
-	}
-
-	struct tm time = {};
-	bool success = (_gmtime32_s(&time, &date_time) == 0)
-				&& (_tcsftime(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%Y-%m-%d %H:%M:%S"), &time) > 0);
-
-	if(!success)
-	{
-		log_print(LOG_ERROR, "Format Time32_t: Failed to format the time32_t date time (time = %I32u) with the error code %d.", date_time, errno);
 		*formatted_string = TEXT('\0');
 	}
 
@@ -838,6 +817,29 @@ void string_to_uppercase(TCHAR* str)
 	}
 }
 
+// @TODO
+void string_unescape(TCHAR* str)
+{
+	while(*str != TEXT('\0'))
+	{
+		if(*str == TEXT('\\'))
+		{
+			TCHAR* next_char = str + 1;
+
+			switch(*next_char)
+			{
+				case(TEXT('\\')):
+				case(TEXT('\"')):
+				{
+					MoveMemory(str, next_char, string_size(next_char));
+				} break;
+			}
+		}
+
+		++str;
+	}
+}
+
 // Skips the leading whitespace (spaces and tabs) in a string.
 // These are split into two functions (instead of using the TCHAR macro) so we can use it on an ANSI string even
 // in the Windows 2000 through 10 (Unicode) builds. For example, when reading ANSI strings from some file format.
@@ -913,32 +915,30 @@ bool convert_s64_to_string(s64 value, TCHAR* result_string)
 // Otherwise, it returns false and the resulting integer is unchanged.
 static bool convert_hexadecimal_char_to_integer(TCHAR hex_char, u8* result_integer)
 {
-	bool success = false;
+	bool success = true;
 
 	if(TEXT('0') <= hex_char && hex_char <= TEXT('9'))
 	{
 		*result_integer = (u8) (hex_char - TEXT('0'));
-		success = true;
 	}
 	else if(TEXT('a') <= hex_char && hex_char <= TEXT('f'))
 	{
 		*result_integer = (u8) (hex_char - TEXT('a') + 0x0A);
-		success = true;
 	}
 	else if(TEXT('A') <= hex_char && hex_char <= TEXT('F'))
 	{
 		*result_integer = (u8) (hex_char - TEXT('A') + 0x0A);
-		success = true;
 	}
 	else
 	{
+		success = false;
 		log_print(LOG_ERROR, "Convert Hexadecimal Character To Integer: The character '%c' (%hhd) cannot be converted into an integer.", hex_char, (char) hex_char);
 	}
 
 	return success;
 }
 
-// Converts the first two hexadecimal characters in a string to a byte. Any third and remaining characters are ignored.
+// Converts the first two hexadecimal characters in a string to a byte. Any remaining characters are ignored.
 //
 // @Parameters:
 // 1. byte_string - The string to convert into a byte.
@@ -978,7 +978,7 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 // On the Windows 98 and ME builds, this function first converts the string to UTF-16, and then to an ANSI one.
 // On the Windows 2000 through 10 builds, this function converts the string to a UTF-16 one.
 //
-// For code page 1200 (UTF-16 LE) exclusively, this function will simply call convert_utf_16_string_to_tchar() instead.
+// This function will fail for the code pages 1200, 1201, 12000, and 12001 (UTF-16 LE, UTF-16 BE, UTF-32 LE, and UTF-32 BE).
 //
 // @Parameters:
 // 1. final_arena - The Arena structure that will receive the final converted TCHAR string.
@@ -990,18 +990,7 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string)
 {
-	// A bit hacky since we're not even handling code pages 1201, 12000, or 12001 (UTF-16 BE, UTF-32 LE, or UTF-32 BE),
-	// but it works for our purposes.
-	if(code_page == CP_UTF16_LE)
-	{
-		return convert_utf_16_string_to_tchar(final_arena, (const wchar_t*) string);
-	}
-	else if(code_page == CP_UTF16_BE || code_page == CP_UTF32_LE || code_page == CP_UTF32_BE)
-	{
-		log_print(LOG_ERROR, "Convert Code Page String To Tchar: Attempted to convert a UTF-16 BE or UTF-32 string. The code page was %I32u.", code_page);
-		_ASSERT(false);
-		return NULL;
-	}
+	_ASSERT(code_page != CP_UTF16_LE && code_page != CP_UTF16_BE && code_page != CP_UTF32_LE && code_page != CP_UTF32_BE);
 
 	int num_chars_required_utf_16 = MultiByteToWideChar(code_page, 0, string, -1, NULL, 0);
 
@@ -1398,9 +1387,22 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 	return tchar_url;
 }
 
-// @TODO
+// Skips the scheme in a URL.
+//
+// For example:
+// 1. "http://www.example.com" 			-> "//www.example.com"
+// 2. "HTTP:http://www.example.com" 	-> "http://www.example.com"
+// 3. "example" 						-> ""
+
+// @Parameters:
+// 1. url - The url whose scheme will be skipped.
+//
+// @Returns: The first character in the URL after the scheme. If the URL is NULL, this function returns NULL.
+// If the URL doesn't contain a scheme, the end of the string is returned.
 TCHAR* skip_url_scheme(TCHAR* url)
 {
+	if(url == NULL) return NULL;
+
 	while(*url != TEXT('\0'))
 	{
 		if(*url == TEXT(':'))
@@ -1526,7 +1528,7 @@ void correct_url_path_characters(TCHAR* path)
 	}
 
 	// Replace a trailing period or space with an underscore.
-	// Otherwise, we'd run into problems when trying to delete these files/directories.
+	// Otherwise, we'd run into problems when trying to delete these files or directories.
 	if(last_char != NULL && (*last_char == TEXT('.') || *last_char == TEXT(' ')) )
 	{
 		*last_char = TEXT('_');
@@ -1539,7 +1541,7 @@ void correct_url_path_characters(TCHAR* path)
 // @Parameters:
 // 1. arena - The Arena structure where any intermediary strings are stored.
 // 2. url - The URL to convert into a path.
-// 3. path - The buffer which receives the converted path. This buffer must be able to hold MAX_PATH_CHARS characters.
+// 3. result_path - The buffer which receives the converted path. This buffer must be able to hold MAX_PATH_CHARS characters.
 //
 // @Returns: True if it succeeds. Otherwise, false.
 bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
@@ -1583,9 +1585,7 @@ bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 // 1. arena -  The Arena structure that receives the various headers' values as strings.
 // 2. original_headers - A narrow ASCII string that contains the HTTP headers. This string isn't necessarily null terminated.
 // 3. headers_size - The size of the headers string in bytes. This function does nothing if this value is zero.
-// The remaining parameters contain the address of the string in the Arena structure that contains the value of their respective
-// header value:
-// 4. result_headers - The structure that receives the parsed HTTP headers.
+// 4. result_headers - The structure that receives the parsed HTTP headers. The members of this structure are initialized to NULL.
 //
 // @Returns: Nothing.
 void parse_http_headers(Arena* arena, const char* original_headers, size_t headers_size, Http_Headers* result_headers)
@@ -1599,36 +1599,30 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 	char* end_of_string = (char*) advance_bytes(headers, headers_size);
 	*end_of_string = '\0';
 
-	// @TODO
-	while(*headers != '\0' && !string_starts_with(headers, "HTTP", true))
-	{
-		headers = skip_to_next_string(headers);
-	}
+	String_Array<char>* split_lines = split_string(arena, headers, "\r\n");
 
-	const char* line_delimiters = "\r\n";
-	char* next_headers_token = NULL;
-	char* line = strtok_s(headers, line_delimiters, &next_headers_token);
-	bool is_first_line = true;
-
-	while(line != NULL)
+	for(int i = 0; i < split_lines->num_strings; ++i)
 	{
+		char* line = split_lines->strings[i];
+
 		// Keep the first line intact since it's the server's response (e.g. "HTTP/1.1 200 OK"),
 		// and not a key-value pair.
-		if(is_first_line)
+		if(i == 0)
 		{
-			is_first_line = false;
 			result_headers->response = convert_ansi_string_to_tchar(arena, line);
 		}
 		// Handle some specific HTTP header response fields (e.g. "Content-Type: text/html",
-		// where "Content-Type" is the key, and "text/html" the value).
+		// where "Content-Type" is the key, and "text/html" is the value).
 		else
 		{
-			char* next_field_token = NULL;
-			char* key = strtok_s(line, ":", &next_field_token);
-			char* value = skip_leading_whitespace(next_field_token);
-			
-			if(key != NULL && value != NULL)
+			String_Array<char>* split_fields = split_string(arena, line, ":", 1);
+
+			if(split_fields->num_strings >= 2)
 			{
+				char* key = split_fields->strings[0];
+				char* value = split_fields->strings[1];
+				value = skip_leading_whitespace(value);
+
 				if(strings_are_equal(key, "server", true))
 				{
 					result_headers->server = convert_ansi_string_to_tchar(arena, value);
@@ -1649,6 +1643,10 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 				{
 					result_headers->content_length = convert_ansi_string_to_tchar(arena, value);
 				}
+				else if(strings_are_equal(key, "content-range", true))
+				{
+					result_headers->content_range = convert_ansi_string_to_tchar(arena, value);
+				}
 				else if(strings_are_equal(key, "content-encoding", true))
 				{
 					result_headers->content_encoding = convert_ansi_string_to_tchar(arena, value);
@@ -1660,8 +1658,6 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 			}
 
 		}
-
-		line = strtok_s(NULL, line_delimiters, &next_headers_token);
 	}
 }
 
@@ -1801,6 +1797,50 @@ int count_path_components(const TCHAR* path)
 	return count;
 }
 
+// @TODO
+TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
+{
+	TCHAR* result = NULL;
+
+	String_Array<TCHAR>* split_path = split_string(arena, path, TEXT("\\"));
+
+	if(component_index < 0)
+	{
+		// @TODO: Explain
+		component_index = -component_index;
+		component_index = split_path->num_strings - component_index;
+	}
+
+	if(0 <= component_index && component_index < split_path->num_strings)
+	{
+		result = push_string_to_arena(arena, split_path->strings[component_index]);
+	}
+
+	return result;
+}
+
+// @TODO
+/*bool path_append_if_missing(TCHAR* path, const TCHAR* path_to_add)
+{
+	bool success = true;
+	int num_components_to_add = count_path_components(path_to_add);
+	TCHAR* path_ending = skip_to_last_path_components(path, num_components_to_add);
+
+	if(!strings_are_equal(path_ending, path_to_add, true))
+	{
+		success = success && (PathAppend(path, path_to_add) != FALSE);
+	}
+
+	return success;
+}
+
+bool path_ends_with(const TCHAR* path, const TCHAR* suffix)
+{
+	int num_suffix_components = count_path_components(suffix);
+	TCHAR* suffix_in_path = skip_to_last_path_components(path, num_suffix_components);
+	return strings_are_equal(suffix_in_path, suffix, true);
+}*/
+
 // Retrieves the absolute version of a specified path. The path may be relative or absolute. This function has two overloads: 
 // - get_full_path_name(2 or 3), which copies the output to another buffer.
 // - get_full_path_name(1), which copies the output to the same buffer.
@@ -1849,8 +1889,7 @@ bool get_special_folder_path(int csidl, TCHAR* result_path)
 	#ifdef BUILD_9X
 		return SHGetSpecialFolderPathA(NULL, result_path, csidl, FALSE) != FALSE;
 	#else
-		// @Note:
-		// Third parameter (hToken): "Microsoft Windows 2000 and earlier: Always set this parameter to NULL."
+		// @Note: Third parameter (hToken): "Microsoft Windows 2000 and earlier: Always set this parameter to NULL."
 		return SUCCEEDED(SHGetFolderPathW(NULL, csidl, NULL, SHGFP_TYPE_CURRENT, result_path));
 	#endif
 }
@@ -1871,7 +1910,7 @@ void truncate_path_components(TCHAR* path)
 
 	if(MAXIMUM_COMPONENT_LENGTH == 0)
 	{
-		if(!GetVolumeInformationA(NULL, NULL, 0, NULL, &MAXIMUM_COMPONENT_LENGTH, NULL, NULL, 0))
+		if(GetVolumeInformationA(NULL, NULL, 0, NULL, &MAXIMUM_COMPONENT_LENGTH, NULL, NULL, 0) == FALSE)
 		{
 			MAXIMUM_COMPONENT_LENGTH = 255;
 			log_print(LOG_WARNING, "Truncate Path Components: Failed to get the maximum component length with the error code %lu. This value will be set to %lu.", GetLastError(), MAXIMUM_COMPONENT_LENGTH);	
@@ -1998,6 +2037,87 @@ void correct_reserved_path_components(TCHAR* path)
 	@NextSection
 */
 
+// @TODO
+//
+// @Docs: CreateFile - Win32 API Reference.
+// - "Windows 95/98/Me: You cannot open a directory, physical disk, or volume using CreateFile."
+// - "FILE_SHARE_DELETE - Windows 95/98/Me: This flag is not supported."
+// - "FILE_FLAG_BACKUP_SEMANTICS - Windows 95/98/Me: This flag is not supported."
+//
+// @TODO
+HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes)
+{
+	// @Docs: "Windows 95/98/Me: The hTemplateFile parameter must be NULL. If you supply a handle, the call fails and GetLastError returns
+	// ERROR_NOT_SUPPORTED."
+	// - CreateFile - Win32 API Reference.
+	return CreateFile(path, desired_access, shared_mode, NULL, creation_disposition, flags_and_attributes, NULL);
+}
+
+// @TODO
+HANDLE create_directory_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes)
+{
+	#ifdef BUILD_9X
+		_ASSERT(false);
+		SetLastError(ERROR_NOT_SUPPORTED);
+		return INVALID_HANDLE_VALUE;
+	#else
+		flags_and_attributes |= FILE_FLAG_BACKUP_SEMANTICS;
+		return create_handle(path, desired_access, shared_mode, creation_disposition, flags_and_attributes);
+	#endif
+}
+
+// Checks if two handles refer to the same file or directory.
+//
+// @Parameters:
+// 1. handle_1 - The first handle.
+// 2. handle_2 - The second handle.
+// 
+// @Returns: True if the handles refer to the same file or directory. Otherwise, false. This function also returns false if it's unable
+// to retrieve the handles' information, or if either of the handles is invalid.
+bool do_handles_refer_to_the_same_file_or_directory(HANDLE handle_1, HANDLE handle_2)
+{
+	if(handle_1 == INVALID_HANDLE_VALUE || handle_2 == INVALID_HANDLE_VALUE) return false;
+
+	BY_HANDLE_FILE_INFORMATION handle_1_info = {};
+	BY_HANDLE_FILE_INFORMATION handle_2_info = {};
+
+	// @Docs: "The identifier (low and high parts) and the volume serial number uniquely identify a file on a single computer.
+	// To determine whether two open handles represent the same file, combine the identifier and the volume serial number for
+	// each file and compare them." - Win32 API reference.
+	if(		GetFileInformationByHandle(handle_1, &handle_1_info) != 0
+		&& 	GetFileInformationByHandle(handle_2, &handle_2_info) != 0)
+	{
+		return 		handle_1_info.nFileIndexHigh == handle_2_info.nFileIndexHigh
+				&&	handle_1_info.nFileIndexLow == handle_2_info.nFileIndexLow
+				&&	handle_1_info.dwVolumeSerialNumber == handle_2_info.dwVolumeSerialNumber;
+	}
+
+	return false;
+}
+
+// @TODO
+// "C:\PROGRA~1\..\PROGRA~1\.\COMMON~1"
+// "C:\Program Files\Common Files"
+bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path_2)
+{
+	#ifdef BUILD_9X
+		char path_to_compare_1[MAX_PATH_CHARS] = "";
+		char path_to_compare_2[MAX_PATH_CHARS] = "";
+		
+		return 	does_directory_exist(path_1)
+				&& does_directory_exist(path_2)
+				&& (PathCanonicalizeA(path_to_compare_1, path_1) != FALSE)
+				&& (PathCanonicalizeA(path_to_compare_2, path_2) != FALSE)
+				&& (GetLongPathNameA(path_to_compare_1, path_to_compare_1, MAX_PATH_CHARS) != 0)
+				&& (GetLongPathNameA(path_to_compare_2, path_to_compare_2, MAX_PATH_CHARS) != 0)
+				&& strings_are_equal(path_to_compare_1, path_to_compare_2, true);
+	#else
+		HANDLE handle_1 = create_directory_handle(path_1, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
+		HANDLE handle_2 = create_directory_handle(path_2, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
+		return do_handles_refer_to_the_same_file_or_directory(handle_1, handle_2);
+	#endif
+}
+
 // Determines whether or not a file exists given its path.
 //
 // @Parameters:
@@ -2007,7 +2127,7 @@ void correct_reserved_path_components(TCHAR* path)
 // This function fails if the path is empty or if the file's attributes cannot be determined.
 bool does_file_exist(const TCHAR* file_path)
 {
-	if(string_is_empty(file_path)) return false;
+	if(file_path == NULL || string_is_empty(file_path)) return false;
 
 	DWORD attributes = GetFileAttributes(file_path);
 	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0);
@@ -2022,7 +2142,7 @@ bool does_file_exist(const TCHAR* file_path)
 // This function fails if the path is empty or if the directory's attributes cannot be determined.
 bool does_directory_exist(const TCHAR* directory_path)
 {
-	if(string_is_empty(directory_path)) return false;
+	if(directory_path == NULL || string_is_empty(directory_path)) return false;
 
 	DWORD attributes = GetFileAttributes(directory_path);
 	return (attributes != INVALID_FILE_ATTRIBUTES) && ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
@@ -2060,15 +2180,12 @@ bool get_file_size(HANDLE file_handle, u64* result_file_size)
 // @Returns: True if the function succeeds. Otherwise, it returns false and the file size is not modified.
 bool get_file_size(const TCHAR* file_path, u64* result_file_size)
 {
+	if(file_path == NULL) return false;
+
 	bool success = false;
 
-	HANDLE file_handle = CreateFile(file_path,
-									GENERIC_READ,
-									FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-									NULL,
-									OPEN_EXISTING,
-									0,
-									NULL);
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
+	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
@@ -2228,7 +2345,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 
 	if(should_traverse_subdirectories && should_continue_traversing)
 	{
-		PathCombine(search_path, directory_path, TEXT("*"));
+		PathCombine(search_path, directory_path, ALL_OBJECTS_SEARCH_QUERY);
 		search_handle = FindFirstFile(search_path, &find_data);
 		
 		found_object = search_handle != INVALID_HANDLE_VALUE;
@@ -2256,6 +2373,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 	}
 }
 
+// Helper structure to pass some values to and from count_objects_callback() and find_objects_callback().
 struct Find_Objects_Params
 {
 	int expected_num_objects;
@@ -2265,7 +2383,7 @@ struct Find_Objects_Params
 	Traversal_Result* result;
 };
 
-// @TODO
+// Called every time an object is found during traversal. Used to count the number of objects and preallocate the traversal result array.
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
@@ -2277,6 +2395,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(count_objects_callback)
 	return true;
 }
 
+// Called every time an object is found during traversal. Used to fill the members of each element in the traversal result array.
+//
+// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
+//
+// @Returns: True if the callback still expects to process more objects. Otherwise, false. 
 static TRAVERSE_DIRECTORY_CALLBACK(find_objects_callback)
 {
 	Find_Objects_Params* params = (Find_Objects_Params*) callback_info->user_data;
@@ -2299,7 +2422,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_objects_callback)
 	return true;
 }
 
-// @TODO
+// Traverses the objects (files and directories) inside a directory, and optionally its subdirectories, given a search query for the
+// filename. Returns an array of every object found instead of calling a callback function.
+//
+// @Parameters: This function takes most of the same parameters as traverse_directory_objects(), except the callback function and user
+// data. It also takes the following one:
+// 1. arena - The Arena structure that will receive the resulting array of objects found.
+//
+// @Returns: An array with information about each object.
 Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory_path, const TCHAR* search_query,
 											u32 traversal_flags, bool should_traverse_subdirectories)
 {
@@ -2513,12 +2643,12 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 //
 // @Parameters:
 // 1. file_path - The path where the file will be created.
+// 2. overwrite - If this value is true, the function will overwrite any existing file with the same name. If it's false,
+// the function will fail if the file already exists. In this case, GetLastError() returns ERROR_FILE_EXISTS.
 //
-// @Returns: True if the file was created successfully. Otherwise, false. This function fails if the file in the specified
-// path already exists. In this case, GetLastError() returns ERROR_FILE_EXISTS.
+// @Returns: True if the file was created successfully. Otherwise, false.
 bool create_empty_file(const TCHAR* file_path, bool overwrite)
 {
-	// @TODO
 	DWORD creation_disposition = (overwrite) ? (CREATE_ALWAYS) : (CREATE_NEW);
 	HANDLE file_handle = CreateFile(file_path, 0, 0, NULL, creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
 	DWORD error_code = GetLastError();
@@ -2529,42 +2659,6 @@ bool create_empty_file(const TCHAR* file_path, bool overwrite)
 	// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
 	// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
 	SetLastError(error_code);
-	return success;
-}
-
-// @TODO
-bool write_to_file(HANDLE file_handle, const void* data, u32 data_size)
-{
-	bool success = false;
-	DWORD num_bytes_written = 0;
-	
-	if(WriteFile(file_handle, data, data_size, &num_bytes_written, NULL) != FALSE)
-	{
-		success = (num_bytes_written == data_size);
-	}
-	else
-	{
-		log_print(LOG_ERROR, "Write To File: Failed to write %I32u bytes with the error code %lu.", data_size, GetLastError());
-	}
-
-	return success;
-}
-
-// @TODO
-bool write_to_file(const TCHAR* file_path, const void* data, u32 data_size)
-{
-	bool success = false;
-	HANDLE file_handle = CreateFile(file_path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-	if(file_handle != INVALID_HANDLE_VALUE)
-	{
-		success = write_to_file(file_handle, data, data_size);
-	}
-	else
-	{
-		log_print(LOG_ERROR, "Write To File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
-	}
-
 	return success;
 }
 
@@ -2663,7 +2757,7 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 // along with the memory mapping's address and file size, and is created with exclusive access.
 //
 // @Parameters: In addition to the previous ones, this function also takes the following parameters:
-// 1. file_path - The path to the file to map into memory.
+// 1. file_path - The path of the file to map into memory.
 // 2. result_file_handle - The address of a variable that receives the handle of the memory mapped file.
 // 
 // @Returns: See memory_map_entire_file(2). In addition to using the safe_unmap_view_of_file() function to unmap this memory,
@@ -2698,7 +2792,7 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 //
 // @Parameters:
 // 1. arena - The Arena structure that will receive the entire file's contents.
-// 2. file_path - The path to the file to read.
+// 2. file_path - The path of the file to read.
 // 3. result_file_size - The resulting file size in bytes.
 //
 // 4. optional_add_null_terminator - An optional parameter that specifies whether to add a null terminator to the end of the
@@ -2784,20 +2878,22 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 	return read_file;
 }
 
-// Reads a given number of bytes from the beginning of a file.
+// Reads a given number of bytes at a specific offset from a file.
 //
 // @Parameters:
-// 1. file_path - The path to the file to read.
+// 1. file_handle - The handle of the file to read.
 // 2. file_buffer - The buffer that will receive the read bytes.
-// 3. num_bytes_to_read - The size of the buffer.
-// 4. optional_allow_reading_fewer_bytes - An optional parameter that specifies if this function is allowed to read fewer bytes than
+// 3. num_bytes_to_read - The size of the buffer in bytes.
+// 4. file_offset - The offset in the file in bytes.
+//
+// 5. optional_allow_reading_fewer_bytes - An optional parameter that specifies if this function is allowed to read fewer bytes than
 // the ones requested. This value defaults to false.
-// 5. optional_result_num_bytes_read - An optional parameter that receives number of bytes read. This value defaults to NULL.
+// 6. optional_result_num_bytes_read - An optional parameter that receives number of bytes read. This value defaults to NULL.
 // 
 // @Returns: True if the file's contents were read successfully. Otherwise, false.
 // This function fails under the following conditions:
 // 1. The requested number of bytes is zero.
-// 2. The path to the file is empty or NULL.
+// 2. The file handle is invalid.
 // 3. It read fewer bytes than the specified value and optional_allow_reading_fewer_bytes is false or not specified.
 bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
 						bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
@@ -2819,12 +2915,18 @@ bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_re
 	return success;
 }
 
-// @TODO
+// Behaves like read_file_chunk() but takes the file's path instead of its handle.
+//
+// @Parameters: All parameters are the same except for the first one:
+// 1. file_path - The path of the file to read.
+// 
+// @Returns: See read_file_chunk().
 bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
 						bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
 	if(file_path == NULL || string_is_empty(file_path) || num_bytes_to_read == 0) return false;
 
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
 	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
 	
 	bool success = read_file_chunk(	file_handle, file_buffer, num_bytes_to_read, file_offset,
@@ -2834,11 +2936,81 @@ bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_t
 	return success;
 }
 
-// @TODO
+// Reads a given number of bytes from the beginning of a file. This function behaves like read_file_chunk() with an offset of zero.
+//
+// @Parameters: See read_file_chunk().
+// 
+// @Returns: See read_file_chunk().
 bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
 	return read_file_chunk(file_path, file_buffer, num_bytes_to_read, 0, optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
+}
+
+// Writes a given amount of bytes at a memory location to a file.
+//
+// @Parameters:
+// 1. file_handle - The handle of the file where the data will be written to.
+// 2. data - The memory location of the data to write.
+// 3. data_size - The size of the data in bytes.
+//
+// @Returns: True if the data was written successfully. Otherwise, false.
+bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* optional_result_num_bytes_written)
+{
+	bool success = false;
+	DWORD num_bytes_written = 0;
+	
+	if(WriteFile(file_handle, data, data_size, &num_bytes_written, NULL) != FALSE)
+	{
+		success = (num_bytes_written == data_size);
+		if(optional_result_num_bytes_written != NULL) *optional_result_num_bytes_written = num_bytes_written;
+	}
+	else
+	{
+		log_print(LOG_ERROR, "Write To File: Failed to write %I32u bytes with the error code %lu.", data_size, GetLastError());
+	}
+
+	return success;
+}
+
+// @TODO
+bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 total_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle)
+{
+	if(source_file_path == NULL || string_is_empty(source_file_path) || destination_file_handle == INVALID_HANDLE_VALUE) return false;
+
+	if(total_bytes_to_copy == 0) return true;
+
+	bool success = true;
+
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
+	HANDLE source_file_handle = CreateFile(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+
+	const u32 FILE_BUFFER_SIZE = 65536;
+	_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
+
+	void* file_buffer = push_arena(arena, FILE_BUFFER_SIZE, u8);
+	u32 total_bytes_read = 0;
+
+	do
+	{
+		u32 num_bytes_to_read = MIN(total_bytes_to_copy - total_bytes_read, FILE_BUFFER_SIZE);
+
+		u32 num_bytes_read = 0;
+		success = success 	&& read_file_chunk(source_file_handle, file_buffer, num_bytes_to_read, file_offset + total_bytes_read, false, &num_bytes_read)
+							&& write_to_file(destination_file_handle, file_buffer, num_bytes_read);
+
+		total_bytes_read += num_bytes_read;
+
+	} while(success && total_bytes_read < total_bytes_to_copy);
+
+	safe_close_handle(&source_file_handle);
+	return success;
+}
+
+// @TODO
+bool empty_file(HANDLE file_handle)
+{
+	return (SetFilePointer(file_handle, 0, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER) && (SetEndOfFile(file_handle) != FALSE);
 }
 
 // Generates the SHA-256 hash of a file.
@@ -2852,15 +3024,12 @@ bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_b
 // @Returns: The computed hash as a string. If any part of the file cannot be read, this function returns NULL.
 TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 {
+	if(file_path == NULL) return NULL;
+
 	TCHAR* result = NULL;
 
-	HANDLE file_handle = CreateFile(file_path,
-									GENERIC_READ,
-									FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-									NULL,
-									OPEN_EXISTING,
-									0,
-									NULL);
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
+	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
@@ -3196,8 +3365,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 	size_t num_bytes_to_write = 0;
 	StringCbLengthA(utf_8_log_buffer, sizeof(utf_8_log_buffer), &num_bytes_to_write);
 
-	DWORD num_bytes_written = 0;
-	WriteFile(GLOBAL_LOG_FILE_HANDLE, utf_8_log_buffer, (DWORD) num_bytes_to_write, &num_bytes_written, NULL);
+	write_to_file(GLOBAL_LOG_FILE_HANDLE, utf_8_log_buffer, (u32) num_bytes_to_write);
 }
 
 // Checks if a CSV string needs to be escaped, and returns the number of bytes that are necessary to store the escaped string
@@ -3389,12 +3557,11 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_typ
 	}
 
 	// @Note: Since sizeof(char) is always one, this means that no alignment took place in the previous push_arena() calls.
-	// Otherwise, we'd write some garbage (NUL bytes) into the file.
+	// Otherwise, we'd write some garbage (null bytes) into the file.
 	ptrdiff_t csv_header_size = pointer_difference(arena->available_memory, csv_header);
 	_ASSERT(csv_header_size > 0);
 
-	DWORD num_bytes_written = 0;
-	WriteFile(csv_file_handle, csv_header, (DWORD) csv_header_size, &num_bytes_written, NULL);
+	write_to_file(csv_file_handle, csv_header, (u32) csv_header_size);
 }
 
 // Writes a row of TCHAR values (ANSI or UTF-16 strings) to a CSV file using UTF-8 as the character encoding. These values will be
@@ -3512,12 +3679,11 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	}
 
 	// @Note: Since sizeof(char) is always one, this means that no alignment took place in the previous push_arena() calls.
-	// Otherwise, we'd write some garbage (NUL bytes) into the file.
+	// Otherwise, we'd write some garbage (null bytes) into the file.
 	ptrdiff_t csv_row_size = pointer_difference(arena->available_memory, csv_row);
 	_ASSERT(csv_row_size > 0);
 
-	DWORD num_bytes_written = 0;
-	WriteFile(csv_file_handle, csv_row, (DWORD) csv_row_size, &num_bytes_written, NULL);
+	write_to_file(csv_file_handle, csv_row, (u32) csv_row_size);
 }
 
 #ifndef BUILD_9X
@@ -3699,33 +3865,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 	}
 
-	// Checks if two file handles refer to the same file
-	//
-	// @Parameters:
-	// 1. file_handle_1 - The first file handle.
-	// 2. file_handle_2 - The second file handle.
-	// 
-	// @Returns: True if the file handles refer to the same file. Otherwise, false. This function also returns false if it's unable
-	// to retrieve the handles' information.
-	static bool do_handles_refer_to_the_same_file(HANDLE file_handle_1, HANDLE file_handle_2)
-	{
-		BY_HANDLE_FILE_INFORMATION handle_1_info = {};
-		BY_HANDLE_FILE_INFORMATION handle_2_info = {};
-
-		// @Docs: "The identifier (low and high parts) and the volume serial number uniquely identify a file on a single computer.
-		// To determine whether two open handles represent the same file, combine the identifier and the volume serial number for
-		// each file and compare them." - Win32 API reference.
-		if(		GetFileInformationByHandle(file_handle_1, &handle_1_info) != 0
-			&& 	GetFileInformationByHandle(file_handle_2, &handle_2_info) != 0)
-		{
-			return 		handle_1_info.nFileIndexHigh == handle_2_info.nFileIndexHigh
-					&&	handle_1_info.nFileIndexLow == handle_2_info.nFileIndexLow
-					&&	handle_1_info.dwVolumeSerialNumber == handle_2_info.dwVolumeSerialNumber;
-		}
-
-		return false;
-	}
-
 	// Finds and creates a duplicated handle for a file that was opened by another process given its path on disk.
 	//
 	// @Compatibility: Compiles in the Windows 2000 to 10 builds, though it was only made to work in Windows 7 to 10.
@@ -3744,9 +3883,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		*result_file_handle = INVALID_HANDLE_VALUE;
 
+		lock_arena(arena);
+
 		// List all opened handles. We may have to increase the size of the Arena structure to receive all the necessary handle
-		// information.
-		// Note that, even if it succeeds, this information may already be stale...
+		// information. Note that, even if it succeeds, this information may already be stale...
 		ULONG handle_info_size = (ULONG) megabytes_to_bytes(1);
 		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
 		ULONG actual_handle_info_size = 0;
@@ -3754,15 +3894,30 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
 		while(error_code == STATUS_INFO_LENGTH_MISMATCH)
 		{
-			// On the next attempt, the overall size of this information may have changed (new handles could have been created),
-			// so we'll go the extra mile and add the current size plus an extra bit.
-			ULONG extra_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(5);
-			push_arena(arena, extra_size, u8);
-			handle_info_size += extra_size;
+			// Clear the previous allocated memory so we can try again with the actual size required. Remember that we locked
+			// the arena before trying to query the information.
+			clear_arena(arena);
 
-			log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query system information. Expanding the buffer to %lu bytes.", handle_info_size);
-			error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+			// On the next attempt, the overall size of this information may have changed (new handles could have been created),
+			// so we'll go the extra mile and use the actual size plus an extra bit.
+			handle_info_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(128);
+			log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query system information. Attempting to expand the buffer to %lu bytes.", handle_info_size);
+
+			handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
+			if(handle_info != NULL)
+			{
+				// Try to query the handle information again.
+				error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+			}
+			else
+			{
+				// Ran out of memory to hold all the returned handle information.
+				log_print(LOG_ERROR, "Query File Handle: Ran out of memory while trying to query system information. The required buffer size was %lu bytes.", actual_handle_info_size);
+				break;
+			}
 		}
+
+		unlock_arena(arena);
 
 		if(!NT_SUCCESS(error_code))
 		{
@@ -3775,13 +3930,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		// getting a handle for a file that's being used by another process, we'll want to avoid asking for any
 		// access rights  that result in a sharing violation. Because of this, we'll ask for the right to read the
 		// file's attributes.
-		HANDLE read_attributes_file_handle = CreateFileW(	full_file_path,
-															FILE_READ_ATTRIBUTES,
-															FILE_SHARE_READ,
-															NULL,
-															OPEN_EXISTING,
-															0,
-															NULL);
+		HANDLE read_attributes_file_handle = CreateFileW(full_file_path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 		if(read_attributes_file_handle == INVALID_HANDLE_VALUE)
 		{
 			log_print(LOG_ERROR, "Query File Handle: Failed to get the read attributes files handle for '%ls' with error code %lu.", full_file_path, GetLastError());
@@ -3816,7 +3965,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 			{
 				// Check if the handle belongs to a file object and if it refers to the file we're looking for.
 				if(GetFileType(duplicated_file_handle) == FILE_TYPE_DISK
-					&& do_handles_refer_to_the_same_file(read_attributes_file_handle, duplicated_file_handle))
+					&& do_handles_refer_to_the_same_file_or_directory(read_attributes_file_handle, duplicated_file_handle))
 				{
 					success = true;
 					*result_file_handle = duplicated_file_handle;
@@ -3862,7 +4011,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		bool copy_success = false;
 
-		// @BeginLock
 		lock_arena(arena);
 
 		HANDLE source_file_handle = INVALID_HANDLE_VALUE;
@@ -3909,7 +4057,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 				
 				u64 total_bytes_read = 0;
 				u64 total_bytes_written = 0;
-				OVERLAPPED overlapped = {};
+				OVERLAPPED overlapped = {}; // The offset in the file.
 				
 				bool reached_end_of_file = false;
 				u32 num_read_retry_attempts = 0;
@@ -3975,11 +4123,15 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 					{
 						total_bytes_read += num_bytes_read;
 					
-						DWORD num_bytes_written = 0;
-						// @TODO: Write failure
-						if(WriteFile(destination_file_handle, file_buffer, num_bytes_read, &num_bytes_written, NULL))
+						u32 num_bytes_written = 0;
+						if(write_to_file(destination_file_handle, file_buffer, num_bytes_read, &num_bytes_written))
 						{
 							total_bytes_written += num_bytes_written;
+						}
+						else
+						{
+							log_print(LOG_ERROR, "Force Copy Open File: Failed to write %I32u bytes to the destination file in '%ls' with the error code %lu. Read %I64u and wrote %I64u bytes so far. This function will terminate prematurely.", num_bytes_read, copy_destination_path, GetLastError(), total_bytes_read, total_bytes_written);
+							break;
 						}
 
 						// Move to the next offset in the file.
@@ -4025,7 +4177,6 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		
 		safe_close_handle(&source_file_handle);
 		
-		// @EndLock
 		unlock_arena(arena);
 
 		return copy_success;
@@ -4033,7 +4184,17 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 #endif
 
-// @TODO
+// Attempts to copy a file that was opened by another process. This function first tries to copy the file normally using CopyFile().
+// If this fails with the error code ERROR_SHARING_VIOLATION and we're in the Windows 2000 to 10 builds, this function will the
+// attempt to forcibly copy it.
+//
+// This function is essentially a wrapper of force_copy_open_file() that works in all supported Windows builds. Much like that one,
+// this function should be used very sparingly.
+//
+// @Parameters: See force_copy_open_file().
+// 
+// @Returns: See force_copy_open_file(). Unlike this last one, this function will succeed and copy the file even if wasn't opened
+// by another process.
 bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path)
 {
 	bool copy_success = CopyFile(copy_source_path, copy_destination_path, FALSE) != FALSE;
@@ -4067,3 +4228,65 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 
 	return copy_success;
 }
+
+#ifdef DEBUG
+	
+	// @TODO
+	void debug_measure_time(bool is_start, const char* identifier)
+	{
+		struct Debug_Time_Measurement
+		{
+			const char* identifier;
+			LARGE_INTEGER start_counter;
+			LARGE_INTEGER stop_counter;
+		};
+
+		static LARGE_INTEGER frequency = {}; // In counts per second.
+
+		static const int MAX_TIME_MEASUREMENTS = 30;
+		static Debug_Time_Measurement time_measurements[MAX_TIME_MEASUREMENTS] = {};
+		
+		static int current_measurement = 0;
+
+		if(is_start)
+		{
+			Debug_Time_Measurement* measurement = &time_measurements[current_measurement];
+
+			_ASSERT(identifier != NULL);
+			measurement->identifier = identifier;
+
+			debug_log_print("Debug Measure Time #%d [%hs]: Started time measurement.", current_measurement, measurement->identifier);
+			
+			if(QueryPerformanceFrequency(&frequency) == FALSE)
+			{
+				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance frequency with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
+			}
+
+			if(QueryPerformanceCounter(&measurement->start_counter) == FALSE)
+			{
+				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the starting time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
+			}
+
+			++current_measurement;
+			_ASSERT(current_measurement < MAX_TIME_MEASUREMENTS);
+		}
+		else
+		{
+			--current_measurement;
+			_ASSERT(current_measurement >= 0);
+
+			Debug_Time_Measurement* measurement = &time_measurements[current_measurement];
+
+			if(QueryPerformanceCounter(&measurement->stop_counter) == FALSE)
+			{
+				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the stopping time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
+			}
+			
+			float64 elapsed_time = (measurement->stop_counter.QuadPart - measurement->start_counter.QuadPart) / (float64) frequency.QuadPart;
+			debug_log_print("Debug Measure Time #%d [%hs]: Stopped time measurement at %.9f seconds.", current_measurement, measurement->identifier, elapsed_time);
+
+			measurement->identifier = NULL;
+		}
+	}
+
+#endif

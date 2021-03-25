@@ -115,7 +115,7 @@ void export_default_or_specific_java_plugin_cache(Exporter* exporter)
 {
 	console_print("Exporting the Java Plugin's cache...");
 
-	initialize_cache_exporter(exporter, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_JAVA_PLUGIN, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		TCHAR* appdata_path = NULL;
 		if(exporter->is_exporting_from_default_locations)
@@ -150,7 +150,7 @@ void export_default_or_specific_java_plugin_cache(Exporter* exporter)
 			PathCombine(exporter->cache_path, user_home_path, TEXT("java_plugin_AppletStore"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
 			set_exporter_output_copy_subdirectory(exporter, TEXT("AppletStore"));
-			traverse_directory_objects(exporter->cache_path, TEXT("*"), TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
+			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
 		}
 
 		log_print(LOG_INFO, "Java Plugin: Finished exporting the cache.");
@@ -185,7 +185,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.full_file_path = full_file_path;
+	params.copy_file_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
@@ -195,10 +195,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 	return true;
 }
 
+// @FormatVersion: Java 1.4 to 10 (applets were removed in Java 11).
+// @ByteOrder: Big Endian.
+// @CharacterEncoding: Modified UTF-8.
+// @DateTimeFormat: Unix time in milliseconds (_time64 * 1000).
+
 // The type of cache location where the index files are kept.
 // In version 1, there were separate directories for files (images, sounds, and classes) and for archives (ZIPs and JARs).
 // In version 6, all types of files were allowed.
-enum Location_Type
+enum Java_Location_Type
 {
 	LOCATION_ALL = 0, // For any type of file. Used by version 6.
 
@@ -207,7 +212,7 @@ enum Location_Type
 };
 
 // The version of the supported index file formats.
-enum Cache_Version
+enum Java_Cache_Version
 {
 	// Version 1. @Java: Taken from "sun.plugin.cache.Cache" (JDK 1.4).
 	VERSION_1 = 16,
@@ -241,7 +246,7 @@ static const u32 VERSION_6_HEADER_SIZE = 128;
 // A structure that represents the contents of an index file for all supported versions.
 // Note that the following layout doesn't correspond byte for byte to the index file format.
 // The members of this structure are filled by read_index_file().
-struct Index
+struct Java_Index
 {
 	// >>>> Version 1 only.
 	s8 status;
@@ -355,7 +360,7 @@ static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, c
 {
 	TCHAR search_query[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(search_query, MAX_PATH_CHARS, filename_prefix);
-	StringCchCat(search_query, MAX_PATH_CHARS, TEXT("*"));
+	StringCchCat(search_query, MAX_PATH_CHARS, ALL_OBJECTS_SEARCH_QUERY);
 
 	Find_Filename_Result result = {};
 	result.result_buffer = result_filename;
@@ -369,7 +374,7 @@ static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, c
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
 // @Returns: True.
-static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type);
+static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* index, Java_Location_Type location_type);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 {
 	Exporter* exporter = (Exporter*) callback_info->user_data;
@@ -386,7 +391,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	PathCombine(previous_directory_path, callback_info->directory_path, TEXT(".."));
 	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
 
-	Location_Type location_type = LOCATION_ALL;
+	Java_Location_Type location_type = LOCATION_ALL;
 	if(strings_are_equal(directory_name, TEXT("file"), true) || strings_are_equal(previous_directory_name, TEXT("file"), true))
 	{
 		location_type = LOCATION_FILES;
@@ -397,7 +402,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 
 	TCHAR* index_filename = callback_info->object_name;
-	Index index = {};
+	Java_Index index = {};
 	read_index_file(arena, callback_info->object_path, &index, location_type);
 
 	// @Docs: According to Java's URL class description: "The URL class does not itself encode or decode
@@ -535,7 +540,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 	
 	Exporter_Params params = {};
-	params.full_file_path = full_file_path;
+	params.copy_file_path = full_file_path;
 	params.url = url;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
@@ -648,31 +653,29 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 	#endif
 }
 
-// Reads any of the supported index file formats and fills an Index structure with any relevant information.
+// Reads any of the supported index file formats and fills an Java_Index structure with any relevant information.
 //
 // @Parameters:
 // 1. arena - The Arena structure where any read string values are stored.
 // 2. index_path - The path to the index file to read.
-// 3. index - The Index structure that receives the index file's contents. This structure must be cleared to zero before calling this
+// 3. index - The Java_Index structure that receives the index file's contents. This structure must be cleared to zero before calling this
 // function.
 // 4. location_type - The type of location where the index file is stored on disk. For version 1, this must be LOCATION_ARCHIVES or
 // LOCATION_FILES. For version 6, this may be any location type (LOCATION_ARCHIVES, LOCATION_FILES, or LOCATION_ALL).
 // 
 // @Returns: Nothing.
-static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index, Location_Type location_type)
+static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* index, Java_Location_Type location_type)
 {
 	u64 index_file_size = 0;
 	void* index_file = read_entire_file(arena, index_path, &index_file_size);
 	
 	if(index_file == NULL)
 	{
-		log_print(LOG_ERROR, "Read Index File: Failed to open the index file '%s'. No files will be exported using this index.", index_path);
+		log_print(LOG_ERROR, "Read Java Index File: Failed to open the index file '%s'. No files will be exported using this index.", index_path);
 		return;
 	}
 
 	/*
-		@ByteOrder: Big Endian.
-
 		Primitive Types in Java:
 		- byte 	= 1 byte (signed) 		= s8
 		- short = 2 bytes (signed) 		= s16
@@ -821,7 +824,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 		u32 expected_total_bytes_read = VERSION_6_HEADER_SIZE + index->section_2_length;\
 		if(total_bytes_read < expected_total_bytes_read)\
 		{\
-			log_print(LOG_WARNING, "Read Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but found only %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
+			log_print(LOG_WARNING, "Read Java Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but found only %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
 		}\
 	} while(false, false)
 
@@ -967,10 +970,16 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Index* index,
 
 			default:
 			{
-				log_print(LOG_ERROR, "Read Index File: Unsupported cache version %I32d in the index file '%s'.", index->cache_version, index_path);
+				log_print(LOG_ERROR, "Read Java Index File: Unsupported cache version %I32d in the index file '%s'.", index->cache_version, index_path);
 			} break;
 		}
 	}
+
+	#undef SKIP_BYTES
+	#undef READ_INTEGER
+	#undef READ_STRING
+	#undef READ_HEADERS
+	#undef READ_SECTION_2
 }
 
 /*

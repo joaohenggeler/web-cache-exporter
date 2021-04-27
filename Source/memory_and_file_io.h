@@ -49,7 +49,6 @@ bool destroy_arena(Arena* arena);
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-#define WHILE_TRUE() for(;;)
 #define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
 #define IS_POWER_OF_TWO(value) ( ((value) > 0) && (( (value) & ((value) - 1) ) == 0) )
@@ -239,8 +238,6 @@ TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false,
 TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components);
 int count_path_components(const TCHAR* path);
 TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index);
-//bool path_append_if_missing(TCHAR* path, const TCHAR* path_to_add);
-//bool path_ends_with(const TCHAR* path, const TCHAR* suffix);
 bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional_num_result_path_chars = MAX_PATH_CHARS);
 bool get_full_path_name(TCHAR* result_full_path);
 bool get_special_folder_path(int csidl, TCHAR* result_path);
@@ -256,7 +253,13 @@ void correct_reserved_path_components(TCHAR* path);
 */
 
 HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
-HANDLE create_directory_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
+
+#ifndef BUILD_9X
+	HANDLE create_directory_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
+#else
+	#define create_directory_handle(...) _STATIC_ASSERT(false)
+#endif
+
 bool do_handles_refer_to_the_same_file_or_directory(HANDLE file_handle_1, HANDLE file_handle_2);
 bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path_2);
 bool does_file_exist(const TCHAR* file_path);
@@ -334,7 +337,8 @@ bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_b
 
 bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* optional_result_num_bytes_written = NULL);
 
-bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 num_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle);
+bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 num_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle);
+bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_bytes_to_copy, u64 file_offset, const TCHAR* destination_file_path, bool overwrite);
 
 bool empty_file(HANDLE file_handle);
 
@@ -464,6 +468,7 @@ enum Csv_Type
 
 	CSV_FILENAME,
 	CSV_URL,
+	CSV_REQUEST_ORIGIN,
 	CSV_FILE_EXTENSION,
 	CSV_FILE_SIZE,
 
@@ -499,9 +504,6 @@ enum Csv_Type
 	CSV_CUSTOM_URL_GROUP,
 	CSV_SHA_256,
 
-	// For the Mozilla cache format:
-	CSV_REQUEST_ORIGIN,
-	
 	// For the Shockwave Plugin:
 	CSV_LIBRARY_SHA_256,
 
@@ -523,7 +525,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 {
 	"None",
 	
-	"Filename", "URL", "File Extension", "File Size",
+	"Filename", "URL", "Request Origin", "File Extension", "File Size",
 	"Last Modified Time", "Creation Time", "Last Write Time", "Last Access Time", "Expiry Time",
 	"Access Count",
 	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Range", "Content Encoding",
@@ -533,7 +535,6 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Location In Output", "Copy Error",
 	"Custom File Group", "Custom URL Group", "SHA-256",
 	
-	"Request Origin",
 	"Library SHA-256",
 	"Director File Type", "Xtra Description", "Xtra Version",
 	"Codebase IP", "Version"
@@ -576,7 +577,7 @@ do\
 // Define custom error codes that are passed to SetLastError(). This is only done for functions that mix Windows errors (e.g. copying a file) with their
 // own error conditions (e.g. failed to resolve a naming collision). See: copy_file_using_url_directory_structure().
 // @Docs: "Bit 29 is reserved for application-defined error codes; no system error code has this bit set." - SetLastError - Win32 API Reference.
-#define CUSTOM_WIN32_ERROR_CODE(n) ( (1 << 28) | n )
+#define CUSTOM_WIN32_ERROR_CODE(n) ( (1 << 28) | (n) )
 enum Custom_Error_Code
 {
 	// For copy_file_using_url_directory_structure().
@@ -584,11 +585,10 @@ enum Custom_Error_Code
 	CUSTOM_ERROR_FAILED_TO_BUILD_VALID_DESTINATION_PATH 	= CUSTOM_WIN32_ERROR_CODE(2),
 	CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS 				= CUSTOM_WIN32_ERROR_CODE(3),
 	CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION 				= CUSTOM_WIN32_ERROR_CODE(4),
+	CUSTOM_ERROR_FAILED_TO_COPY_FILE_CHUNKS 				= CUSTOM_WIN32_ERROR_CODE(5),
+	CUSTOM_ERROR_FAILED_TO_GET_FILE_SIZE 					= CUSTOM_WIN32_ERROR_CODE(6),
 };
 
-// These functions are only meant to be used in the Windows 2000 through 10 builds. In the Windows 98 and ME builds, attempting
-// to call these functions will result in a compile time error.
-// If we want to use them, we have to explicitly wrap the code with #ifndef BUILD_9X [...] #endif.
 #ifndef BUILD_9X
 	void load_ntdll_functions(void);
 	void free_ntdll_functions(void);
@@ -605,19 +605,20 @@ enum Custom_Error_Code
 
 bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path);
 
-// @TODO
+// For measuring times in the debug builds. Only DEBUG_BEGIN_MEASURE_TIME() and DEBUG_END_MEASURE_TIME() should be used directly.
 #ifdef DEBUG
 	void debug_measure_time(bool is_start, const char* identifier);
 	#define DEBUG_BEGIN_MEASURE_TIME(identifier) debug_measure_time(true, identifier)
 	#define DEBUG_END_MEASURE_TIME() debug_measure_time(false, NULL)
 #else
+	#define debug_measure_time(...) _STATIC_ASSERT(false)
 	#define DEBUG_BEGIN_MEASURE_TIME(...)
 	#define DEBUG_END_MEASURE_TIME(...)
 #endif
 
 // Any structs or functions that use templates:
 
-// @TODO
+// Represents an array of ANSI or UTF-16 strings.
 template<typename Char_Type>
 struct String_Array
 {
@@ -625,7 +626,18 @@ struct String_Array
 	Char_Type* strings[ANYSIZE_ARRAY];
 };
 
-// @TODO
+// Splits a string into an array of tokens using one or more separators. This function will only consider non-empty tokens.
+//
+// For example, the string ",abc,def,,,ghi," with the separator "," is split into an array of three elements: "abc", "def", "ghi".
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the array of tokens.
+// 2. str - The string to split.
+// 3. delimiters - A string containing one or more characters to be used as separators.
+// 4. optional_max_splits - An optional parameter that specifies the maximum number of splits to perform. This value defaults to -1, which specifies
+// an unlimited number of splits. A value of zero will result in an array with one element (the entire string) or no elements (if the string is empty).
+//
+// @Returns: The array of split tokens. If the string is empty, this array will have zero elements.
 template<typename Char_Type>
 String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_Type* delimiters, int optional_max_splits = -1)
 {
@@ -696,10 +708,16 @@ String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_T
 		last_value_begin = NULL;
 	}
 
+	_ASSERT(optional_max_splits == -1 || result->num_strings <= optional_max_splits + 1);
+
 	return result;
 }
 
-// @TODO
+// Behaves like split_string() but takes a constant string instead.
+//
+// @Parameters: All parameters are the same except 'str' is constant. A copy will be made in the Arena structure.
+// 
+// @Returns: See split_string().
 template<typename Char_Type>
 String_Array<Char_Type>* split_string(Arena* arena, const Char_Type* str, const Char_Type* delimiters, int optional_max_splits = -1)
 {

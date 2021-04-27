@@ -80,7 +80,6 @@
 	Windows 2000 or later, you can use any Unicode characters.
 */
 
-static const TCHAR* GROUP_FILES_DIRECTORY_NAME = TEXT("Groups");
 static const TCHAR* GROUP_FILES_SEARCH_QUERY = TEXT("*.group");
 
 // Various keywords and delimiters for the group file syntax.
@@ -99,21 +98,23 @@ static const char* BEGIN_DOMAINS = "BEGIN_DOMAINS";
 static const TCHAR* ANY_TOP_OR_SECOND_LEVEL_DOMAIN = TEXT(".*");
 static const TCHAR* URL_PATH_DELIMITERS = TEXT("/");
 
-// The maximum size of the file signature buffer in bytes.
-static const u32 MAX_FILE_SIGNATURE_BUFFER_SIZE = (u32) kilobytes_to_bytes(1);
+static const int MAX_FILE_SIGNATURE_BUFFER_SIZE = (int) kilobytes_to_bytes(1);
 
-// Determines if a given group file should be loaded by searching an array of filenames. This function is only called when
-// the '-load-group-files' is passed to the application.
+// Determines if a given group file should be loaded given its filename and the exporter's command line arguments.
 //
 // @Parameters:
-// 1. filenames_to_load - The array of filenames to check. These are passed as command line options to the application.
-// 2. num_filenames_to_load - The number of elements in this array.
-// 3. filename - The current name of the group file on disk that should be checked. This filename may contain a .group extension,
-// though this will be ignored when comparing it with the other array elements.
+// 1. exporter - The Exporter structure which contains information on how the group files should be loaded.
+// 2. filename - The current name of the group file on disk that should be checked. This filename may contain a .group extension,
+// though this will be ignored when performing comparisons.
 //
-// @Returns: True if this filename is allowed to be loaded. Otherwise, false.
-static bool should_load_group_with_filename(TCHAR** filenames_to_load, size_t num_filenames_to_load, TCHAR* filename)
+// @Returns: True if this filename is allowed to be loaded. Otherwise, false. This function always succeeds if the
+// '-load-group-files' command line option is not used.
+static bool should_load_group_with_filename(Exporter* exporter, TCHAR* filename)
 {
+	if(!exporter->should_load_specific_groups_files) return true;
+
+	String_Array<TCHAR>* group_files_to_load = exporter->group_files_to_load;
+
 	// Temporarily remove the .group file extension.
 	TCHAR* file_extension = skip_to_file_extension(filename, true);
 	TCHAR previous_char = *file_extension;
@@ -121,9 +122,10 @@ static bool should_load_group_with_filename(TCHAR** filenames_to_load, size_t nu
 		
 	bool success = false;
 
-	for(size_t i = 0; i < num_filenames_to_load; ++i)
+	for(int i = 0; i < group_files_to_load->num_strings; ++i)
 	{
-		if(strings_are_equal(filename, filenames_to_load[i]))
+		TCHAR* filename_to_load = group_files_to_load->strings[i];
+		if(strings_are_equal(filename, filename_to_load, true))
 		{
 			success = true;
 			break;
@@ -135,92 +137,6 @@ static bool should_load_group_with_filename(TCHAR** filenames_to_load, size_t nu
 	return success;
 }
 
-// Helper structure to pass some values to and from find_total_group_size_callback().
-struct Total_Group_File_Result
-{
-	Exporter* exporter;
-	size_t total_group_size;
-	u32 total_num_groups;
-};
-
-// Called every time a group file is found. Used to find the number of groups and the amount of memory required to store them.
-//
-// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
-//
-// @Returns: True.
-static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
-{
-	Total_Group_File_Result* result = (Total_Group_File_Result*) callback_info->user_data;
-	Exporter* exporter = result->exporter;
-	TCHAR* filename = callback_info->object_name;
-
-	if(exporter->should_load_specific_groups_files
-		&& !should_load_group_with_filename(exporter->group_filenames_to_load, exporter->num_group_filenames_to_load, filename))
-	{
-		return true;
-	}
-
-	TCHAR* group_file_path = callback_info->object_path;
-
-	HANDLE group_file_handle = INVALID_HANDLE_VALUE;
-	u64 group_file_size = 0;
-	char* group_file = (char*) memory_map_entire_file(group_file_path, &group_file_handle, &group_file_size, false);
-	
-	if(group_file != NULL)
-	{
-		// Replace the last character (which should be a newline according to the group file guidelines) with a null
-		// terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't the most common
-		// way to read a text file line by line, but it works in our case.
-		char* end_of_file = (char*) advance_bytes(group_file, group_file_size - 1);
-		*end_of_file = '\0';
-
-		char* remaining_lines = NULL;
-		char* line = strtok_s(group_file, LINE_DELIMITERS, &remaining_lines);
-
-		while(line != NULL)
-		{
-			line = skip_leading_whitespace(line);
-
-			if(*line == COMMENT || string_is_empty(line))
-			{
-				// Skip comments and empty lines.
-			}
-			else
-			{
-				// Keep track of the total group file string data. We're essentially getting a single byte character
-				// string's length plus the null terminator here. At the end, we'll multiply this value by sizeof(TCHAR).
-				// This should guarantee enough memory (in excess) for both types of build (char vs wchar_t).
-				result->total_group_size += string_size(line);
-
-				char* group_name = NULL;
-				char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
-				if(group_type != NULL)
-				{
-					// Keep track of the total amount of groups across multiple files.
-					group_name = skip_leading_whitespace(group_name);
-
-					if( (strings_are_equal(group_type, BEGIN_FILE_GROUP) || strings_are_equal(group_type, BEGIN_URL_GROUP))
-						&& !string_is_empty(group_name) )
-					{
-						++(result->total_num_groups);
-					}
-				}
-				else
-				{
-					_ASSERT(false);
-				}
-			}
-
-			line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
-		}
-	}
-
-	safe_unmap_view_of_file((void**) &group_file);
-	safe_close_handle(&group_file_handle);
-
-	return true;
-}
-
 // Finds each group file on disk and retrieves the number of groups and how many bytes are (roughly) required to store them.
 //
 // @Parameters:
@@ -228,57 +144,83 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_total_group_size_callback)
 // 2. result_num_groups - The number of groups found.
 //
 // @Returns: The total size in bytes required to store the groups found.
-size_t get_total_group_files_size(Exporter* exporter, u32* result_num_groups)
+size_t get_total_group_files_size(Exporter* exporter, int* result_num_groups)
 {
-	TCHAR group_files_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(group_files_directory_path, exporter->executable_path, GROUP_FILES_DIRECTORY_NAME);
+	Arena* temporary_arena = &(exporter->temporary_arena);
+	lock_arena(temporary_arena);
 
-	Total_Group_File_Result result = {};
-	result.exporter = exporter;
-	traverse_directory_objects(	group_files_directory_path, GROUP_FILES_SEARCH_QUERY, TRAVERSE_FILES, false,
-								find_total_group_size_callback, &result);
-
-	*result_num_groups = result.total_num_groups;
+	Traversal_Result* group_files = find_objects_in_directory(temporary_arena, exporter->group_files_path, GROUP_FILES_SEARCH_QUERY, TRAVERSE_FILES, false);
 	
-	int remaining_num_groups = result.total_num_groups - 1;
-	// Total Size = Size for the Group array + Size for the string data + Size for the file signature buffer.
-	return 	sizeof(Custom_Groups) + MAX(remaining_num_groups, 0) * sizeof(Group)
-			+ result.total_group_size * sizeof(TCHAR)
-			+ MAX_FILE_SIGNATURE_BUFFER_SIZE;
-}
+	size_t total_group_size = 0;
+	int num_groups = 0;
 
-// Counts the number of tokens in a string that are delimited by spaces. This is used to find out how many tokens will be created
-// after iterating over this string with strtok_s(). Note that multiple spaces in a row are skipped (e.g. "aa bb     c" counts three
-// tokens). 
-//
-// @Parameters:
-// 1. str - The string.
-//
-// @Returns: The number of tokens delimited by spaces.
-static u32 count_tokens_delimited_by_spaces(TCHAR* str)
-{
-	u32 count = 0;
-	bool was_previously_whitespace = true;
-
-	while(*str != TEXT('\0'))
+	for(int i = 0; i < group_files->num_objects; ++i)
 	{
-		if(*str == TEXT(' '))
+		Traversal_Object_Info file_info = group_files->object_info[i];
+		TCHAR* filename = file_info.object_name;
+		TCHAR* file_path = file_info.object_path;
+
+		if(!should_load_group_with_filename(exporter, filename))
 		{
-			was_previously_whitespace = true;
-		}
-		else
-		{
-			if(was_previously_whitespace)
-			{
-				++count;
-			}
-			was_previously_whitespace = false;
+			continue;
 		}
 
-		++str;
+		lock_arena(temporary_arena);
+
+		u64 file_size = 0;
+		char* file = (char*) read_entire_file(temporary_arena, file_path, &file_size, true);
+	
+		if(file != NULL)
+		{
+			String_Array<char>* split_lines = split_string(temporary_arena, file, LINE_DELIMITERS);
+		
+			for(int j = 0; j < split_lines->num_strings; ++j)
+			{
+				char* line = split_lines->strings[j];
+				line = skip_leading_whitespace(line);
+
+				if(*line == COMMENT || string_is_empty(line))
+				{
+					// Skip comments and empty lines.
+				}
+				else
+				{
+					// Keep track of the total group file string data. We're essentially getting a single byte character
+					// string's length plus the null terminator here. At the end, we'll multiply this value by sizeof(TCHAR).
+					// This should guarantee enough memory (in excess) for both types of build (char vs wchar_t).
+					total_group_size += string_size(line);
+
+					String_Array<char>* split_tokens = split_string(temporary_arena, line, TOKEN_DELIMITERS, 1);
+					
+					if(split_tokens->num_strings == 2)
+					{
+						char* group_type = split_tokens->strings[0];
+						char* group_name = split_tokens->strings[1];
+						group_name = skip_leading_whitespace(group_name);
+
+						if( (strings_are_equal(group_type, BEGIN_FILE_GROUP) || strings_are_equal(group_type, BEGIN_URL_GROUP))
+							&& !string_is_empty(group_name) )
+						{
+							++num_groups;
+						}
+					}
+				}
+			}
+		}
+
+		clear_arena(temporary_arena);
+		unlock_arena(temporary_arena);
 	}
 
-	return count;
+	clear_arena(temporary_arena);
+	unlock_arena(temporary_arena);
+
+	*result_num_groups = num_groups;
+	
+	// Total Size = Size for the Group array + Size for the string data + Size for the file signature buffer.
+	return 	sizeof(Custom_Groups) + MAX(num_groups - 1, 0) * sizeof(Group)
+			+ total_group_size * sizeof(TCHAR)
+			+ MAX_FILE_SIGNATURE_BUFFER_SIZE;
 }
 
 // Copies the current string tokens from a line of delimited values, and converts it from UTF-8 to a TCHAR (ANSI or UTF-16 string
@@ -298,18 +240,19 @@ static u32 count_tokens_delimited_by_spaces(TCHAR* str)
 // @Returns: Nothing.
 static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* temporary_arena,
 											char* list_line, const char* token_delimiters,
-											TCHAR** token_strings, u32* token_counter)
+											TCHAR** token_strings, int* token_counter)
 {
 	if(*token_strings == NULL) *token_strings = push_arena(permanent_arena, 0, TCHAR);
 
-	char* remaining_tokens = NULL;
-	char* token = strtok_s(list_line, token_delimiters, &remaining_tokens);
-	while(token != NULL)
+	String_Array<char>* split_tokens = split_string(temporary_arena, list_line, token_delimiters);
+
+	for(int i = 0; i < split_tokens->num_strings; ++i)
 	{
-		++(*token_counter);
+		char* token = split_tokens->strings[i];
 		convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, token);
-		token = strtok_s(NULL, token_delimiters, &remaining_tokens);
 	}
+
+	*token_counter += split_tokens->num_strings;
 }
 
 // Loads a specific group file on disk, while also keeping track of the total number of processed groups and the maximum file signature
@@ -328,30 +271,25 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 //
 // @Returns: Nothing.
 void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* secondary_temporary_arena,
-					 const TCHAR* file_path, Group* group_array, u32* num_processed_groups, u32* max_num_file_signature_bytes)
+					 const TCHAR* file_path, Group* group_array, int* num_processed_groups, int* max_num_file_signature_bytes)
 {
+	lock_arena(temporary_arena);
+
 	TCHAR* group_filename = PathFindFileName(file_path);
 	log_print(LOG_INFO, "Load Group File: Loading the group file '%s'.", group_filename);
 
-	HANDLE group_file_handle = INVALID_HANDLE_VALUE;
-	u64 group_file_size = 0;
-	char* group_file = (char*) memory_map_entire_file(file_path, &group_file_handle, &group_file_size, false);
+	u64 file_size = 0;
+	char* file = (char*) read_entire_file(temporary_arena, file_path, &file_size, true);
 	
-	if(group_file == NULL)
+	if(file == NULL)
 	{
 		log_print(LOG_ERROR, "Load Group File: Failed to load the group file '%s'.", group_filename);
-		safe_close_handle(&group_file_handle);
+		clear_arena(temporary_arena);
+		unlock_arena(temporary_arena);
 		return;
 	}
 
-	// Replace the last character (which should be a newline according to the group file guidelines) with a null
-	// terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't the most common
-	// way to read a text file line by line, but it works in our case.
-	char* end_of_file = (char*) advance_bytes(group_file, group_file_size - 1);
-	*end_of_file = '\0';
-
-	char* remaining_lines = NULL;
-	char* line = strtok_s(group_file, LINE_DELIMITERS, &remaining_lines);
+	String_Array<char>* split_lines = split_string(temporary_arena, file, LINE_DELIMITERS);
 
 	// Keep track of which group we're loading data to.
 	Group_Type current_group_type = GROUP_NONE;
@@ -362,20 +300,21 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 	// These counters and addresses are set back to zero and NULL after processing their respective list type.
 	List_Type current_list_type = LIST_NONE;
 	
-	u32 num_file_signatures = 0;
+	int num_file_signatures = 0;
 	TCHAR* file_signature_strings = NULL;
 
-	u32 num_mime_types = 0;
+	int num_mime_types = 0;
 	TCHAR* mime_type_strings = NULL;
 	
-	u32 num_file_extensions = 0;
+	int num_file_extensions = 0;
 	TCHAR* file_extension_strings = NULL;
 	
-	u32 num_domains = 0;
+	int num_domains = 0;
 	TCHAR* domain_strings = NULL;
 
-	while(line != NULL)
+	for(int i = 0; i < split_lines->num_strings; ++i)
 	{
+		char* line = split_lines->strings[i];
 		line = skip_leading_whitespace(line);
 
 		if(*line == COMMENT || string_is_empty(line))
@@ -398,16 +337,19 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 					// Create a file signature array.
 					File_Signature** file_signatures = push_arena(permanent_arena, num_file_signatures * sizeof(File_Signature*), File_Signature*);
 					
-					for(u32 i = 0; i < num_file_signatures; ++i)
+					for(int j = 0; j < num_file_signatures; ++j)
 					{
 						// Create each file signature by converting each space delimited string to a byte or wildcard.
 						++(group->file_info.num_file_signatures);
 						File_Signature* signature = push_arena(permanent_arena, sizeof(File_Signature), File_Signature);
 
-						u32 num_bytes = count_tokens_delimited_by_spaces(file_signature_strings);
+						TCHAR* next_file_signature_string = skip_to_next_string(file_signature_strings);
+						String_Array<TCHAR>* split_bytes = split_string(temporary_arena, file_signature_strings, BYTE_DELIMITERS);
+						int num_bytes = split_bytes->num_strings;
+
 						if(num_bytes > MAX_FILE_SIGNATURE_BUFFER_SIZE)
 						{
-							log_print(LOG_WARNING, "Load Group File: The file signature number %I32u in the group '%s' has %I32u bytes when the maximum is %I32u. These extra bytes will be ignored.", i+1, group->name, num_bytes, MAX_FILE_SIGNATURE_BUFFER_SIZE);
+							log_print(LOG_WARNING, "Load Group File: The file signature number %d in the group '%s' has %d bytes when the maximum is %d. These extra bytes will be ignored.", j+1, group->name, num_bytes, MAX_FILE_SIGNATURE_BUFFER_SIZE);
 							num_bytes = MAX_FILE_SIGNATURE_BUFFER_SIZE;
 						}
 
@@ -420,41 +362,33 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 
 						u8* bytes = push_arena(permanent_arena, num_bytes * sizeof(u8), u8);
 						bool* is_wildcard = push_arena(permanent_arena, num_bytes * sizeof(bool), bool);
-
-						TCHAR* next_file_signature_string = skip_to_next_string(file_signature_strings);
-
-						TCHAR* remaining_bytes = NULL;
-						TCHAR* byte_string = _tcstok_s(file_signature_strings, BYTE_DELIMITERS, &remaining_bytes);
-						u32 byte_idx = 0;
-						while(byte_string != NULL)
+						
+						for(int k = 0; k < num_bytes; ++k)
 						{
-							_ASSERT(byte_idx < num_bytes);
+							TCHAR* byte_string = split_bytes->strings[k];
 
 							if(strings_are_equal(byte_string, TEXT("__")))
 							{
-								is_wildcard[byte_idx] = true;
+								is_wildcard[k] = true;
 							}
-							else if(convert_hexadecimal_string_to_byte(byte_string, &bytes[byte_idx]))
+							else if(convert_hexadecimal_string_to_byte(byte_string, &bytes[k]))
 							{
-								is_wildcard[byte_idx] = false;
+								is_wildcard[k] = false;
 							}
 							else
 							{
-								log_print(LOG_ERROR, "Load Group File: The string '%s' cannot be converted into a byte. The file signature number %I32u in the group '%s' will be skipped.", byte_string, i+1, group->name);
+								log_print(LOG_ERROR, "Load Group File: The string '%s' cannot be converted into a byte. The file signature number %d in the group '%s' will be skipped.", byte_string, j+1, group->name);
 								num_bytes = 0;
 								bytes = NULL;
 								is_wildcard = NULL;
 								break;
 							}
-
-							byte_string = _tcstok_s(NULL, BYTE_DELIMITERS, &remaining_bytes);
-							++byte_idx;
 						}
 
 						signature->num_bytes = num_bytes;
 						signature->bytes = bytes;
 						signature->is_wildcard = is_wildcard;
-						file_signatures[i] = signature;
+						file_signatures[j] = signature;
 
 						file_signature_strings = next_file_signature_string;
 					}
@@ -493,17 +427,18 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 					// Create a domain array.
 					Domain** domains = push_arena(permanent_arena, num_domains * sizeof(Domain*), Domain*);
 					
-					for(u32 i = 0; i < num_domains; ++i)
+					for(int j = 0; j < num_domains; ++j)
 					{
 						// Create each domain by splitting the host and path URL components.
 						++(group->url_info.num_domains);
 						Domain* domain = push_arena(permanent_arena, sizeof(Domain), Domain);
 
 						TCHAR* next_domain_string = skip_to_next_string(domain_strings);
+						String_Array<TCHAR>* split_url = split_string(temporary_arena, domain_strings, URL_PATH_DELIMITERS, 1);
 
-						TCHAR* path = NULL;
-						TCHAR* host = _tcstok_s(domain_strings, URL_PATH_DELIMITERS, &path);
-
+						TCHAR* host = split_url->strings[0];
+						TCHAR* path = (split_url->num_strings == 2) ? (split_url->strings[1]) : (NULL);
+						
 						if(string_ends_with(host, ANY_TOP_OR_SECOND_LEVEL_DOMAIN))
 						{
 							domain->match_any_top_or_second_level_domain = true;
@@ -525,7 +460,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							domain->path = NULL;
 						}
 
-						domains[i] = domain;
+						domains[j] = domain;
 
 						domain_strings = next_domain_string;
 					}
@@ -552,15 +487,17 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 				// Found the start of a new group.
 				case(GROUP_NONE):
 				{
-					char* group_name = NULL;
-					char* group_type = strtok_s(line, TOKEN_DELIMITERS, &group_name);
-					if(group_type != NULL)
+					String_Array<char>* split_tokens = split_string(temporary_arena, line, TOKEN_DELIMITERS, 1);
+
+					if(split_tokens->num_strings == 2)
 					{
+						char* group_type = split_tokens->strings[0];
+						char* group_name = split_tokens->strings[1];
+
 						// Find the group's type.
 						if(strings_are_equal(group_type, BEGIN_FILE_GROUP))
 						{
 							current_group_type = GROUP_FILE;
-							
 						}
 						else if(strings_are_equal(group_type, BEGIN_URL_GROUP))
 						{
@@ -573,7 +510,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						{
 							// Get this group's index in the global custom groups array.
 							// This will allow us to use this group's preallocated Group structure.
-							u32 group_idx = *num_processed_groups;
+							int group_idx = *num_processed_groups;
 							++(*num_processed_groups);
 							group = &group_array[group_idx];
 
@@ -593,7 +530,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 					}
 					else
 					{
-						_ASSERT(false);
+						log_print(LOG_ERROR, "Load Group Files: Found %d tokens while looking for a new group when two were expected.", split_tokens->num_strings);
 					}
 				} break;
 
@@ -687,8 +624,6 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 				} break;
 			}
 		}
-
-		line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
 	}
 
 	if(current_list_type != LIST_NONE)
@@ -701,40 +636,8 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 		log_print(LOG_WARNING, "Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 	}
 
-	safe_unmap_view_of_file((void**) &group_file);
-	safe_close_handle(&group_file_handle);
-}
-
-// Helper structure to pass some values to and from find_group_files_callback().
-struct Find_Group_Files_Result
-{
-	Exporter* exporter;
-	u32 num_group_files;
-};
-
-// Called every time a group file is found. Used to make an array of filenames.
-//
-// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
-//
-// @Returns: True.
-static TRAVERSE_DIRECTORY_CALLBACK(find_group_files_callback)
-{
-	Find_Group_Files_Result* result = (Find_Group_Files_Result*) callback_info->user_data;
-	Exporter* exporter = result->exporter;
-	TCHAR* filename = callback_info->object_name;
-
-	if(exporter->should_load_specific_groups_files
-		&& !should_load_group_with_filename(exporter->group_filenames_to_load, exporter->num_group_filenames_to_load, filename))
-	{
-		return true;
-	}
-
-	size_t size = string_size(filename);
-	push_and_copy_to_arena(&(exporter->temporary_arena), size, u8, filename, size);
-
-	++(result->num_group_files);
-
-	return true;
+	clear_arena(temporary_arena);
+	unlock_arena(temporary_arena);
 }
 
 // Called by qsort() to sort group file's names alphabetically.
@@ -755,7 +658,7 @@ static int compare_filenames(const void* filename_pointer_1, const void* filenam
 // 2. num_groups - The number of groups found by an earlier call to get_total_group_files_size().
 //
 // @Returns: Nothing.
-void load_all_group_files(Exporter* exporter, u32 num_groups)
+void load_all_group_files(Exporter* exporter, int num_groups)
 {
 	if(num_groups == 0)
 	{
@@ -766,26 +669,35 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	// The relevant loaded group data will go to the permanent arena, and any intermediary data to the temporary one.
 	Arena* permanent_arena = &(exporter->permanent_arena);
 	Arena* temporary_arena = &(exporter->temporary_arena);
-
-	TCHAR group_files_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(group_files_directory_path, exporter->executable_path, GROUP_FILES_DIRECTORY_NAME);
 	
 	// Find each group file on disk. We'll keep track of their filenames by storing them contiguously in memory.
+	Traversal_Result* group_files = find_objects_in_directory(temporary_arena, exporter->group_files_path, GROUP_FILES_SEARCH_QUERY, TRAVERSE_FILES, false);
 	TCHAR* first_group_filename = push_arena(temporary_arena, 0, TCHAR);
-	Find_Group_Files_Result result = {};
-	result.exporter = exporter;
-	traverse_directory_objects(	group_files_directory_path, GROUP_FILES_SEARCH_QUERY, TRAVERSE_FILES, false,
-								find_group_files_callback, &result);
+	
+	int num_group_files = 0;
+	for(int i = 0; i < group_files->num_objects; ++i)
+	{
+		Traversal_Object_Info file_info = group_files->object_info[i];
+		TCHAR* filename = file_info.object_name;
 
-	u32 num_group_files = result.num_group_files;
+		if(!should_load_group_with_filename(exporter, filename))
+		{
+			continue;
+		}
+
+		size_t filename_size = string_size(filename);
+		push_and_copy_to_arena(temporary_arena, filename_size, u8, filename, filename_size);
+		++num_group_files;
+	}
+
 	if(num_group_files == 0)
 	{
-		log_print(LOG_ERROR, "Load All Group Files: Expected to load %I32u groups from at least one file on disk, but no files were found. No groups will be loaded.", num_groups);
+		log_print(LOG_ERROR, "Load All Group Files: Expected to load %d groups from at least one file on disk, but no files were found. No groups will be loaded.", num_groups);
 		return;
 	}
 
-	// Build an array with the filenames so we can sort them alphabetically. FindFirstFile() doesn't guarantee any specific order,
-	// and we want the way the group files are loaded to be deterministic.
+	// Build an array with the filenames so we can sort them alphabetically. We'll do this because find_objects_in_directory()
+	// doesn't guarantee any specific order, and we want the way the group files are loaded to be deterministic.
 	TCHAR** group_filenames_array = build_array_from_contiguous_strings(temporary_arena, first_group_filename, num_group_files);
 	qsort(group_filenames_array, num_group_files, sizeof(TCHAR*), compare_filenames);
 
@@ -797,13 +709,13 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	Custom_Groups* custom_groups = push_arena(permanent_arena, custom_groups_size, Custom_Groups);
 
 	// The global group counter that is used to keep track of each group's place in the array.
-	u32 num_processed_groups = 0;
-	u32 max_num_file_signature_bytes = 0;
+	int num_processed_groups = 0;
+	int max_num_file_signature_bytes = 0;
 	
-	for(u32 i = 0; i < num_group_files; ++i)
+	for(int i = 0; i < num_group_files; ++i)
 	{
 		TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
-		PathCombine(group_file_path, group_files_directory_path, group_filenames_array[i]);
+		PathCombine(group_file_path, exporter->group_files_path, group_filenames_array[i]);
 
 		load_group_file(permanent_arena, temporary_arena, &(exporter->secondary_temporary_arena),
 						group_file_path, custom_groups->groups,
@@ -813,7 +725,7 @@ void load_all_group_files(Exporter* exporter, u32 num_groups)
 	custom_groups->num_groups = num_processed_groups;
 	if(num_processed_groups != num_groups)
 	{
-		log_print(LOG_ERROR, "Load All Group Files: Loaded %I32u groups when %I32u were expected.", num_processed_groups, num_groups);
+		log_print(LOG_ERROR, "Load All Group Files: Loaded %d groups when %d were expected.", num_processed_groups, num_groups);
 	}
 
 	log_print(LOG_INFO, "Load All Group Files: Allocating %I32u bytes for the file signature buffer.", max_num_file_signature_bytes);
@@ -911,7 +823,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 	bool partioned_url_successfully = should_match_url_group
 									&& partition_url(temporary_arena, entry_to_match->url_to_match, &url_parts_to_match);
 
-	for(u32 i = 0; i < custom_groups->num_groups; ++i)
+	for(int i = 0; i < custom_groups->num_groups; ++i)
 	{
 		Group group = custom_groups->groups[i];
 
@@ -921,7 +833,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			// Match a file signature by comparing each individual byte while taking into account wildcards, which match any byte.
 			if(matched_file_group_name == NULL && read_file_signature_successfully)
 			{
-				for(u32 j = 0; j < group.file_info.num_file_signatures; ++j)
+				for(int j = 0; j < group.file_info.num_file_signatures; ++j)
 				{
 					File_Signature* signature = group.file_info.file_signatures[j];
 					_ASSERT(signature->num_bytes <= custom_groups->file_signature_buffer_size);
@@ -939,7 +851,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			// Match a MIME type by comparing the beginning of the string (case insensitive).
 			if(matched_file_group_name == NULL && mime_type_to_match != NULL)
 			{
-				for(u32 j = 0; j < group.file_info.num_mime_types; ++j)
+				for(int j = 0; j < group.file_info.num_mime_types; ++j)
 				{
 					TCHAR* mime_type_in_group = group.file_info.mime_types[j];
 					if(string_starts_with(mime_type_to_match, mime_type_in_group, true))
@@ -952,7 +864,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			// Match a file extension by comparing strings (case insensitive).
 			if(matched_file_group_name == NULL && file_extension_to_match != NULL)
 			{
-				for(u32 j = 0; j < group.file_info.num_file_extensions; ++j)
+				for(int j = 0; j < group.file_info.num_file_extensions; ++j)
 				{
 					TCHAR* file_extension_in_group = group.file_info.file_extensions[j];
 					if(strings_are_equal(file_extension_to_match, file_extension_in_group, true))
@@ -968,7 +880,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			// Match a URL by comparing the ending of the host and beginning of the path components (case insensitive).
 			if(matched_url_group_name == NULL && partioned_url_successfully)
 			{
-				for(u32 j = 0; j < group.url_info.num_domains; ++j)
+				for(int j = 0; j < group.url_info.num_domains; ++j)
 				{
 					// The URL we partioned always has a 'path', but the 'host' might be NULL.
 					// The opposite is true for a URL group: the 'path' might be NULL, but the host always exists.

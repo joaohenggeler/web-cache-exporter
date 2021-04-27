@@ -817,7 +817,12 @@ void string_to_uppercase(TCHAR* str)
 	}
 }
 
-// @TODO
+// Unescapes a string containing a few common escape characters. 
+//
+// @Parameters:
+// 1. str - The string to unescape.
+//
+// @Returns: Nothing.
 void string_unescape(TCHAR* str)
 {
 	while(*str != TEXT('\0'))
@@ -1797,7 +1802,21 @@ int count_path_components(const TCHAR* path)
 	return count;
 }
 
-// @TODO
+// Retrieves a path component at a given index. For example, the path "C:\DirectoryA\DirectoryB\File.ext" has four components, where
+// the following indexes can be used:
+//
+// [0] or [-4] -> C:
+// [1] or [-3] -> DirectoryA
+// [2] or [-2] -> DirectoryB
+// [3] or [-1] -> File.ext
+//
+// @Parameters:
+// 1. arena - The Arena structure that will receive the resulting component.
+// 2. path - The path to be searched for components.
+// 3. component_index - The index of the component to retrieve. If this value is negative, the component is retrieved starting at the
+// end of the path. For negatives values, the index is one-based instead of zero-based.
+//
+// @Returns: The component if a valid one exists in the path at that index. Otherwise, this function returns NULL.
 TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 {
 	TCHAR* result = NULL;
@@ -1806,7 +1825,6 @@ TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 
 	if(component_index < 0)
 	{
-		// @TODO: Explain
 		component_index = -component_index;
 		component_index = split_path->num_strings - component_index;
 	}
@@ -1819,7 +1837,7 @@ TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 	return result;
 }
 
-// @TODO
+// @Remove
 /*bool path_append_if_missing(TCHAR* path, const TCHAR* path_to_add)
 {
 	bool success = true;
@@ -1872,6 +1890,7 @@ bool get_full_path_name(TCHAR* result_full_path)
 }
 
 // Retrieves the absolute path of a special folder, identified by its CSIDL (constant special item ID list).
+//
 // See this page for a list of possible CSIDLs: https://docs.microsoft.com/en-us/windows/win32/shell/csidl
 // Note that each different target build has a version requirement for these CSIDLs:
 // - Windows 98/ME: version 4.72 or older.
@@ -1917,7 +1936,7 @@ void truncate_path_components(TCHAR* path)
 		}
 	}
 
-	WHILE_TRUE()
+	while(true, true)
 	{
 		bool is_end_of_string = (*path == TEXT('\0'));
 
@@ -2000,7 +2019,7 @@ void correct_reserved_path_components(TCHAR* path)
 	const size_t NUM_RESERVED_NAMES = _countof(SORTED_RESERVED_NAMES);
 
 	TCHAR* component_begin = path;
-	WHILE_TRUE()
+	while(true, true)
 	{
 		bool is_end_of_string = (*path == TEXT('\0'));
 
@@ -2037,34 +2056,45 @@ void correct_reserved_path_components(TCHAR* path)
 	@NextSection
 */
 
-// @TODO
+// Creates or opens a file or I/O device. This function is essentially a convenience wrapper for using CreateFile() in Windows 98 to Windows 10.
 //
-// @Docs: CreateFile - Win32 API Reference.
-// - "Windows 95/98/Me: You cannot open a directory, physical disk, or volume using CreateFile."
-// - "FILE_SHARE_DELETE - Windows 95/98/Me: This flag is not supported."
-// - "FILE_FLAG_BACKUP_SEMANTICS - Windows 95/98/Me: This flag is not supported."
+// @Parameters: See CreateFile() in the Win32 API Reference:
+// - https://web.archive.org/web/20030210222137/http://msdn.microsoft.com/library/en-us/fileio/base/createfile.asp
+// - https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea
 //
-// @TODO
+// @Returns: See CreateFile() in the Win32 API Reference.
 HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes)
 {
-	// @Docs: "Windows 95/98/Me: The hTemplateFile parameter must be NULL. If you supply a handle, the call fails and GetLastError returns
-	// ERROR_NOT_SUPPORTED."
-	// - CreateFile - Win32 API Reference.
+	// @Docs: CreateFile - Win32 API Reference.
+	//
+	// - "Windows 95/98/Me: You cannot open a directory, physical disk, or volume using CreateFile."
+	// - "FILE_SHARE_DELETE - Windows 95/98/Me: This flag is not supported."
+	// - "FILE_FLAG_BACKUP_SEMANTICS - Windows 95/98/Me: This flag is not supported."
+	// - "Windows 95/98/Me: The hTemplateFile parameter must be NULL. If you supply a handle, the call fails and GetLastError returns ERROR_NOT_SUPPORTED."
+
+	#ifdef BUILD_9X
+		// Remove the unsupported flags for Windows 98 and ME.
+		flags_and_attributes &= ~FILE_SHARE_DELETE;
+		flags_and_attributes &= ~FILE_FLAG_BACKUP_SEMANTICS;
+	#endif
+
 	return CreateFile(path, desired_access, shared_mode, NULL, creation_disposition, flags_and_attributes, NULL);
 }
 
-// @TODO
-HANDLE create_directory_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes)
-{
-	#ifdef BUILD_9X
-		_ASSERT(false);
-		SetLastError(ERROR_NOT_SUPPORTED);
-		return INVALID_HANDLE_VALUE;
-	#else
+// Creates a handle for a directory.
+//
+// @Compatibility: Windows 2000 to 10 only.
+//
+// @Parameters: See create_handle().
+// 
+// @Returns: See create_handle().
+#ifndef BUILD_9X
+	HANDLE create_directory_handle(const wchar_t* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes)
+	{
 		flags_and_attributes |= FILE_FLAG_BACKUP_SEMANTICS;
 		return create_handle(path, desired_access, shared_mode, creation_disposition, flags_and_attributes);
-	#endif
-}
+	}
+#endif
 
 // Checks if two handles refer to the same file or directory.
 //
@@ -2095,15 +2125,20 @@ bool do_handles_refer_to_the_same_file_or_directory(HANDLE handle_1, HANDLE hand
 	return false;
 }
 
-// @TODO
-// "C:\PROGRA~1\..\PROGRA~1\.\COMMON~1"
-// "C:\Program Files\Common Files"
+// Checks if two paths refer to the same directory. This function is not very robust for Windows 98 and ME.
+//
+// For example, the following paths refer to the same directory: "C:\Program Files\Common Files" and "C:\PROGRA~1\..\PROGRA~1\.\COMMON~1".
+//
+// @Returns: True if the paths refer to the same directory. Otherwise, false. This function also returns false if a directory doesn't exist.
 bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path_2)
 {
 	#ifdef BUILD_9X
 		char path_to_compare_1[MAX_PATH_CHARS] = "";
 		char path_to_compare_2[MAX_PATH_CHARS] = "";
 		
+		// Remove the "." and ".." characters, convert any short paths to their long versions,
+		// and perform a case insensitive string comparison. This is meant to make this check
+		// more robust, but it's not a good approach...
 		return 	does_directory_exist(path_1)
 				&& does_directory_exist(path_2)
 				&& (PathCanonicalizeA(path_to_compare_1, path_1) != FALSE)
@@ -2114,7 +2149,10 @@ bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path
 	#else
 		HANDLE handle_1 = create_directory_handle(path_1, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
 		HANDLE handle_2 = create_directory_handle(path_2, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
-		return do_handles_refer_to_the_same_file_or_directory(handle_1, handle_2);
+		bool result = do_handles_refer_to_the_same_file_or_directory(handle_1, handle_2);
+		safe_close_handle(&handle_1);
+		safe_close_handle(&handle_2);
+		return result;
 	#endif
 }
 
@@ -2185,7 +2223,7 @@ bool get_file_size(const TCHAR* file_path, u64* result_file_size)
 	bool success = false;
 
 	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
-	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
@@ -2650,13 +2688,13 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 bool create_empty_file(const TCHAR* file_path, bool overwrite)
 {
 	DWORD creation_disposition = (overwrite) ? (CREATE_ALWAYS) : (CREATE_NEW);
-	HANDLE file_handle = CreateFile(file_path, 0, 0, NULL, creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE file_handle = create_handle(file_path, 0, 0, creation_disposition, FILE_ATTRIBUTE_NORMAL);
 	DWORD error_code = GetLastError();
 	
 	bool success = file_handle != INVALID_HANDLE_VALUE;
 	safe_close_handle(&file_handle);
 
-	// We'll set the error code to be the one returned by CreateFile since CloseHandle would overwrite it.
+	// We'll set the error code to be the one returned by CreateFile() since CloseHandle() would overwrite it.
 	// This way, if the file already exists, calling GetLastError() after using this function returns ERROR_FILE_EXISTS.
 	SetLastError(error_code);
 	return success;
@@ -2772,7 +2810,7 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 	// PAGE_WRITECOPY - "The files specified must have been created with the GENERIC_READ and GENERIC_WRITE access rights."
 	// - CreateFileMapping - Win32 API Reference.
 	DWORD desired_access = (optional_read_only) ? (GENERIC_READ) : (GENERIC_READ | GENERIC_WRITE);
-	HANDLE file_handle = CreateFile(file_path, desired_access, 0, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE file_handle = create_handle(file_path, desired_access, 0, OPEN_EXISTING, 0);
 
 	*result_file_handle = file_handle;
 
@@ -2810,13 +2848,7 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 	void* read_file = NULL;
 	*result_file_size = 0;
 
-	HANDLE file_handle = CreateFile(file_path,
-									GENERIC_READ,
-									FILE_SHARE_READ,
-									NULL,
-									OPEN_EXISTING,
-									0,
-									NULL);
+	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0);
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
@@ -2863,7 +2895,7 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 			{
 				reached_end_of_file = true;
 				read_file = NULL;
-				log_print(LOG_ERROR, "Read Entire File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes so far.", file_path, GetLastError(), *result_file_size);
+				log_print(LOG_ERROR, "Read Entire File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes until now.", file_path, GetLastError(), *result_file_size);
 			}
 
 		} while(!reached_end_of_file);
@@ -2927,7 +2959,7 @@ bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_t
 	if(file_path == NULL || string_is_empty(file_path) || num_bytes_to_read == 0) return false;
 
 	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
-	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 	
 	bool success = read_file_chunk(	file_handle, file_buffer, num_bytes_to_read, file_offset,
 									optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
@@ -2953,6 +2985,7 @@ bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_b
 // 1. file_handle - The handle of the file where the data will be written to.
 // 2. data - The memory location of the data to write.
 // 3. data_size - The size of the data in bytes.
+// 4. optional_result_num_bytes_written - An optional parameter that receives number of bytes written. This value defaults to NULL.
 //
 // @Returns: True if the data was written successfully. Otherwise, false.
 bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* optional_result_num_bytes_written)
@@ -2973,8 +3006,18 @@ bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* opt
 	return success;
 }
 
-// @TODO
-bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 total_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle)
+// Copies part of a file at a given offset to another file.
+//
+// @Parameters:
+// 1. arena - The Arena structure that is used as the intermediate file buffer.
+// 2. source_file_path - The path of the source file where the chunk will be read from.
+// 3. total_bytes_to_copy - The size of the chunk to copy in bytes.
+// 4. file_offset - The offset of the chunk in the file in bytes.
+// 5. destination_file_handle - The handle of the destination file where the chunk will be written to.
+// 
+// @Returns: True if the whole chunk was copied successfully. Otherwise, false. This functions returns true if the number of bytes to copy is zero and the
+// source path and destination handle are valid.
+bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle)
 {
 	if(source_file_path == NULL || string_is_empty(source_file_path) || destination_file_handle == INVALID_HANDLE_VALUE) return false;
 
@@ -2983,7 +3026,7 @@ bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 total_byt
 	bool success = true;
 
 	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
-	HANDLE source_file_handle = CreateFile(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE source_file_handle = create_handle(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 
 	const u32 FILE_BUFFER_SIZE = 65536;
 	_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
@@ -2993,7 +3036,7 @@ bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 total_byt
 
 	do
 	{
-		u32 num_bytes_to_read = MIN(total_bytes_to_copy - total_bytes_read, FILE_BUFFER_SIZE);
+		u32 num_bytes_to_read = (u32) MIN(total_bytes_to_copy - total_bytes_read, FILE_BUFFER_SIZE);
 
 		u32 num_bytes_read = 0;
 		success = success 	&& read_file_chunk(source_file_handle, file_buffer, num_bytes_to_read, file_offset + total_bytes_read, false, &num_bytes_read)
@@ -3007,7 +3050,43 @@ bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u32 total_byt
 	return success;
 }
 
-// @TODO
+// Behaves like copy_file_chunks() but takes the destination file's path instead of its handle.
+//
+// @Parameters: All parameters are the same except for the last one:
+// 5. destination_file_path - The path of the destination file where the chunk will be written to.
+// 6. overwrite - Whether or not to overwrite any existing file at that same path.
+// 
+// @Returns: See copy_file_chunks(). This function also returns false if 'overwrite' is false and a file already exists in the desination path.
+// For this last cases, GetLastError() returns ERROR_FILE_EXISTS. For all other failure cases, GetLastError() returns CUSTOM_ERROR_FAILED_TO_COPY_FILE_CHUNKS.
+// See copy_exporter_file() for more details.
+bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_bytes_to_copy, u64 file_offset, const TCHAR* destination_file_path, bool overwrite)
+{
+	DWORD creation_disposition = (overwrite) ? (CREATE_ALWAYS) : (CREATE_NEW);
+	HANDLE destination_file_handle = create_handle(destination_file_path, GENERIC_WRITE, 0, creation_disposition, FILE_ATTRIBUTE_NORMAL);
+	
+	bool success = false;
+	if(destination_file_handle != INVALID_HANDLE_VALUE)
+	{
+		success = copy_file_chunks(arena, source_file_path, total_bytes_to_copy, file_offset, destination_file_handle);
+		safe_close_handle(&destination_file_handle);
+		// Propagate a generic error code if the destination file was created successfully but copying the chunks failed anyways.
+		if(!success) SetLastError(CUSTOM_ERROR_FAILED_TO_COPY_FILE_CHUNKS);
+	}
+	else
+	{
+		// Propagate the last Windows system error if we can't create the destination file (e.g. 'overwrite' is false and the file already
+		// exists results in ERROR_FILE_EXISTS).
+	}
+
+	return success;
+}
+
+// Reduces a file's size to zero given its handle.
+//
+// @Parameters:
+// 1. file_handle - The handle of the file to empty.
+// 
+// @Returns: True if the file size was reduced successfully. Otherwise, false.
 bool empty_file(HANDLE file_handle)
 {
 	return (SetFilePointer(file_handle, 0, NULL, FILE_BEGIN) != INVALID_SET_FILE_POINTER) && (SetEndOfFile(file_handle) != FALSE);
@@ -3029,7 +3108,7 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 	TCHAR* result = NULL;
 
 	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
-	HANDLE file_handle = CreateFile(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 
 	if(file_handle != INVALID_HANDLE_VALUE)
 	{
@@ -3282,13 +3361,7 @@ bool create_log_file(const TCHAR* log_file_path)
 	
 	create_directories(full_log_directory_path);
 
-	GLOBAL_LOG_FILE_HANDLE = CreateFile(log_file_path,
-										GENERIC_WRITE,
-										FILE_SHARE_READ,
-										NULL,
-										CREATE_ALWAYS,
-										FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
-										NULL);
+	GLOBAL_LOG_FILE_HANDLE = create_handle(log_file_path, GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH);
 
 	return GLOBAL_LOG_FILE_HANDLE != INVALID_HANDLE_VALUE;
 }
@@ -3502,13 +3575,7 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 	
 	create_directories(full_csv_directory_path);
 
-	*result_file_handle = CreateFile(	csv_file_path,
-										GENERIC_WRITE,
-										0,
-										NULL,
-										CREATE_ALWAYS,
-										FILE_ATTRIBUTE_NORMAL,
-										NULL);
+	*result_file_handle = create_handle(csv_file_path, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
 
 	return *result_file_handle != INVALID_HANDLE_VALUE;
 }
@@ -4231,9 +4298,28 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 
 #ifdef DEBUG
 	
-	// @TODO
+	// A debug function that measures the time between two calls. The macros DEBUG_BEGIN_MEASURE_TIME() and DEBUG_END_MEASURE_TIME() should
+	// be used to start and stop the measurement.
+	//
+	// For example:
+	//		DEBUG_BEGIN_MEASURE_TIME();
+	//			function_1(...)
+	//			{
+	//				DEBUG_BEGIN_MEASURE_TIME();
+	//					function_2(...);
+	//				DEBUG_END_MEASURE_TIME();			
+	//			}
+	//		DEBUG_END_MEASURE_TIME();
+	//
+	// @Parameters:
+	// 1. is_start - True when starting a new time measurement. False for stopping the last measurement.
+	// 2. identifier - A constant string that can be used to identify different measurements in the log file. May be NULL when 'is_start' is false.
+	// 
+	// @Returns: Nothing.
 	void debug_measure_time(bool is_start, const char* identifier)
 	{
+		// Excuse the messiness, this is only used in the debug builds.
+
 		struct Debug_Time_Measurement
 		{
 			const char* identifier;

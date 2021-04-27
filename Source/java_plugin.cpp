@@ -34,10 +34,6 @@
 	- 2000, XP 				C:\Documents and Settings\<Username>\Application Data\Sun\Java\Deployment\cache
 	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\AppData\LocalLow\Sun\Java\Deployment\cache
 
-	Note that we currently only look at these default locations. It's possible for Java's deployment properties to change the user and
-	system level cache locations using the "deployment.user.cachedir" and "deployment.system.cachedir" properties in the
-	deployment.properties file. These default to "<User Home>\cache" and <None>, respectively.
-
 	We can consider two sublocations in the IDX file cache:
 	1. <Cache Location>\javapi\v1.0
 	2. <Cache Location>\6.0
@@ -57,6 +53,14 @@
 	Let's call 1. the "version 1 cache" and 2. the "version 6 cache".
 	Any archives that are specified in the "cache_archive" applet tag parameter are stored in the "jar" subdirectory in version 1,
 	and in any subdirectory in version 6.
+
+	@SupportsCustomCacheLocations:
+	- Same Machine: No, it's possible for the Java's deployment properties to change the user and system level cache locations using the
+	"deployment.user.cachedir" and "deployment.system.cachedir" properties in the deployment.properties file. These default to "<User Home>\cache"
+	and <None>, respectively. @Future: Although we could parse this file, it's very unlikely that this location is changed.
+	- External Locations: No, see above.
+
+	Note that we currently only look at these default locations. 
 
 	@Resources: The index file format was investigated by looking at the decompiled code of the following Java archives and release:
 	- "jre\lib\jaws.jar" in JDK 1.3.1 update 28.
@@ -93,7 +97,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE,
 	CSV_LAST_MODIFIED_TIME, CSV_EXPIRY_TIME,
-	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING,
+	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING,
 	CSV_CODEBASE_IP, CSV_VERSION,
 	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
@@ -124,7 +128,7 @@ void export_default_or_specific_java_plugin_cache(Exporter* exporter)
 			if(string_is_empty(appdata_path)) appdata_path = exporter->appdata_path;
 
 			// For Java 1.4 and later (distributed by Sun or Oracle).
-			PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment"));
+			PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
 		}
 
 		log_print(LOG_INFO, "Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
@@ -137,7 +141,7 @@ void export_default_or_specific_java_plugin_cache(Exporter* exporter)
 			if(string_is_empty(user_home_path)) user_home_path = exporter->windows_path;
 		
 			// For Java 1.4 and later (distributed by IBM).
-			PathCombine(exporter->cache_path, appdata_path, TEXT("IBM\\Java\\Deployment"));
+			PathCombine(exporter->cache_path, appdata_path, TEXT("IBM\\Java\\Deployment\\cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
@@ -175,7 +179,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 	{
 		{/* Filename */}, {/* URL */}, {/* File Extension */}, {/* File Size */},
 		{/* Last Modified Time */}, {/* Expiry Time */},
-		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */}, {/* Content Type */}, {/* Content Length */}, {/* Content Encoding */},
+		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+		{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 		{/* Codebase IP */}, {/* Version */},
 		{/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
@@ -297,14 +302,9 @@ struct Java_Index
 	TCHAR* namespace_id;
 	TCHAR* codebase_ip;
 
-	TCHAR* response;
-	TCHAR* server;
-	TCHAR* cache_control;
-	TCHAR* pragma;
-	TCHAR* content_type;
-	// This value is used in the Content Length CSV column if it exists. Otherwise, the content length numeric value is used instead.
-	TCHAR* content_length_string;
-	TCHAR* content_encoding;
+	// The content length string in this struct is used for the Content Length CSV column if it exists.
+	// Otherwise, the content length numeric value above is used instead.
+	Http_Headers headers;
 };
 
 // Maps a cached resource's file type to its respective file extension. Note that JAR and JARJAR files map to ".zip".
@@ -328,45 +328,40 @@ static TCHAR* get_cached_file_extension_from_java_file_type(s32 type)
 	}
 }
 
-// Helper structure to pass some values to and from find_cached_filename_that_starts_with_callback().
-struct Find_Filename_Result
-{
-	bool was_found;
-	TCHAR* result_buffer;
-};
-
-// Called every time a cached file that begins with a given prefix is found.
-//
-// @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
-//
-// @Returns: True if the file was not found (to keep searching) or false if it was found (to stop searching).
-static TRAVERSE_DIRECTORY_CALLBACK(find_cached_filename_that_starts_with_callback)
-{
-	Find_Filename_Result* result = (Find_Filename_Result*) callback_info->user_data;
-	result->was_found = !string_ends_with(callback_info->object_name, TEXT(".idx"))
-					&& SUCCEEDED(StringCchCopy(result->result_buffer, MAX_PATH_CHARS, callback_info->object_name));
-	return !result->was_found;
-}
-
 // Finds the first file that begins with a given prefix in a given directory. This search does not include any subdirectories.
 //
 // @Parameters:
-// 1. directory_path - The path to the directory to search.
-// 2. filename_prefix - The filename prefix to search for.
-// 3. result_filename - The buffer which receives the found filename. This buffer must be able to hold MAX_PATH_CHARS characters.
+// 1. arena - The Arena structure that will receive the string and any intermediate values.
+// 2. directory_path - The path of the directory to search.
+// 3. filename_prefix - The filename prefix to search for.
+// 4. result_filename - The resulting filename or NULL if the file wasn't found.
 // 
 // @Returns: True if the file was found. Otherwise, false.
-static bool find_cached_filename_that_starts_with(const TCHAR* directory_path, const TCHAR* filename_prefix, TCHAR* result_filename)
+static bool find_cached_filename_that_starts_with(Arena* arena, const TCHAR* directory_path, const TCHAR* filename_prefix, TCHAR** result_filename)
 {
+	*result_filename = NULL;
+
 	TCHAR search_query[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(search_query, MAX_PATH_CHARS, filename_prefix);
 	StringCchCat(search_query, MAX_PATH_CHARS, ALL_OBJECTS_SEARCH_QUERY);
 
-	Find_Filename_Result result = {};
-	result.result_buffer = result_filename;
-	traverse_directory_objects(	directory_path, search_query, TRAVERSE_FILES, false,
-								find_cached_filename_that_starts_with_callback, &result);
-	return result.was_found;
+	Traversal_Result* files = find_objects_in_directory(arena, directory_path, search_query, TRAVERSE_FILES, false);
+
+	bool was_found = false;
+	for(int i = 0; i < files->num_objects; ++i)
+	{
+		Traversal_Object_Info file_info = files->object_info[i];
+		TCHAR* filename = file_info.object_name;		
+
+		if(!string_ends_with(filename, TEXT(".idx")))
+		{
+			was_found = true;
+			*result_filename = filename;
+			break;
+		}
+	}
+
+	return was_found;
 }
 
 // Called every time an index file is found in the Java Plugin's cache. Used to export every cache entry.
@@ -425,15 +420,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	format_time64_t_date_time(index.expiry_time / 1000, expiry_time);
 
 	TCHAR* content_length = NULL;
-	TCHAR content_length_buffer[MAX_INT32_CHARS] = TEXT("");
-	if(index.content_length_string != NULL)
+	if(index.headers.content_length != NULL)
 	{
-		content_length = index.content_length_string;
+		content_length = index.headers.content_length;
 	}
 	else
 	{
-		convert_s32_to_string(index.content_length, content_length_buffer);
-		content_length = content_length_buffer;
+		content_length = push_arena(arena, MAX_INT32_CHARS * sizeof(TCHAR), TCHAR);
+		convert_s32_to_string(index.content_length, content_length);
 	}
 
 	// How we find the cached filename depends on the cache version.
@@ -502,8 +496,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 			{
 				// If that fails, take the time to search on disk for the actual filename.
 				// This applies to the version 1 cache directories that still exist in version 6.
-				TCHAR actual_filename[MAX_PATH_CHARS] = TEXT("");
-				if(find_cached_filename_that_starts_with(callback_info->directory_path, cached_filename, actual_filename))
+				TCHAR* actual_filename = NULL;
+				if(find_cached_filename_that_starts_with(arena, callback_info->directory_path, cached_filename, &actual_filename))
 				{
 					StringCchCopy(cached_filename, MAX_PATH_CHARS, actual_filename);
 				}
@@ -532,7 +526,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	{
 		{/* Filename */}, {/* URL */}, {/* File Extension */}, {/* File Size */},
 		{last_modified_time}, {expiry_time},
-		{index.response}, {index.server}, {index.cache_control}, {index.pragma}, {index.content_type}, {content_length}, {index.content_encoding},
+		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+		{/* Content Type */}, {content_length}, {/* Content Range */}, {/* Content Encoding */},
 		{index.codebase_ip}, {index.version},
 		{/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
@@ -543,6 +538,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	params.copy_file_path = full_file_path;
 	params.url = url;
 	params.filename = filename;
+	params.headers = index.headers;
 	params.short_location_on_cache = short_location_on_cache;
 
 	export_cache_entry(exporter, csv_row, &params);
@@ -666,10 +662,10 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 // @Returns: Nothing.
 static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* index, Java_Location_Type location_type)
 {
-	u64 index_file_size = 0;
-	void* index_file = read_entire_file(arena, index_path, &index_file_size);
+	u64 file_size = 0;
+	void* file = read_entire_file(arena, index_path, &file_size);
 	
-	if(index_file == NULL)
+	if(file == NULL)
 	{
 		log_print(LOG_ERROR, "Read Java Index File: Failed to open the index file '%s'. No files will be exported using this index.", index_path);
 		return;
@@ -689,7 +685,8 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 		- https://docs.oracle.com/javase/8/docs/api/java/io/DataOutput.html
 	*/
 
-	u32 total_bytes_read = 0;
+	u64 remaining_file_size = file_size;
+	bool reached_end_of_file = false;
 
 	// Helper macro function used to skip a number of bytes in the file. This may be used to
 	// emulate the behavior of the skipBytes() function from java.io.DataInput, or any other
@@ -697,10 +694,9 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 	#define SKIP_BYTES(num_bytes)\
 	do\
 	{\
-		if(total_bytes_read >= index_file_size) break;\
-		\
-		index_file = advance_bytes(index_file, num_bytes);\
-		total_bytes_read += num_bytes;\
+		u64 size_to_skip = MIN(num_bytes, remaining_file_size);\
+		file = advance_bytes(file, size_to_skip);\
+		remaining_file_size -= size_to_skip;\
 	} while(false, false)
 
 	// Helper macro function used to read an integer of any size from the current file position.
@@ -709,13 +705,14 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 	#define READ_INTEGER(variable)\
 	do\
 	{\
-		if(total_bytes_read >= index_file_size) break;\
+		if(remaining_file_size < sizeof(variable)) reached_end_of_file = true;\
+		if(reached_end_of_file) break;\
 		\
-		CopyMemory(&variable, index_file, sizeof(variable));\
-		variable = swap_byte_order(variable);\
+		CopyMemory(&variable, file, sizeof(variable));\
+		SWAP_BYTE_ORDER(variable);\
 		\
-		index_file = advance_bytes(index_file, sizeof(variable));\
-		total_bytes_read += sizeof(variable);\
+		file = advance_bytes(file, sizeof(variable));\
+		remaining_file_size -= sizeof(variable);\
 	} while(false, false)
 
 	// Helper macro function used to read a string that was encoded using modified UTF-8 from
@@ -725,18 +722,14 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 	#define READ_STRING(variable)\
 	do\
 	{\
-		if(total_bytes_read >= index_file_size) break;\
-		\
 		u16 utf_length = 0;\
-		CopyMemory(&utf_length, index_file, sizeof(utf_length));\
-		utf_length = swap_byte_order(utf_length);\
-		index_file = advance_bytes(index_file, sizeof(utf_length));\
+		READ_INTEGER(utf_length);\
 		\
-		char* modified_utf_8_string = (char*) index_file;\
+		char* modified_utf_8_string = (char*) file;\
 		variable = convert_modified_utf_8_string_to_tchar(arena, modified_utf_8_string, utf_length);\
-		index_file = advance_bytes(index_file, utf_length);\
+		file = advance_bytes(file, utf_length);\
 		\
-		total_bytes_read += sizeof(utf_length) + utf_length;\
+		remaining_file_size -= utf_length;\
 	} while(false, false)
 
 	// Helper macro function used to read multiple HTTP header values as modified UTF-8 strings.
@@ -769,31 +762,35 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 			}\
 			else if(strings_are_equal(key, TEXT("<null>"), true))\
 			{\
-				index->response = value;\
+				index->headers.response = value;\
 			}\
 			else if(strings_are_equal(key, TEXT("server"), true))\
 			{\
-				index->server = value;\
+				index->headers.server = value;\
 			}\
 			else if(strings_are_equal(key, TEXT("cache-control"), true))\
 			{\
-				index->cache_control = value;\
+				index->headers.cache_control = value;\
 			}\
 			else if(strings_are_equal(key, TEXT("pragma"), true))\
 			{\
-				index->pragma = value;\
+				index->headers.pragma = value;\
 			}\
 			else if(strings_are_equal(key, TEXT("content-type"), true))\
 			{\
-				index->content_type = value;\
+				index->headers.content_type = value;\
 			}\
 			else if(strings_are_equal(key, TEXT("content-length"), true))\
 			{\
-				index->content_length_string = value;\
+				index->headers.content_length = value;\
+			}\
+			else if(strings_are_equal(key, TEXT("content-range"), true))\
+			{\
+				index->headers.content_range = value;\
 			}\
 			else if(strings_are_equal(key, TEXT("content-encoding"), true))\
 			{\
-				index->content_encoding = value;\
+				index->headers.content_encoding = value;\
 			}\
 		}\
 	} while(false, false)
@@ -805,6 +802,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 	#define READ_SECTION_2()\
 	do\
 	{\
+		u32 total_bytes_read = (u32) (file_size - remaining_file_size);\
 		if(total_bytes_read < VERSION_6_HEADER_SIZE)\
 		{\
 			u32 header_padding_size = VERSION_6_HEADER_SIZE - total_bytes_read;\
@@ -821,6 +819,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 			READ_HEADERS(NULL);\
 		}\
 		\
+		total_bytes_read = (u32) (file_size - remaining_file_size);\
 		u32 expected_total_bytes_read = VERSION_6_HEADER_SIZE + index->section_2_length;\
 		if(total_bytes_read < expected_total_bytes_read)\
 		{\

@@ -2,7 +2,7 @@
 #include "mozilla_firefox.h"
 
 /*
-	@TODO
+	This file defines how the exporter processes the cache format used by Mozilla-based browsers, like Firefox and SeaMonkey.
 
 	@SupportedFormats:
 	- Mozilla 0.9.5 to Firefox 31 (version 1 - "Cache\_CACHE_MAP_").
@@ -23,7 +23,7 @@
 	- K-Meleon						"K-Meleon"
 	- Netscape Navigator			"Netscape\Navigator" (for 9.x)
 									"Netscape\NSB" (for 8.x)
-					
+	
 	For older versions like Netscape Navigator 6.1 to 7.x, Phoenix, Mozilla Firebird, and the Mozilla Suite this location is slighty different:
 	- "<AppData>\<Vendor and Browser>\Profiles\<Profile Name>\<8 Characters>.slt\<Cache Subdirectory>".
 	1. It's located in <AppData> instead of <Local Appdata>.
@@ -51,7 +51,9 @@
 	- https://en.wikipedia.org/wiki/Firefox_early_version_history
 	- https://en.wikipedia.org/wiki/Netscape_(web_browser)#Release_history
 
-	// @TODO: @UserCacheLocations:
+	@SupportsCustomCacheLocations:
+	- Same Machine: Yes, we check the prefs.js file for each profile before looking in the default locations above.
+	- External Locations: Yes, see above.
 
 	See: http://kb.mozillazine.org/Browser.cache.disk.parent_directory
 	
@@ -97,11 +99,18 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
-// @TODO
-
 static void export_mozilla_cache_version_1(Exporter* exporter);
 static void export_mozilla_cache_version_2(Exporter* exporter);
 
+// Finds any custom cache locations from a Mozilla browser's preferences file (prefs.js).
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the Mozilla cache should be exported.
+// 2. prefs_file_path - The path to the prejs.js file.
+// 3. result_cache_path - The resulting cache location. Only the first one is returned. Note that this location might be either the cache directory
+// itself or its parent directory.
+//
+// @Returns: True if a user-defined cache location was found. Otherwise, false.
 static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, const TCHAR* prefs_file_path, TCHAR* result_cache_path)
 {
 	*result_cache_path = TEXT('\0');
@@ -122,6 +131,8 @@ static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, con
 			char* line = split_prefs->strings[i];
 			if(string_starts_with(line, "user_pref"))
 			{
+				// E.g. "user_pref("example.pref", "abc");".
+				// This works because we only care about prefs with string values.
 				String_Array<char>* split_line = split_string(arena, line, "\"");
 				if(split_line->num_strings == 5)
 				{
@@ -166,17 +177,29 @@ static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, con
 	return success;
 }
 
+// Finds and exports the Mozilla cache from a given browser's default location.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the Mozilla cache should be exported.
+// 2. vendor_and_browser_subdirectories - A string specifying one or more directories that identify the browser (e.g. "Mozilla\Firefox").
+// 3. output_subdirectory_name - The name of the exporter's output subdirectory. This can be used to identify the browser (e.g. "FF" for Firefox).
+// 4. optional_use_old_profiles_directory - An optional parameter that specifies if the old profiles directory name should be used (true) or not (false).
+// This value defaults to false.
+//
+// @Returns: Nothing.
 static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendor_and_browser_subdirectories,
 											const TCHAR* output_subdirectory_name, bool optional_use_old_profiles_directory = false)
 {
 	set_exporter_output_copy_subdirectory(exporter, output_subdirectory_name);
 
+	// We need to check both paths since older versions used to store the cache in AppData.
 	const TCHAR* cache_appdata_path_array[] = {exporter->local_appdata_path, exporter->appdata_path};
 	const TCHAR* CACHE_PROFILES_DIRECTORY_NAME = (optional_use_old_profiles_directory) ? (TEXT("Users50")) : (TEXT("Profiles"));
 
 	for(int i = 0; i < _countof(cache_appdata_path_array); ++i)
 	{
 		const TCHAR* cache_appdata_path = cache_appdata_path_array[i];
+		// Local AppData is skipped for Windows 98 and ME.
 		if(string_is_empty(cache_appdata_path)) continue;
 
 		TCHAR cache_profile_path[MAX_PATH_CHARS] = TEXT("");
@@ -187,10 +210,13 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 		Traversal_Result* profiles = find_objects_in_directory(arena, cache_profile_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false);
 		lock_arena(arena);
 
+		// Look for browser profiles.
 		for(int j = 0; j < profiles->num_objects; ++j)
 		{
 			Traversal_Object_Info profile_info = profiles->object_info[j];
 
+			// We only check for custom locations in the prefs.js file when iterating over AppData (which is defined for all Windows versions and
+			// is where this preferences file is located).
 			bool should_check_prefs = (cache_appdata_path == exporter->appdata_path);
 			TCHAR prefs_file_path[MAX_PATH_CHARS] = TEXT("");
 			PathCombine(prefs_file_path, cache_profile_path, profile_info.object_name);
@@ -214,6 +240,10 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 			TCHAR* parent_cache_path = profile_info.object_path;
 
+			// If it exists, the custom location in the prefs.js file may be defined as the parent directory and not the cache directory itself.
+			// By default, we try to append the possible cache subdirectory names to the current profile path we're iterating over, so we need
+			// to be careful and avoid exporting the cache twice from the same location. If this prefs location doesn't exist, we always export
+			// normally below.
 			if(!do_paths_refer_to_the_same_directory(prefs_cache_path, parent_cache_path))
 			{
 				PathCombine(exporter->cache_path, parent_cache_path, TEXT("Cache"));
@@ -230,6 +260,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			Traversal_Result* salt_directories = find_objects_in_directory(arena, profile_info.object_path, TEXT("*.slt"), TRAVERSE_DIRECTORIES, false);
 			lock_arena(arena);
 
+			// Look for salt directories inside each browser profiles (for the old structure).
 			for(int k = 0; k < salt_directories->num_objects; ++k)
 			{
 				Traversal_Object_Info salt_directory_info = salt_directories->object_info[k];
@@ -275,6 +306,13 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 	}
 }
 
+// Entry point for the Mozilla cache exporter. This function will determine where to look for the cache before processing its contents.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the Mozilla cache should be exported.
+// If the path to this location isn't defined, this function will try to find it in multiple paths used by different browsers.
+//
+// @Returns: Nothing.
 void export_default_or_specific_mozilla_cache(Exporter* exporter)
 {
 	console_print("Exporting the Mozilla cache...");
@@ -420,7 +458,17 @@ _STATIC_ASSERT(sizeof(Mozilla_1_Map_Header_Version_6_To_19) == 276);
 _STATIC_ASSERT(sizeof(Mozilla_1_Map_Record) == 16);
 _STATIC_ASSERT(sizeof(Mozilla_1_Metadata_Entry) == 36);
 
-// @TODO
+// Retrieves any HTTP headers and request origin information from the elements structure used by the Mozilla cache file format.
+// This structure maps keys to values, both of which are null terminated ASCII strings that are stored contiguously.
+//
+// @Parameters:
+// 1. arena - The Arena structure that receives the resulting values.
+// 2. elements - The beginning of the elements structure present in the Mozilla cache file format.
+// 3. elements_size - The total size of this structure in bytes.
+// 4. result_headers - The resulting HTTP headers structure.
+// 5. result_request_origin - The resulting request origin string.
+//
+// @Returns: Nothing.
 static void parse_mozilla_cache_elements(	Arena* arena, void* elements, u32 elements_size,
 											Http_Headers* result_headers, TCHAR** result_request_origin)
 {
@@ -444,7 +492,12 @@ static void parse_mozilla_cache_elements(	Arena* arena, void* elements, u32 elem
 	}
 }
 
-// @TODO
+// Exports the Mozilla cache format (version 1) from a given location.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the Mozilla cache should be exported.
+//
+// @Returns: Nothing.
 static void export_mozilla_cache_version_1(Exporter* exporter)
 {
 	log_print(LOG_INFO, "Mozilla Cache Version 1: Exporting the cache from '%s'.", exporter->cache_path);
@@ -488,11 +541,14 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 	void* header_cursor = map_file;
 	u64 remaining_header_size = map_file_size;
+	bool reached_end_of_header = false;
 
+	// Helper macro function used to read an integer of any size from the current file position.
 	#define READ_INTEGER(variable)\
 	do\
 	{\
-		if(remaining_header_size < sizeof(variable)) break;\
+		if(remaining_header_size < sizeof(variable)) reached_end_of_header = true;\
+		if(reached_end_of_header) break;\
 		\
 		CopyMemory(&variable, header_cursor, sizeof(variable));\
 		SWAP_BYTE_ORDER(variable);\
@@ -501,10 +557,12 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		remaining_header_size -= sizeof(variable);\
 	} while(false, false)
 
+	// Helper macro function used to read an array of integers from the current file position.
 	#define READ_ARRAY(variable)\
 	do\
 	{\
-		if(remaining_header_size < sizeof(variable)) break;\
+		if(remaining_header_size < sizeof(variable)) reached_end_of_header = true;\
+		if(reached_end_of_header) break;\
 		\
 		for(int i = 0; i < _countof(variable); ++i)\
 		{\
@@ -544,7 +602,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	}
 
 	#undef READ_INTEGER
-	#undef READ_ARRAY
+	#undef READ_ARRAY		
 
 	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT16_CHARS + 1 + MAX_INT16_CHARS;
 	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
@@ -570,6 +628,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		}
 	}
 
+	// Open any existing blocks files for reading and determine version-specific parameters.
 	const size_t MAX_BLOCK_FILENAME_CHARS = 12;
 	struct Block_File
 	{
@@ -586,6 +645,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	const int MAX_NUM_BLOCK_FILES = 3;
 	Block_File block_file_array[MAX_NUM_BLOCK_FILES + 1] = {};
 
+	// Block file zero corresponds to an external file and is never accessed using this array.
 	for(int i = 1; i <= MAX_NUM_BLOCK_FILES; ++i)
 	{
 		Block_File* block_file = &block_file_array[i];
@@ -593,7 +653,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		StringCchPrintf(block_file->filename, MAX_BLOCK_FILENAME_CHARS, TEXT("_CACHE_00%d_"), i);
 		PathCombine(block_file->file_path, exporter->cache_path, block_file->filename);
 
-		block_file->file_handle = CreateFile(block_file->file_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+		block_file->file_handle = create_handle(block_file->file_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0);
 
 		if(block_file->file_handle != INVALID_HANDLE_VALUE)
 		{
@@ -661,9 +721,11 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		block_file->max_entry_size = MAX_NUM_BLOCKS_PER_RECORD * block_file->block_size;
 	}
 
+	// E.g. "C:\Users\<Username>\AppData\Local\<Vendor and Browser>\Profiles\<Profile Name>\Cache".
 	exporter->browser_name = find_path_component(arena, exporter->cache_path, -4);
 	exporter->browser_profile = find_path_component(arena, exporter->cache_path, -2);
 
+	// E.g. "C:\Documents and Settings\<Username>\Local Settings\Application Data\<Vendor and Browser>\Profiles\<Profile Name>\<8 Characters>.slt\Cache".
 	bool using_old_directory_format = string_ends_with(exporter->browser_profile, TEXT(".slt"), true);
 	if(using_old_directory_format)
 	{
@@ -714,15 +776,19 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		u32 metadata_first_block = (record.metadata_location & MZ1_BLOCK_NUMBER_MASK);
 		u32 metadata_num_blocks = ((record.metadata_location & MZ1_EXTRA_BLOCKS_MASK) >> MZ1_EXTRA_BLOCKS_OFFSET) + 1;	
 
-		bool is_file_initialized = file_initialized != 0;
-		bool is_metadata_initialized = metadata_initialized != 0;
+		bool is_file_initialized = (file_initialized != 0);
+		bool is_metadata_initialized = (metadata_initialized != 0);
 
 		if(!is_file_initialized && !is_metadata_initialized) continue;
 
 		_ASSERT(1 <= file_num_blocks && file_num_blocks <= MAX_NUM_BLOCKS_PER_RECORD);
 		_ASSERT(1 <= metadata_num_blocks && metadata_num_blocks <= MAX_NUM_BLOCKS_PER_RECORD);
 
-		// @TODO
+		// Determines the filename or short path of an external file associated with the current record.
+		//
+		// @Parameters:
+		// 1. is_metadata - Whether the external file contains cached data (false) or its metadata (true).
+		// 2. result_path - The buffer which receives the filename or short path. This buffer must be able to hold MAX_PATH_CHARS characters.
 		#define GET_EXTERNAL_DATA_FILE_PATH(is_metadata, result_path)\
 		do\
 		{\
@@ -915,7 +981,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 				}
 				else
 				{
-					// @TODO
+					// For external data, the file we'll copy will always be the intermediate temporary file that was previously created
+					// (unless we fail to extract some chunks from the block file).
 					Block_File block_file = block_file_array[file_selector];
 					if(block_file.file_handle != INVALID_HANDLE_VALUE)
 					{
@@ -931,10 +998,14 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 						{
 							if(metadata != NULL)
 							{
+								// Avoid copying more bytes than expected if the size in the metadata is wrong.
 								read_cached_file_size = MIN(read_cached_file_size, metadata->data_size);
 							}
 							else
 							{
+								// Try to guess the cached file's size if there's no metadata. This isn't guaranteed to work since
+								// we might remove one too many null bytes and corrupt the real cached file.
+								// @Format: The data in a block file is padded with null bytes, unless it's the last entry.
 								u32 num_null_bytes = 0;
 								u8* last_cached_file_byte = (u8*) advance_bytes(cached_file_in_block_file, read_cached_file_size - 1);
 
@@ -960,6 +1031,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 								log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to write the cached file (%I32u) in record %I32u from block file '%s' to the temporary exporter directory.", read_cached_file_size, i, block_file.filename);
 							}
 
+							// Create a pretty version of the location on cache which includes the address and size in the block file.
 							const size_t MAX_LOCATION_IN_FILE_CHARS = MAX_INT32_CHARS * 2 + 2;
 							TCHAR location_in_file[MAX_LOCATION_IN_FILE_CHARS] = TEXT("");
 							StringCchPrintf(location_in_file, MAX_LOCATION_IN_FILE_CHARS, TEXT("@%08X") TEXT("#%08X"), offset_in_block_file, read_cached_file_size);
@@ -987,10 +1059,10 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 		Csv_Entry csv_row[] =
 		{
-			{/* Filename */}, {/* URL */}, {request_origin}, {/* File Extension */}, {cached_file_size_string},
+			{/* Filename */}, {/* URL */}, {/* Request Origin */}, {/* File Extension */}, {cached_file_size_string},
 			{last_modified_time}, {last_access_time}, {expiry_time}, {access_count},
-			{headers.response}, {headers.server}, {headers.cache_control}, {headers.pragma},
-			{headers.content_type}, {headers.content_length}, {headers.content_range}, {headers.content_encoding},
+			{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+			{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 			{/* Location On Cache */}, {exporter->browser_name}, {cache_version},
 			{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 			{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
@@ -1001,6 +1073,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		params.copy_file_path = copy_file_path;
 		params.url = url;
 		params.filename = NULL;
+		params.request_origin = request_origin;
+		params.headers = headers;
 		params.short_location_on_cache = short_location_on_cache;
 		params.full_location_on_cache = full_location_on_cache;
 
@@ -1087,7 +1161,7 @@ struct Find_Mozilla_2_Files_Params
 	HANDLE temporary_file_handle;
 };
 
-// @TODO
+// Called every time a file is found in the Mozilla cache directory (version 2). Used to export every cache entry.
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
@@ -1174,10 +1248,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		// From here on out, the remaining size only takes into account the header, key, and elements.
 		// We are guaranteed the size of the first version of the metadata header because of the check above.
 
+		bool reached_end_of_metadata = false;
+		// Helper macro function used to read an integer of any size from the current file position.
 		#define READ_INTEGER(variable)\
 		do\
 		{\
-			if(remaining_metadata_size < sizeof(variable)) break;\
+			if(remaining_metadata_size < sizeof(variable)) reached_end_of_metadata = true;\
+			if(reached_end_of_metadata) break;\
 			\
 			CopyMemory(&variable, metadata, sizeof(variable));\
 			SWAP_BYTE_ORDER(variable);\
@@ -1349,13 +1426,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		request_origin = partition_key;
 	}
 
-	// The file we'll copy will always be the intermediate temporary file that
-	// was previously created (unless we fail to extract some chunks from the
-	// cached file).
+	// The file we'll copy will always be the intermediate temporary file that was previously created (unless we fail
+	// to extract some chunks from the cached file).
 	TCHAR* copy_file_path = NULL;
 	TCHAR* temporary_file_path = find_params->temporary_file_path;
 	HANDLE temporary_file_handle = find_params->temporary_file_handle;
 
+	// Again, the metadata offset is the cached file's size.
 	bool copy_success = empty_file(temporary_file_handle) && copy_file_chunks(arena, full_location_on_cache, metadata_offset, 0, temporary_file_handle);
 
 	if(copy_success)
@@ -1372,10 +1449,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	Csv_Entry csv_row[] =
 	{
-		{/* Filename */}, {/* URL */}, {request_origin}, {/* File Extension */}, {cached_file_size},
+		{/* Filename */}, {/* URL */}, {/* Request Origin */}, {/* File Extension */}, {cached_file_size},
 		{last_modified_time}, {last_access_time}, {expiry_time}, {access_count},
-		{headers.response}, {headers.server}, {headers.cache_control}, {headers.pragma},
-		{headers.content_type}, {headers.content_length}, {headers.content_range}, {headers.content_encoding},
+		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+		{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 		{/* Location On Cache */}, {exporter->browser_name}, {cache_version},
 		{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
@@ -1386,6 +1463,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 	exporter_params.copy_file_path = copy_file_path;
 	exporter_params.url = url;
 	exporter_params.filename = NULL;
+	exporter_params.request_origin = request_origin;
+	exporter_params.headers = headers;
 	exporter_params.short_location_on_cache = short_location_on_cache;
 	exporter_params.full_location_on_cache = full_location_on_cache;
 
@@ -1394,7 +1473,12 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 	return true;
 }
 
-// @TODO
+// Exports the Mozilla cache format (version 2) from a given location.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the Mozilla cache should be exported.
+//
+// @Returns: Nothing.
 static void export_mozilla_cache_version_2(Exporter* exporter)
 {
 	log_print(LOG_INFO, "Mozilla Cache Version 2: Exporting the cache from '%s'.", exporter->cache_path);
@@ -1440,6 +1524,7 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 	params.temporary_file_path[0] = TEXT('\0');
 	params.temporary_file_handle = INVALID_HANDLE_VALUE;
 
+	// E.g. "C:\Users\<Username>\AppData\Local\<Vendor and Browser>\Profiles\<Profile Name>\cache2\entries".
 	exporter->browser_name = find_path_component(arena, exporter->cache_path, -5);
 	exporter->browser_profile = find_path_component(arena, exporter->cache_path, -3);
 

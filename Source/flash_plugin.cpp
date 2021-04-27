@@ -22,6 +22,10 @@
 	YouTube, when these type of files were played in the browser. Note that these videos may also exist in the browser's cache, and
 	should be handled by that specific cache exporter. The Flash Plugin exporter only checks the Temporary Files directory.
 
+	@SupportsCustomCacheLocations:
+	- Same Machine: Unknown if this location can be changed by the user.
+	- External Locations: Unknown, see above.
+
 	@Resources: A few pages of interest:
 
 	- https://community.ccleaner.com/topic/24286-a-new-plague-of-flash-trash-on-the-way/

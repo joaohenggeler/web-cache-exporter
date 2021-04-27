@@ -18,6 +18,10 @@
 	This exporter will also copy any Xtras (.x32 files) in the Temporary Files directory, AppData, LocalLow AppData, and their
 	subdirectories.
 
+	@SupportsCustomCacheLocations:
+	- Same Machine: Unknown if this location can be changed by the user.
+	- External Locations: Unknown, see above.
+
 	@Resources: TOMYSSHADOW's extensive knowledge of Macromedia / Adobe Director: https://github.com/tomysshadow
 
 	@Tools: Some utilities that can be used to process certain Director file formats that are found in the plugin's cache.
@@ -124,8 +128,8 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 			CopyMemory(&chunk_id, &file_buffer[0], sizeof(chunk_id));
 			CopyMemory(&chunk_format, &file_buffer[8], sizeof(chunk_format));
 			
-			chunk_id = swap_byte_order(chunk_id);
-			chunk_format = swap_byte_order(chunk_format);
+			SWAP_BYTE_ORDER(chunk_id);
+			SWAP_BYTE_ORDER(chunk_format);
 
 			// This would work without swapping the byte order because we check both big and little endian format signatures.
 			// But it'll be useful for the other file types.

@@ -12,7 +12,7 @@ REM - Build.bat /D EXPORT_EMPTY_FILES
 REM
 REM Macros that can be used in the debug builds:
 REM - EXPORT_EMPTY_FILES, which tells the application to create empty files instead of copying the real cached files.
-REM This is useful to test the program without having to waiting for Windows to copy each file.
+REM This is useful to test the program without having to wait for Windows to copy each file.
 
 SETLOCAL
 PUSHD "%~dp0"

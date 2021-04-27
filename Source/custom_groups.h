@@ -42,7 +42,7 @@ const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
 // A structure that represents a file signature. Wildcards may be used to match any byte when comparing file signatures.
 struct File_Signature
 {
-	u32 num_bytes;
+	int num_bytes;
 	u8* bytes;
 	bool* is_wildcard;
 };
@@ -67,19 +67,19 @@ struct Group
 	{
 		struct
 		{
-			u32 num_file_signatures;
+			int num_file_signatures;
 			File_Signature** file_signatures;
 
-			u32 num_mime_types;
+			int num_mime_types;
 			TCHAR** mime_types;
 
-			u32 num_file_extensions;
+			int num_file_extensions;
 			TCHAR** file_extensions;
 		} file_info;
 
 		struct
 		{
-			u32 num_domains;
+			int num_domains;
 			Domain** domains;
 		} url_info;
 	};
@@ -90,9 +90,9 @@ struct Group
 struct Custom_Groups
 {
 	u8* file_signature_buffer;
-	u32 file_signature_buffer_size;
+	int file_signature_buffer_size;
 
-	u32 num_groups;
+	int num_groups;
 	Group groups[ANYSIZE_ARRAY];
 };
 
@@ -112,8 +112,8 @@ struct Matchable_Cache_Entry
 	TCHAR* matched_url_group_name;
 };
 
-size_t get_total_group_files_size(Exporter* exporter, u32* num_groups);
-void load_all_group_files(Exporter* exporter, u32 num_groups);
+size_t get_total_group_files_size(Exporter* exporter, int* num_groups);
+void load_all_group_files(Exporter* exporter, int num_groups);
 bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_groups, Matchable_Cache_Entry* entry_to_match);
 
 #endif

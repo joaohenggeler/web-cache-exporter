@@ -152,14 +152,27 @@ enum Cache_Type
 	NUM_CACHE_TYPES = 8
 };
 
-// An array that maps the previous values to full names.
-const TCHAR* const CACHE_TYPE_TO_STRING[NUM_CACHE_TYPES] =
+// An array that maps the previous values to full and short names.
+const TCHAR* const CACHE_TYPE_TO_FULL_NAME[NUM_CACHE_TYPES] =
 {
 	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
-	
 	TEXT("Internet Explorer"), TEXT("Mozilla"),
-
 	TEXT("Flash Plugin"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
+};
+
+const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[NUM_CACHE_TYPES] =
+{
+	TEXT("unknown"), TEXT("all"), TEXT("explore"),
+	TEXT("ie"), TEXT("mozilla"),
+	TEXT("flash"), TEXT("shockwave"), TEXT("java")
+};
+
+// Whether a given cache type belongs to a web plugin or not (i.e. a web browser).
+const bool IS_CACHE_TYPE_PLUGIN[NUM_CACHE_TYPES] =
+{
+	false, false, false,
+	false, false,
+	true, true, true
 };
 
 #include "memory_and_file_io.h"
@@ -187,7 +200,7 @@ struct Profile
 // See: load_external_locations().
 struct External_Locations
 {
-	u32 num_profiles;
+	int num_profiles;
 	Profile profiles[ANYSIZE_ARRAY];
 };
 
@@ -204,9 +217,9 @@ struct Exporter
 	bool should_filter_by_groups;
 	bool should_show_full_paths;
 
+	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
 	bool should_load_specific_groups_files;
-	size_t num_group_filenames_to_load;
-	TCHAR** group_filenames_to_load;
+	String_Array<TCHAR>* group_files_to_load;
 
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
@@ -224,7 +237,8 @@ struct Exporter
 	TCHAR output_path[MAX_PATH_CHARS];
 	bool is_exporting_from_default_locations;
 
-	// @TODO
+	// The current cache type that is being exported. When exporting every type using CACHE_ALL, this member will
+	// hold multiple values at different times.
 	Cache_Type current_cache_type;
 
 	// The current Windows version. Used to determine how much memory to allocate for the temporary memory.
@@ -245,6 +259,7 @@ struct Exporter
 
 	// The paths to relevant exporter locations.
 	TCHAR executable_path[MAX_PATH_CHARS];
+	TCHAR group_files_path[MAX_PATH_CHARS];
 	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
 	bool was_temporary_exporter_directory_created;
 	
@@ -327,6 +342,9 @@ struct Exporter_Params
 	TCHAR* copy_file_path;
 	TCHAR* url;
 	TCHAR* filename;
+
+	TCHAR* request_origin;
+	Http_Headers headers;
 
 	TCHAR* short_location_on_cache;
 	TCHAR* full_location_on_cache;

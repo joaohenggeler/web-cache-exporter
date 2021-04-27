@@ -62,6 +62,10 @@
 	- Cached Files: <Cache Location>\IE\<8 Character Directory>
 	- Database File: <Cache Location>\..\WebCache\WebCacheV01.dat or WebCacheV24.dat
 
+	@SupportsCustomCacheLocations:
+	- Same Machine: Yes, since it's determined by querying the Windows API.
+	- External Locations: Yes, there's a dedicated field (called INTERNET_CACHE) that is used for the Windows cache.
+
 	@Resources: Previous reverse engineering efforts that specify how the index.dat file format (IE 4 to 9) should be processed.
 	Note that we don't handle the entirety of these formats (index.dat or ESE databases). We only process the subset of the file
 	formats that is useful for this application. Any used members in the data structures that represent the various parts of the
@@ -98,7 +102,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME, CSV_ACCESS_COUNT,
-	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_ENCODING, 
+	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING, 
 	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION,
 	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
@@ -923,8 +927,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					{
 						{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 						{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time}, {access_count},
-						{headers.response}, {headers.server}, {headers.cache_control}, {headers.pragma},
-						{headers.content_type}, {headers.content_length}, {headers.content_encoding},
+						{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+						{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 						{/* Location On Cache */}, {cache_version},
 						{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 						{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
@@ -940,6 +944,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					params.copy_file_path = full_file_path;
 					params.url = url;
 					params.filename = filename;
+					params.headers = headers;
 					params.short_location_on_cache = short_location_on_cache;
 
 					export_cache_entry(exporter, csv_row, &params);
@@ -1520,15 +1525,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		log_print(LOG_INFO, "Internet Explorer 10 to 11: The cache will be exported based on the information in the ESE database file '%ls'.", index_filename);
 
 		// How the ESE database will be read:
-		// 1. Copy every ESE file in the database's directory to a temporary location. This will require:
-		// 1a. The normal CopyFile() function which will be used for files that aren't being used by another
-		// process (if we're exporting from a live machine) or for every file (if we're exporting from
-		// a backup of another machine).
-		// 1b. Our own force_copy_open_file() function which will be used for files that are being
-		// used by another process.
-		// 2. Set the required ESE system parameters so a database recovery is attempted if necessary. We'll
-		// need to point to our temporary directory which contains the copied transaction logs, and specify
-		// the three character base name (e.g. "V01") that is used in their filenames.
+		// 1. Copy every ESE file in the database's directory to a temporary location. This may require forcibly
+		// copying files that are being used by another process.
+		// 2. Set the required ESE system parameters so a database recovery is attempted if necessary. We'll need
+		// to point it to our temporary location which contains the copied transaction logs, and specify the three
+		// character base name (e.g. "V01") that is used in their filenames.
 		
 		wchar_t index_directory_path[MAX_PATH_CHARS] = L"";
 		PathCombineW(index_directory_path, exporter->index_path, L"..");
@@ -1593,7 +1594,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		error_code = JetGetDatabaseFileInfoW(temporary_database_path, &page_size, sizeof(page_size), JET_DbInfoPageSize);
 		if(error_code < 0)
 		{
-			// Default to this value (taken from sample WebCache<base>.dat files) if we can't get it out of the database for some reason.
+			// Default to this value (taken from sample WebCache*.dat files) if we can't get it out of the database for some reason.
 			page_size = 32768;
 			log_print(LOG_WARNING, "Internet Explorer 10 to 11: Failed to get the ESE database's page size with the error code %ld. This value will default to %lu.", error_code, page_size);
 		}
@@ -1814,7 +1815,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						if(error_code >= 0)
 						{
 							// >>>>
-							// >>>> START EXPORTING
+							// >>>> BEGIN EXPORTING
 							// >>>>
 							
 							enum Cache_Column_Index
@@ -2000,8 +2001,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									{
 										{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
 										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time}, {access_count_string},
-										{cache_headers.response}, {cache_headers.server}, {cache_headers.cache_control}, {cache_headers.pragma},
-										{cache_headers.content_type}, {cache_headers.content_length}, {cache_headers.content_encoding},
+										{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+										{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 										{/* Location On Cache */}, {cache_version},
 										{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 										{/* Custom File Group*/}, {/* Custom URL Group */}, {/* SHA-256 */}
@@ -2012,6 +2013,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									params.copy_file_path = full_file_path;
 									params.url = url;
 									params.filename = filename;
+									params.headers = cache_headers;
 									params.short_location_on_cache = short_location_on_cache_with_prefix;
 
 									export_cache_entry(exporter, csv_row, &params);
@@ -2022,7 +2024,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 							}
 
 							// >>>>
-							// >>>> FINISH EXPORTING
+							// >>>> END EXPORTING
 							// >>>>
 
 							error_code = JetCloseTable(session_id, cache_table_id);

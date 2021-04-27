@@ -66,6 +66,10 @@ the output path.
 to 11.
 * Output Name: IE
 
+* Option: -export-mozilla
+* Description: exports the Mozilla cache, including Mozilla Firefox.
+* Output Name: MZ
+
 * Option: -export-flash
 * Description: Exports the Flash Player's shared library cache and
 temporary Flash videos.

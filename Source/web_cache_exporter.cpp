@@ -50,11 +50,12 @@
 	@Author: João Henggeler
 
 	@TODO:
-	- Start adding support for the Mozilla cache format.
-	- Investigate the Unity Web Player cache directory.
-	- Add an option to force copy a opened file (-copy-opened-file).
-	- Add an option to ignore the -filter-by-groups for specific cache exporters (-ignore-filter-for "flash/shockwave/java").
+	- Add an option to group the first website directories by the request origin (-group-by-origin).
+	- Add a "Exporter Warning" CSV column to warn about any potentially corrupted files.
+
 	- Create a "Scripts" directory that's copied to the release build. This can include useful batch files.
+	- Investigate the Unity Web Player cache directory.
+	- Add the DEFAULT_FILE_EXTENSION field to group files.
 */
 
 /*
@@ -76,6 +77,8 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"If you specify an empty path, then a default location is used.\n"
 												"\n"
 												"-export-ie    exports the WinINet cache, including Internet Explorer 4 to 11.\n"
+												"\n"
+												"-export-mozilla    exports the Mozilla cache, including Mozilla Firefox.\n"
 												"\n"
 												"-export-flash    exports the Flash Player cache.\n"
 												"\n"
@@ -134,6 +137,23 @@ static TCHAR* skip_to_suboption(TCHAR* str)
 	return suboption;
 }
 
+// @TODO
+static Cache_Type get_cache_type_from_short_name(const TCHAR* name)
+{
+	Cache_Type result = CACHE_UNKNOWN;
+
+	for(int i = 0; i < NUM_CACHE_TYPES; ++i)
+	{
+		if(strings_are_equal(name, CACHE_TYPE_TO_SHORT_NAME[i]))
+		{
+			result = (Cache_Type) i;
+			break;
+		}
+	}
+
+	return result;
+}
+
 // Parses the application's command line arguments and sets the resulting Exporter structure's members accordingly.
 //
 // @Parameters:
@@ -142,7 +162,7 @@ static TCHAR* skip_to_suboption(TCHAR* str)
 // 3. exporter - The resulting Exporter structure. This must be cleared to zero before calling this function.
 //
 // @Returns: True if every parsed argument was correct. Otherwise, it returns false and the application should terminate.
-static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Exporter* exporter)
+static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Exporter* exporter)
 {
 	bool success = true;
 	bool seen_export_option = false;
@@ -178,33 +198,60 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		{
 			exporter->should_filter_by_groups = true;
 		}
+		else if(strings_are_equal(option, TEXT("-ignore-filter-for")))
+		{
+			if(i+1 < num_arguments)
+			{
+				const TCHAR* name_list = arguments[i+1];
+				String_Array<TCHAR>* split_names = split_string(temporary_arena, name_list, TEXT("/"));
+
+				for(int j = 0; j < split_names->num_strings; ++j)
+				{
+					TCHAR* name = split_names->strings[j];
+					Cache_Type type = get_cache_type_from_short_name(name);
+
+					if(type == CACHE_UNKNOWN || type == CACHE_ALL || type == CACHE_EXPLORE)
+					{
+						if(strings_are_equal(name, TEXT("plugins")))
+						{
+							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
+							{
+								if(IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
+							}
+						}
+						else if(strings_are_equal(name, TEXT("browsers")))
+						{
+							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
+							{
+								if(!IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
+							}
+						}
+						else
+						{
+							success = false;
+							console_print("Unknown cache type '%s' in the -ignore-filter-for option.", name);
+							log_print(LOG_ERROR, "Unknown cache type '%s' in the -ignore-filter-for option.", name);
+						}
+					}
+					else
+					{
+						exporter->should_ignore_filter_for_cache_type[type] = true;
+					}
+				}
+
+				i += 1;
+			}
+		}
 		else if(strings_are_equal(option, TEXT("-load-group-files")))
 		{
 			exporter->should_load_specific_groups_files = true;
 
 			if(i+1 < num_arguments)
 			{
-				TCHAR* group_filenames = push_string_to_arena(temporary_arena, arguments[i+1]);
+				const TCHAR* group_file_list = arguments[i+1];
+				exporter->group_files_to_load = split_string(temporary_arena, group_file_list, TEXT("/"));
 				i += 1;
-
-				const TCHAR* FILENAME_DELIMITER = TEXT("/");
-				TCHAR* remaining_filenames = NULL;
-				TCHAR* filename = _tcstok_s(group_filenames, FILENAME_DELIMITER, &remaining_filenames);
-
-				u32 num_filenames = 0;
-				TCHAR* first_filename = push_arena(temporary_arena, 0, TCHAR);
-				while(filename != NULL)
-				{
-					++num_filenames;
-					size_t size = string_size(filename);
-					push_and_copy_to_arena(temporary_arena, size, u8, filename, size);
-
-					filename = _tcstok_s(NULL, FILENAME_DELIMITER, &remaining_filenames);					
-				}
-
-				exporter->num_group_filenames_to_load = num_filenames;
-				exporter->group_filenames_to_load = build_array_from_contiguous_strings(temporary_arena, first_filename, num_filenames);
-			}			
+			}
 		}
 		else if(strings_are_equal(option, TEXT("-hint-ie")))
 		{
@@ -268,41 +315,26 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 		}
 		else if(string_starts_with(option, TEXT("-export")))
 		{
-			TCHAR* cache_type = skip_to_suboption(option);
+			TCHAR* cache_name = skip_to_suboption(option);
 
-			if(cache_type == NULL)
+			if(cache_name == NULL)
 			{
-				console_print("Missing web cache type in command line option '%s'.", option);
-				log_print(LOG_ERROR, "Argument Parsing: Missing web cache type in command line option '%s'", option);
+				console_print("Missing cache type in the command line option '%s'.", option);
+				log_print(LOG_ERROR, "Argument Parsing: Missing cache type in the command line option '%s'.", option);
 				exporter->command_line_cache_type = CACHE_UNKNOWN;
 				success = false;
-			}
-			else if(strings_are_equal(cache_type, TEXT("-ie")))
-			{
-				exporter->command_line_cache_type = CACHE_INTERNET_EXPLORER;
-			}
-			else if(strings_are_equal(cache_type, TEXT("-mozilla")))
-			{
-				exporter->command_line_cache_type = CACHE_MOZILLA;
-			}
-			else if(strings_are_equal(cache_type, TEXT("-flash")))
-			{
-				exporter->command_line_cache_type = CACHE_FLASH_PLUGIN;
-			}
-			else if(strings_are_equal(cache_type, TEXT("-shockwave")))
-			{
-				exporter->command_line_cache_type = CACHE_SHOCKWAVE_PLUGIN;
-			}
-			else if(strings_are_equal(cache_type, TEXT("-java")))
-			{
-				exporter->command_line_cache_type = CACHE_JAVA_PLUGIN;
 			}
 			else
 			{
-				console_print("Unknown web cache type '%s' in command line option '%s'.", cache_type, option);
-				log_print(LOG_ERROR, "Argument Parsing: Unknown web cache type '%s' in command line option '%s'", cache_type, option);
-				exporter->command_line_cache_type = CACHE_UNKNOWN;
-				success = false;
+				// E.g. "-ie".
+				exporter->command_line_cache_type = get_cache_type_from_short_name(cache_name + 1);
+
+				if(exporter->command_line_cache_type == CACHE_UNKNOWN)
+				{
+					console_print("Unknown cache type '%s' in the command line option '%s'.", cache_name, option);
+					log_print(LOG_ERROR, "Argument Parsing: Unknown cache type '%s' in the command line option '%s'.", cache_name, option);
+					success = false;
+				}
 			}
 
 			bool was_given_cache_path = false;
@@ -392,7 +424,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR* arguments[], Expo
 // this function.
 //
 // @Returns: The number of bytes to allocate for the temporary memory.
-static size_t get_temporary_memory_size_for_os_version(Exporter* exporter)
+static size_t get_temporary_exporter_memory_size_for_os_version(Exporter* exporter)
 {
 	OSVERSIONINFO os_version = exporter->os_version;
 	size_t size_for_os_version = 0;
@@ -440,7 +472,7 @@ static size_t get_temporary_memory_size_for_os_version(Exporter* exporter)
 // 1. exporter - The Exporter structure that contains the necessary information to perform these clean up operations.
 //
 // @Returns: Nothing.
-static void clean_up(Exporter* exporter)
+static void clean_up_exporter(Exporter* exporter)
 {
 	if(exporter->was_temporary_exporter_directory_created)
 	{
@@ -489,8 +521,8 @@ static void clean_up(Exporter* exporter)
 	previous errors occur.
 */
 
-static size_t get_total_external_locations_size(Exporter* exporter, u32* result_num_profiles);
-static void load_external_locations(Exporter* exporter, u32 num_profiles);
+static size_t get_total_external_locations_size(Exporter* exporter, int* result_num_profiles);
+static void load_external_locations(Exporter* exporter, int num_profiles);
 static void export_all_default_or_specific_cache_locations(Exporter* exporter);
 
 int _tmain(int argc, TCHAR* argv[])
@@ -557,20 +589,20 @@ int _tmain(int argc, TCHAR* argv[])
 		console_print("%hs", COMMAND_LINE_HELP_MESSAGE);
 
 		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and terminate.");
-		clean_up(&exporter);
+		clean_up_exporter(&exporter);
 		return 1;
 	}
 
 	Arena* temporary_arena = &(exporter.temporary_arena);
 	{
-		size_t temporary_memory_size = get_temporary_memory_size_for_os_version(&exporter);
+		size_t temporary_memory_size = get_temporary_exporter_memory_size_for_os_version(&exporter);
 		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
 
 		if(!create_arena(temporary_arena, temporary_memory_size))
 		{
 			console_print("Could not allocate enough temporary memory to run the program.");
 			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
-			clean_up(&exporter);
+			clean_up_exporter(&exporter);
 			return 1;
 		}
 
@@ -585,7 +617,7 @@ int _tmain(int argc, TCHAR* argv[])
 			{
 				console_print("Could not allocate enough temporary memory to run the program.");
 				log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
-				clean_up(&exporter);
+				clean_up_exporter(&exporter);
 				return 1;
 			}
 		#endif
@@ -594,12 +626,15 @@ int _tmain(int argc, TCHAR* argv[])
 	if(!parse_exporter_arguments(argc, argv, &exporter))
 	{
 		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will terminate.");
-		clean_up(&exporter);
+		clean_up_exporter(&exporter);
 		return 1;
 	}
 
 	Arena* permanent_arena = &(exporter.permanent_arena);
 	{
+		// Keep any variable-length values from the command line arguments around while we load any group and external locations files.
+		lock_arena(temporary_arena);
+
 		if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) != 0)
 		{
 			// Remove the executable's name from the path.
@@ -610,10 +645,12 @@ int _tmain(int argc, TCHAR* argv[])
 			log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
 		}
 
-		u32 num_groups = 0;
-		u32 num_profiles = 0;
+		PathCombine(exporter.group_files_path, exporter.executable_path, TEXT("Groups"));
+
+		int num_groups = 0;
+		int num_profiles = 0;
 		
-		size_t permanent_memory_size = 	get_total_group_files_size(&exporter, &num_groups);
+		size_t permanent_memory_size = get_total_group_files_size(&exporter, &num_groups);
 		if(exporter.should_load_external_locations)
 		{
 			permanent_memory_size += get_total_external_locations_size(&exporter, &num_profiles);
@@ -625,23 +662,25 @@ int _tmain(int argc, TCHAR* argv[])
 		{
 			console_print("Could not allocate enough permanent memory to run the program.");
 			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", permanent_memory_size);
-			clean_up(&exporter);
+			clean_up_exporter(&exporter);
 			return 1;
 		}
 
-		log_print(LOG_INFO, "Startup: Loading %I32u groups.", num_groups);
+		log_print(LOG_INFO, "Startup: Loading %d groups.", num_groups);
 		load_all_group_files(&exporter, num_groups);
 
 		if(exporter.should_load_external_locations)
 		{
-			log_print(LOG_INFO, "Startup: Loading %I32u profiles from the external locations file '%s'.", num_profiles, exporter.external_locations_file_path);
+			log_print(LOG_INFO, "Startup: Loading %d profiles from the external locations file '%s'.", num_profiles, exporter.external_locations_file_path);
 			load_external_locations(&exporter, num_profiles);			
 		}
 
 		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity before being locked.", get_used_arena_capacity(permanent_arena));
 
-		// @BeginLock: There is no corresponding @EndLock since this memory lasts throughout the program's lifetime.
+		// This memory lasts throughout the program's lifetime.
 		lock_arena(permanent_arena);
+
+		unlock_arena(temporary_arena);
 	}
 
 	#ifndef BUILD_9X
@@ -736,27 +775,21 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 	}
 
-	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around
-	// should be stored in the permanent arena.
 	log_print(LOG_INFO, "Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(temporary_arena));
 	
-	_ASSERT(temporary_arena->num_locks == 0);
-	clear_arena(temporary_arena);
-	exporter.group_filenames_to_load = NULL;
-
 	log_print_newline();
 
 	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_INFO, "Exporter Options:");
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_STRING[exporter.command_line_cache_type]);
+	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_FULL_NAME[exporter.command_line_cache_type]);
 	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", (exporter.should_overwrite_previous_output) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Show Full Paths: %hs", (exporter.should_show_full_paths) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Filter By Groups: %hs", (exporter.should_filter_by_groups) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Load Specific Groups: %hs", (exporter.should_load_specific_groups_files) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Number Of Groups To Load: %Iu", exporter.num_group_filenames_to_load);
+	log_print(LOG_NONE, "- Number Of Groups To Load: %d", (exporter.group_files_to_load != NULL) ? (exporter.group_files_to_load->num_strings) : (-1));
 	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
 	log_print(LOG_NONE, "------------------------------------------------------------");
@@ -785,6 +818,14 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- WinINet Cache Path: '%s'", exporter.wininet_cache_path);
 
 	log_print_newline();
+
+	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around should be stored in the permanent arena.
+	_ASSERT(permanent_arena->num_locks == 1);
+	_ASSERT(temporary_arena->num_locks == 0);
+
+	// Get rid of any variable-length that is no longer necessary.
+	clear_arena(temporary_arena);
+	exporter.group_files_to_load = NULL;
 
 	switch(exporter.command_line_cache_type)
 	{
@@ -841,7 +882,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print_newline();
 	log_print(LOG_INFO, "Finished Running: Created %d CSV files. Processed %d cache entries. Copied %d cached files. Assigned %d filenames.", exporter.total_csv_files_created, exporter.total_processed_files, exporter.total_copied_files, exporter.total_assigned_filenames);
 	
-	clean_up(&exporter);
+	clean_up_exporter(&exporter);
 
 	return 0;
 }
@@ -990,6 +1031,51 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 	StringCchPrintf(result_filename, MAX_PATH_CHARS, TEXT("~WCE-%d"), exporter->num_assigned_filenames);
 }
 
+// Copies an existing file to a new location while taking into account a few quirks, such as copying a temporary file that's being
+// used by the exporter process.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the current cache exporter's parameters.
+// 2. source_path - The fully qualified path to the source file to copy.
+// 3. destination_path - The fully qualified path to the destination file to create.
+// 
+// @Returns: True if the file was copied successfully. Otherwise, false and the error code can be retrieved using GetLastError().
+static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, const TCHAR* destination_path)
+{
+	// @Note: Any function used to copy the file here must set the last Windows error code properly so that we can perform the correct
+	// checks using GetLastError() in copy_file_using_url_directory_structure(). This applies to CopyFile(), create_empty_file(),
+	// copy_file_chunks(), and this function itself.
+	bool copy_success = false;
+
+	Arena* temporary_arena = &(exporter->temporary_arena);
+
+	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
+		copy_success = create_empty_file(destination_path, false);
+	#else
+		copy_success = CopyFile(source_path, destination_path, TRUE) != FALSE;
+
+		// For older Windows versions when we're copying temporary files that are currently being used by the exporter's process.
+		if(!copy_success && GetLastError() == ERROR_SHARING_VIOLATION)
+		{
+			log_print(LOG_WARNING, "Copy Exporter File: Attempting to copy the file '%s' to '%s' chunk by chunk due to a sharing violation.", source_path, destination_path);
+
+			u64 file_size = 0;
+			if(get_file_size(source_path, &file_size))
+			{
+				copy_success = copy_file_chunks(temporary_arena, source_path, file_size, 0, destination_path, false);
+			}
+			else
+			{
+				// Propagate a generic error code for a failure case where we can't attempt to copy the whole file in chunks because we couldn't
+				// determine its size. What matters here is that we specify an error code for every case that this function returns false.
+				SetLastError(CUSTOM_ERROR_FAILED_TO_GET_FILE_SIZE);
+			}
+		}
+	#endif
+
+	return copy_success;
+}
+
 // Copies a file using a given URL's directory structure. If the generated file path already exists, this function will resolve any
 // naming collisions by adding a number to the filename. This function is a core part of the cache exporters.
 //
@@ -1046,7 +1132,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 		return false;
 	}
 
-	Arena* arena = &(exporter->temporary_arena);
+	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	// Copy Target = Base Destination Path
 	TCHAR full_destination_path[MAX_PATH_CHARS] = TEXT("");
@@ -1058,7 +1144,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	if(url != NULL)
 	{
 		TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
-		bool build_target_success = convert_url_to_path(arena, url, url_path) && (PathAppend(full_destination_path, url_path) != FALSE);
+		bool build_target_success = convert_url_to_path(temporary_arena, url, url_path) && (PathAppend(full_destination_path, url_path) != FALSE);
 		if(!build_target_success)
 		{
 			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
@@ -1069,7 +1155,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	_ASSERT(!string_is_empty(full_destination_path));
 
 	// Create every directory in the copy target, while resolving any file naming collisions.
-	// - If a directory with the same name already exists, nothing is done and function continues.
+	// - If a directory with the same name already exists, nothing is done and the function continues.
 	// - If a file with the same name already exists, then the name of the directory will be changed (e.g. "Dir" -> "Dir~1").
 	TCHAR resolved_full_destination_path[MAX_PATH_CHARS] = TEXT("");
 	if(create_directories(full_destination_path, true, resolved_full_destination_path))
@@ -1089,7 +1175,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	truncate_path_components(corrected_filename);
 	correct_reserved_path_components(corrected_filename);
 
-	TCHAR* file_extension = push_string_to_arena(arena, skip_to_file_extension((TCHAR*) filename, true));
+	TCHAR* file_extension = push_string_to_arena(temporary_arena, skip_to_file_extension((TCHAR*) filename, true));
 	correct_url_path_characters(file_extension);
 	truncate_path_components(file_extension);
 	correct_reserved_path_components(file_extension);
@@ -1121,23 +1207,19 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 
 	_ASSERT(!string_is_empty(full_destination_path));
 
-	bool copy_success = false;
-	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-		copy_success = create_empty_file(full_destination_path, false);
-	#else
-		copy_success = CopyFile(full_source_path, full_destination_path, TRUE) != FALSE;
-	#endif
-
 	u32 num_naming_collisions = 0;
 	TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
 	TCHAR full_unique_destination_path[MAX_PATH_CHARS] = TEXT("");
 	StringCchCopy(full_unique_destination_path, MAX_PATH_CHARS, full_destination_path);
 
+	bool copy_success = copy_exporter_file(exporter, full_source_path, full_unique_destination_path);
+
 	// Copy the file to the target directory, while resolving any file naming collisions.
-	// - If a file with the same name already exists, then the current name will be changed (e.g. "File.ext" -> "File~1.ext").
-	// - If a directory with the same name already exists, then the operation above is also performed.
-	while(	!copy_success &&
-			(GetLastError() == ERROR_FILE_EXISTS || (GetLastError() == ERROR_ACCESS_DENIED && does_directory_exist(full_unique_destination_path))) )
+	// - If a file with the same name already exists (ERROR_FILE_EXISTS), then the current name will be changed (e.g. "File.ext" -> "File~1.ext").
+	// - If a directory with the same name already exists (ERROR_ACCESS_DENIED), then the operation above is also performed.
+	#define NAMING_COLLISION() ( GetLastError() == ERROR_FILE_EXISTS || (GetLastError() == ERROR_ACCESS_DENIED && does_directory_exist(full_unique_destination_path)) )
+
+	while(!copy_success && NAMING_COLLISION())
 	{
 		++num_naming_collisions;
 		if(num_naming_collisions == 0)
@@ -1165,13 +1247,13 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 			break;
 		}
 		
-		#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
-			copy_success = create_empty_file(full_unique_destination_path, false);
-		#else
-			copy_success = CopyFile(full_source_path, full_unique_destination_path, TRUE) != FALSE;
-		#endif
+		// Try again with a new name.
+		copy_success = copy_exporter_file(exporter, full_source_path, full_unique_destination_path);
 	}
 	
+	#undef NAMING_COLLISION
+
+	// Set the output values depending on the copy operation's success.
 	if(copy_success)
 	{
 		TCHAR* final_destination_path = (num_naming_collisions == 0) ? (full_destination_path) : (full_unique_destination_path);
@@ -1258,6 +1340,9 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	TCHAR* entry_url = params->url;
 	TCHAR* entry_filename = params->filename;
 
+	TCHAR* entry_request_origin = params->request_origin;
+	Http_Headers entry_headers = params->headers;
+
 	#define IS_STRING_EMPTY(string) ( ((string) == NULL) || string_is_empty(string) )
 
 	TCHAR* location_on_cache = NULL;
@@ -1312,7 +1397,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
-		bool use_value_from_find_data = (value == NULL && optional_file_info != NULL);
+		bool use_value_from_file_info = (value == NULL && optional_file_info != NULL);
 
 		switch(exporter->csv_column_types[i])
 		{
@@ -1325,42 +1410,6 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 				@ExporterParams: Uses the values from the 'params' parameter.
 			*/
 
-			// @CustomGroups
-			case(CSV_CUSTOM_FILE_GROUP):
-			{
-				_ASSERT(value == NULL);
-				file_group_index = i;
-			} break;
-
-			// @CustomGroups
-			case(CSV_CUSTOM_URL_GROUP):
-			{
-				_ASSERT(value == NULL);
-				url_group_index = i;
-			} break;
-
-			case(CSV_SHA_256):
-			{
-				_ASSERT(value == NULL);
-				if(file_exists)
-				{
-					value = generate_sha_256_from_file(temporary_arena, entry_copy_path);
-				}
-			} break;
-
-			// @CustomGroups
-			case(CSV_CONTENT_TYPE):
-			{
-				entry_to_match.mime_type_to_match = value;
-			} break;
-
-			// @CustomGroups @FileInfo
-			case(CSV_FILE_EXTENSION):
-			{
-				if(value == NULL) value = skip_to_file_extension(entry_filename);
-				entry_to_match.file_extension_to_match = value;
-			} break;
-
 			// @FileInfo @ExporterParams
 			case(CSV_FILENAME):
 			{
@@ -1371,6 +1420,117 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			case(CSV_URL):
 			{
 				if(value == NULL) value = entry_url;
+			} break;
+
+			case(CSV_REQUEST_ORIGIN):
+			{
+				if(value == NULL) value = entry_request_origin;
+			} break;
+
+			// @CustomGroups @FileInfo
+			case(CSV_FILE_EXTENSION):
+			{
+				if(value == NULL) value = skip_to_file_extension(entry_filename);
+				entry_to_match.file_extension_to_match = value;
+			} break;
+
+			// @FileInfo
+			case(CSV_FILE_SIZE):
+			{
+				if(IS_STRING_EMPTY(value))
+				{
+					u64 file_size_value = 0;
+					if(use_value_from_file_info)
+					{
+						file_size_value = optional_file_info->object_size;
+					}
+					else
+					{
+						get_file_size(entry_copy_path, &file_size_value);
+					}
+
+					convert_u64_to_string(file_size_value, file_size);
+					value = file_size;
+				}
+			} break;
+
+			// @FileInfo
+			case(CSV_CREATION_TIME):
+			{
+				if(use_value_from_file_info)
+				{
+					format_filetime_date_time(optional_file_info->creation_time, creation_time);
+					value = creation_time;
+				}
+			} break;
+
+			// @FileInfo
+			case(CSV_LAST_WRITE_TIME):
+			{
+				if(use_value_from_file_info)
+				{
+					format_filetime_date_time(optional_file_info->last_write_time, last_write_time);
+					value = last_write_time;
+				}
+			} break;
+
+			// @FileInfo
+			case(CSV_LAST_ACCESS_TIME):
+			{
+				if(use_value_from_file_info)
+				{
+					format_filetime_date_time(optional_file_info->last_access_time, last_access_time);
+					value = last_access_time;
+				}
+			} break;
+
+			// @ExporterParams
+			case(CSV_RESPONSE):
+			{
+				if(value == NULL) value = entry_headers.response;
+			} break;
+
+			// @ExporterParams
+			case(CSV_SERVER):
+			{
+				if(value == NULL) value = entry_headers.server;
+			} break;
+
+			// @ExporterParams
+			case(CSV_CACHE_CONTROL):
+			{
+				if(value == NULL) value = entry_headers.cache_control;
+			} break;
+
+			// @ExporterParams
+			case(CSV_PRAGMA):
+			{
+				if(value == NULL) value = entry_headers.pragma;
+			} break;
+
+			// @CustomGroups @ExporterParams
+			case(CSV_CONTENT_TYPE):
+			{
+				if(value == NULL) value = entry_headers.content_type;
+				entry_to_match.mime_type_to_match = value;
+			} break;
+
+			// @ExporterParams
+			case(CSV_CONTENT_LENGTH):
+			{
+				if(value == NULL) value = entry_headers.content_length;
+			} break;
+
+			// @ExporterParams
+			case(CSV_CONTENT_RANGE):
+			{
+				if(value == NULL) value = entry_headers.content_range;
+			} break;
+
+			// @ExporterParams
+			case(CSV_CONTENT_ENCODING):
+			{
+				if(value == NULL) value = entry_headers.content_encoding;
 			} break;
 
 			// @ExporterParams
@@ -1394,53 +1554,26 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 				value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
 			} break;
 
-			// @FileInfo
-			case(CSV_FILE_SIZE):
+			// @CustomGroups
+			case(CSV_CUSTOM_FILE_GROUP):
 			{
-				if(IS_STRING_EMPTY(value))
-				{
-					u64 file_size_value = 0;
-					if(use_value_from_find_data)
-					{
-						file_size_value = optional_file_info->object_size;
-					}
-					else
-					{
-						get_file_size(entry_copy_path, &file_size_value);
-					}
-
-					convert_u64_to_string(file_size_value, file_size);
-					value = file_size;
-				}
+				_ASSERT(value == NULL);
+				file_group_index = i;
 			} break;
 
-			// @FileInfo
-			case(CSV_CREATION_TIME):
+			// @CustomGroups
+			case(CSV_CUSTOM_URL_GROUP):
 			{
-				if(use_value_from_find_data)
-				{
-					format_filetime_date_time(optional_file_info->creation_time, creation_time);
-					value = creation_time;
-				}
+				_ASSERT(value == NULL);
+				url_group_index = i;
 			} break;
 
-			// @FileInfo
-			case(CSV_LAST_WRITE_TIME):
+			case(CSV_SHA_256):
 			{
-				if(use_value_from_find_data)
+				_ASSERT(value == NULL);
+				if(file_exists)
 				{
-					format_filetime_date_time(optional_file_info->last_write_time, last_write_time);
-					value = last_write_time;
-				}
-			} break;
-
-			// @FileInfo
-			case(CSV_LAST_ACCESS_TIME):
-			{
-				if(use_value_from_find_data)
-				{
-					format_filetime_date_time(optional_file_info->last_access_time, last_access_time);
-					value = last_access_time;
+					value = generate_sha_256_from_file(temporary_arena, entry_copy_path);
 				}
 			} break;
 		}
@@ -1466,7 +1599,8 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		}
 	}
 
-	bool match_allows_for_exporting_entry = (!exporter->should_filter_by_groups) || (exporter->should_filter_by_groups && matched_group);
+	bool match_allows_for_exporting_entry = (!exporter->should_filter_by_groups)
+								|| ( exporter->should_filter_by_groups && (matched_group || exporter->should_ignore_filter_for_cache_type[exporter->current_cache_type]) );
 
 	TCHAR copy_destination_path[MAX_PATH_CHARS] = TEXT("");
 	TCHAR copy_error_code[MAX_INT32_CHARS] = TEXT("");
@@ -1595,8 +1729,8 @@ bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path,
 
 	if(create_success)
 	{
-		*result_file_handle = CreateFile(	result_file_path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL,
-											CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+		*result_file_handle = create_handle(result_file_path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
+											CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE);
 
 		get_handle_success = (*result_file_handle != INVALID_HANDLE_VALUE);
 
@@ -1749,28 +1883,24 @@ static const char* LOCATION_INTERNET_CACHE = "INTERNET_CACHE";
 // 2. result_num_profiles - The number of profiles found.
 //
 // @Returns: The total size in bytes required to store the profiles found.
-static size_t get_total_external_locations_size(Exporter* exporter, u32* result_num_profiles)
+static size_t get_total_external_locations_size(Exporter* exporter, int* result_num_profiles)
 {
-	HANDLE file_handle = INVALID_HANDLE_VALUE;
-	u64 file_size = 0;
-	char* file = (char*) memory_map_entire_file(exporter->external_locations_file_path, &file_handle, &file_size, false);
+	Arena* temporary_arena = &(exporter->temporary_arena);
+	lock_arena(temporary_arena);
 
-	u32 num_profiles = 0;
+	u64 file_size = 0;
+	char* file = (char*) read_entire_file(temporary_arena, exporter->external_locations_file_path, &file_size, true);
+
 	size_t total_locations_size = 0;
+	int num_profiles = 0;
 
 	if(file != NULL)
 	{
-		// Replace the last character (which should be a newline according to the external locations file guidelines)
-		// with a null terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't
-		// the most common way to read a text file line by line, but it works in our case.
-		char* end_of_file = (char*) advance_bytes(file, file_size - 1);
-		*end_of_file = '\0';
-
-		char* remaining_lines = NULL;
-		char* line = strtok_s(file, LINE_DELIMITERS, &remaining_lines);
-
-		while(line != NULL)
+		String_Array<char>* split_lines = split_string(temporary_arena, file, LINE_DELIMITERS);
+		
+		for(int i = 0; i < split_lines->num_strings; ++i)
 		{
+			char* line = split_lines->strings[i];
 			line = skip_leading_whitespace(line);
 
 			if(*line == COMMENT || string_is_empty(line))
@@ -1784,10 +1914,12 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 				// This should guarantee enough memory (in excess) for both types of build (char vs wchar_t).
 				total_locations_size += string_size(line);
 
-				char* name = NULL;
-				char* type = strtok_s(line, TOKEN_DELIMITERS, &name);
-				if(type != NULL)
+				String_Array<char>* split_tokens = split_string(temporary_arena, line, TOKEN_DELIMITERS, 1);
+				
+				if(split_tokens->num_strings == 2)
 				{
+					char* type = split_tokens->strings[0];
+					char* name = split_tokens->strings[1];
 					name = skip_leading_whitespace(name);
 
 					if(strings_are_equal(type, BEGIN_PROFILE) && !string_is_empty(name))
@@ -1795,13 +1927,7 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 						++num_profiles;
 					}
 				}
-				else
-				{
-					_ASSERT(false);
-				}
 			}
-
-			line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
 		}
 	}
 	else
@@ -1809,14 +1935,13 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 		log_print(LOG_ERROR, "Get Total External Locations Size: Failed to load the external locations file '%s'.", exporter->external_locations_file_path);
 	}
 
-	safe_unmap_view_of_file((void**) &file);
-	safe_close_handle(&file_handle);
+	clear_arena(temporary_arena);
+	unlock_arena(temporary_arena);
 
 	*result_num_profiles = num_profiles;
-	
-	int remaining_num_profiles = num_profiles - 1;
+
 	// Total Size = Size for the Profile array + Size for the string data.
-	return 	sizeof(External_Locations) + MAX(remaining_num_profiles, 0) * sizeof(Profile)
+	return 	sizeof(External_Locations) + MAX(num_profiles - 1, 0) * sizeof(Profile)
 			+ total_locations_size * sizeof(TCHAR);
 }
 
@@ -1829,7 +1954,7 @@ static size_t get_total_external_locations_size(Exporter* exporter, u32* result_
 // 2. num_profiles - The number of profiles found by an earlier call to get_total_external_locations_size().
 //
 // @Returns: Nothing.
-static void load_external_locations(Exporter* exporter, u32 num_profiles)
+static void load_external_locations(Exporter* exporter, int num_profiles)
 {
 	if(num_profiles == 0)
 	{
@@ -1841,35 +1966,30 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 	Arena* permanent_arena = &(exporter->permanent_arena);
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
+	lock_arena(temporary_arena);
+
 	// The number of profiles is always greater than zero here.
 	size_t external_locations_size = sizeof(External_Locations) + sizeof(Profile) * (num_profiles - 1);
 	External_Locations* external_locations = push_arena(permanent_arena, external_locations_size, External_Locations);
 	
-	HANDLE file_handle = INVALID_HANDLE_VALUE;
 	u64 file_size = 0;
-	char* file = (char*) memory_map_entire_file(exporter->external_locations_file_path, &file_handle, &file_size, false);
+	char* file = (char*) read_entire_file(temporary_arena, exporter->external_locations_file_path, &file_size, true);
 
-	u32 num_processed_profiles = 0;
+	int num_processed_profiles = 0;
 
 	if(file != NULL)
 	{
-		// Replace the last character (which should be a newline according to the external locations file guidelines)
-		// with a null terminator. Otherwise, we'd read past this memory when using strtok_s(). This probably isn't
-		// the most common way to read a text file line by line, but it works in our case.
-		char* end_of_file = (char*) advance_bytes(file, file_size - 1);
-		*end_of_file = '\0';
-
-		char* remaining_lines = NULL;
-		char* line = strtok_s(file, LINE_DELIMITERS, &remaining_lines);
-
 		// Keep track of which profile we're loading data to.
 		bool seen_begin_list = false;
 		bool is_invalid = false;
 		Profile* profile_array = external_locations->profiles;
 		Profile* profile = NULL;
 
-		while(line != NULL)
+		String_Array<char>* split_lines = split_string(temporary_arena, file, LINE_DELIMITERS);
+		
+		for(int i = 0; i < split_lines->num_strings; ++i)
 		{
+			char* line = split_lines->strings[i];
 			line = skip_leading_whitespace(line);
 
 			if(*line == COMMENT || string_is_empty(line))
@@ -1880,29 +2000,33 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 			else if(!seen_begin_list)
 			{
 				seen_begin_list = true;
+				is_invalid = true;
 
-				char* name = NULL;
-				char* type = strtok_s(line, TOKEN_DELIMITERS, &name);
-				if(type != NULL)
+				String_Array<char>* split_tokens = split_string(temporary_arena, line, TOKEN_DELIMITERS, 1);
+
+				if(split_tokens->num_strings == 2)
 				{
+					char* type = split_tokens->strings[0];
+					char* name = split_tokens->strings[1];
+					name = skip_leading_whitespace(name);
+
 					if(strings_are_equal(type, BEGIN_PROFILE) && !string_is_empty(name))
 					{
 						profile = &profile_array[num_processed_profiles];
 						++num_processed_profiles;
 
-						name = skip_leading_whitespace(name);
+						is_invalid = false;
 						profile->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, name);
 						log_print(LOG_INFO, "Load External Locations: Loading the profile '%s'.", profile->name);
 					}
 					else
 					{
-						is_invalid = true;
 						log_print(LOG_ERROR, "Load External Locations: Skipping invalid profile of type '%hs' and name '%hs'.", type, name);
 					}
 				}
 				else
 				{
-					_ASSERT(false);
+					log_print(LOG_ERROR, "Load External Locations: Found %d tokens while looking for a new profile when two were expected.", split_tokens->num_strings);
 				}
 			}
 			// While processing the current profile.
@@ -1922,10 +2046,12 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 				// Load the path list in the current profile.
 				else
 				{
-					char* path = NULL;
-					char* location_type = strtok_s(line, TOKEN_DELIMITERS, &path);
-					if(location_type != NULL)
+					String_Array<char>* split_tokens = split_string(temporary_arena, line, TOKEN_DELIMITERS, 1);
+
+					if(split_tokens->num_strings == 2)
 					{
+						char* location_type = split_tokens->strings[0];
+						char* path = split_tokens->strings[1];
 						path = skip_leading_whitespace(path);
 
 						if(strings_are_equal(path, NO_LOCATION))
@@ -1933,46 +2059,30 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 							path = "";
 						}
 
-						if(strings_are_equal(location_type, LOCATION_DRIVE))
-						{
-							profile->drive_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
+						#define SET_IF_TYPE(member_type, member_name)\
+						if(strings_are_equal(location_type, member_type))\
+						{\
+							profile->member_name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);\
 						}
-						else if(strings_are_equal(location_type, LOCATION_WINDOWS))
-						{
-							profile->windows_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
-						else if(strings_are_equal(location_type, LOCATION_TEMPORARY))
-						{
-							profile->windows_temporary_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
-						else if(strings_are_equal(location_type, LOCATION_USER_PROFILE))
-						{
-							profile->user_profile_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
-						else if(strings_are_equal(location_type, LOCATION_APPDATA))
-						{
-							profile->appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
-						else if(strings_are_equal(location_type, LOCATION_LOCAL_APPDATA))
-						{
-							profile->local_appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
-						else if(strings_are_equal(location_type, LOCATION_LOCAL_LOW_APPDATA))
-						{
-							profile->local_low_appdata_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
-						else if(strings_are_equal(location_type, LOCATION_INTERNET_CACHE))
-						{
-							profile->wininet_cache_path = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, path);
-						}
+
+						SET_IF_TYPE(LOCATION_DRIVE, drive_path)
+						else SET_IF_TYPE(LOCATION_WINDOWS, windows_path)
+						else SET_IF_TYPE(LOCATION_TEMPORARY, windows_temporary_path)
+						else SET_IF_TYPE(LOCATION_USER_PROFILE, user_profile_path)
+						else SET_IF_TYPE(LOCATION_APPDATA, appdata_path)
+						else SET_IF_TYPE(LOCATION_LOCAL_APPDATA, local_appdata_path)
+						else SET_IF_TYPE(LOCATION_LOCAL_LOW_APPDATA, local_low_appdata_path)
+						else SET_IF_TYPE(LOCATION_INTERNET_CACHE, wininet_cache_path)
 						else
 						{
 							log_print(LOG_ERROR, "Load External Locations: Unknown location type '%hs'.", location_type);
 						}
+
+						#undef SET_IF_TYPE
 					}
 					else
 					{
-						_ASSERT(false);
+						log_print(LOG_ERROR, "Load External Locations: Found %d tokens while loading the path list when two were expected.", split_tokens->num_strings);
 					}
 				}
 			}
@@ -1980,8 +2090,6 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 			{
 				_ASSERT(false);
 			}
-
-			line = strtok_s(NULL, LINE_DELIMITERS, &remaining_lines);
 		}
 
 		if(seen_begin_list)
@@ -1994,13 +2102,13 @@ static void load_external_locations(Exporter* exporter, u32 num_profiles)
 		log_print(LOG_ERROR, "Load External Locations: Failed to load the external locations file '%s'.", exporter->external_locations_file_path);
 	}
 
-	safe_unmap_view_of_file((void**) &file);
-	safe_close_handle(&file_handle);
+	clear_arena(temporary_arena);
+	unlock_arena(temporary_arena);
 
 	external_locations->num_profiles = num_processed_profiles;
 	if(num_processed_profiles != num_profiles)
 	{
-		log_print(LOG_ERROR, "Load External Locations: Loaded %I32u profiles when %I32u were expected.", num_processed_profiles, num_profiles);
+		log_print(LOG_ERROR, "Load External Locations: Loaded %d profiles when %d were expected.", num_processed_profiles, num_profiles);
 	}
 
 	exporter->external_locations = external_locations;
@@ -2043,15 +2151,15 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 		External_Locations* external_locations = exporter->external_locations;
 		_ASSERT(external_locations != NULL);
 
-		console_print("Exporting the cache from %I32u default external locations...", external_locations->num_profiles);
-		log_print(LOG_INFO, "All Locations: Exporting the cache from %I32u default external locations.", external_locations->num_profiles);
+		console_print("Exporting the cache from %d default external locations...", external_locations->num_profiles);
+		log_print(LOG_INFO, "All Locations: Exporting the cache from %d default external locations.", external_locations->num_profiles);
 		log_print_newline();
 
-		for(u32 i = 0; i < external_locations->num_profiles; ++i)
+		for(int i = 0; i < external_locations->num_profiles; ++i)
 		{
 			Profile profile = external_locations->profiles[i];
 			exporter->current_profile_name = profile.name;
-			console_print("- [%I32u of %I32u] Exporting from the profile '%s'...", i+1, external_locations->num_profiles, profile.name);
+			console_print("- [%d of %d] Exporting from the profile '%s'...", i+1, external_locations->num_profiles, profile.name);
 			
 			#define STRING_OR_DEFAULT(str) (str != NULL) ? (str) : (TEXT(""))
 
@@ -2118,7 +2226,18 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 	}
 }
 
-// @TODO
+// Resolves an absolute path from a different computer using the information from the current profile in the external locations file.
+// This function must only be called when the external locations file was passed to the exporter.
+//
+// For example, given the path "D:\Path\File.ext" with the drive path "C:\Old Drives\Computer A" specified in the external locations file,
+// the resulting path is returned as "C:\Old Drives\Computer A\Path\File.ext".
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information from the external locations file.
+// 2. full_path - The absolute path to resolve.
+// 3. result_path - The buffer which receives the resolved path. This buffer must be able to hold MAX_PATH_CHARS characters.
+//
+// @Returns: True if the path was resolved successfully. Otherwise, false. This function returns false if the given path is not absolute.
 bool resolve_exporter_external_locations_path(Exporter* exporter, const TCHAR* full_path, TCHAR* result_path)
 {
 	_ASSERT(exporter->should_load_external_locations);

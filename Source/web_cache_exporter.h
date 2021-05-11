@@ -157,7 +157,7 @@ const TCHAR* const CACHE_TYPE_TO_FULL_NAME[NUM_CACHE_TYPES] =
 {
 	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
 	TEXT("Internet Explorer"), TEXT("Mozilla"),
-	TEXT("Flash Plugin"), TEXT("Shockwave Plugin"), TEXT("Java Plugin")
+	TEXT("Flash Player"), TEXT("Shockwave Player"), TEXT("Java Plugin")
 };
 
 const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[NUM_CACHE_TYPES] =
@@ -204,6 +204,8 @@ struct External_Locations
 	Profile profiles[ANYSIZE_ARRAY];
 };
 
+const size_t MAX_EXPORTER_WARNING_CHARS = 1000;
+
 // A structure that represents a cache exporter. 
 struct Exporter
 {
@@ -216,6 +218,7 @@ struct Exporter
 	bool should_overwrite_previous_output;
 	bool should_filter_by_groups;
 	bool should_show_full_paths;
+	bool should_group_by_request_origin;
 
 	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
 	bool should_load_specific_groups_files;
@@ -262,6 +265,10 @@ struct Exporter
 	TCHAR group_files_path[MAX_PATH_CHARS];
 	TCHAR exporter_temporary_path[MAX_PATH_CHARS];
 	bool was_temporary_exporter_directory_created;
+
+	// The warning message for the current cache entry. This buffer is cleared after each cached file is exported.
+	// See tchar_add_exporter_warning_message().
+	TCHAR warning_message[MAX_EXPORTER_WARNING_CHARS];
 	
 	// The absolute paths to relevant Windows locations. These are used to find the default cache directories.
 	// @DefaultCacheLocations:
@@ -339,7 +346,7 @@ struct Exporter
 // See: export_cache_entry().
 struct Exporter_Params
 {
-	TCHAR* copy_file_path;
+	TCHAR* copy_source_path;
 	TCHAR* url;
 	TCHAR* filename;
 
@@ -353,6 +360,9 @@ struct Exporter_Params
 void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns);
 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
+
+void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_format, ...);
+#define add_exporter_warning_message(exporter, string_format, ...) tchar_add_exporter_warning_message(exporter, TEXT(string_format), __VA_ARGS__)
 
 void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params, Traversal_Object_Info* optional_file_info = NULL);
 

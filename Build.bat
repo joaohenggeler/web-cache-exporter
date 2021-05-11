@@ -1,6 +1,6 @@
 @ECHO OFF
 
-REM This script is used to build the application on Windows using Visual Studio 2005 Professional.
+REM This script is used to build the application on Windows using Visual Studio.
 REM It will define any useful macros (like the version string and the Windows 98 and ME build macro), and set the
 REM correct compiler and linker options. Extra compiler options may be added via the command line.
 REM
@@ -64,8 +64,12 @@ PUSHD "%~dp0"
 	
 	SET "GROUP_FILES_DIR=Groups"
 	SET "SOURCE_GROUP_FILES_DIR=%SOURCE_PATH%\%GROUP_FILES_DIR%"
+	
 	SET "EXTERNAL_LOCATIONS_DIR=ExternalLocations"
 	SET "SOURCE_EXTERNAL_LOCATIONS_DIR=%SOURCE_PATH%\%EXTERNAL_LOCATIONS_DIR%"
+	
+	SET "SCRIPTS_DIR=Scripts"
+	SET "SOURCE_SCRIPTS_DIR=%SOURCE_PATH%\%SCRIPTS_DIR%"
 
 	REM Where to look for third party source files, headers, and libraries.
 	REM - /I "<Path>" - third party header files for the compiler.
@@ -235,7 +239,7 @@ PUSHD "%~dp0"
 	ECHO [%~nx0] Building in %BUILD_MODE% mode...
 	ECHO.
 
-	REM Any any remaining command line arguments to the compiler options.
+	REM Add any remaining command line arguments to the compiler options.
 	SET "COMMAND_LINE_COMPILER_OPTIONS=%*"
 	IF "%COMMAND_LINE_COMPILER_OPTIONS%" NEQ "" (
 		ECHO [%~nx0] Passing extra compiler options from the command line: "%COMMAND_LINE_COMPILER_OPTIONS%"...
@@ -266,6 +270,10 @@ PUSHD "%~dp0"
 
 			ECHO [%~nx0] Copying the source external locations directory...
 			ROBOCOPY "%SOURCE_EXTERNAL_LOCATIONS_DIR%" ".\%EXTERNAL_LOCATIONS_DIR%" /S /XF "*.md" >NUL
+			ECHO.
+
+			ECHO [%~nx0] Copying the source scripts...
+			ROBOCOPY "%SOURCE_SCRIPTS_DIR%" ".\%SCRIPTS_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
 			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_NT_ONLY%"
@@ -342,6 +350,10 @@ PUSHD "%~dp0"
 
 			ECHO [%~nx0] Copying the source external locations directory...
 			ROBOCOPY "%SOURCE_EXTERNAL_LOCATIONS_DIR%" ".\%EXTERNAL_LOCATIONS_DIR%" /S /XF "*.md" >NUL
+			ECHO.
+
+			ECHO [%~nx0] Copying the source scripts...
+			ROBOCOPY "%SOURCE_SCRIPTS_DIR%" ".\%SCRIPTS_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
 			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_NT_ONLY%"
@@ -425,6 +437,10 @@ PUSHD "%~dp0"
 
 			ECHO [%~nx0] Copying the source external locations directory...
 			ROBOCOPY "%SOURCE_EXTERNAL_LOCATIONS_DIR%" ".\%EXTERNAL_LOCATIONS_DIR%" /S /XF "*.md" >NUL
+			ECHO.
+
+			ECHO [%~nx0] Copying the source scripts...
+			ROBOCOPY "%SOURCE_SCRIPTS_DIR%" ".\%SCRIPTS_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
 			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_9X_ONLY%"

@@ -104,7 +104,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME, CSV_ACCESS_COUNT,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING, 
 	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION,
-	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR, CSV_EXPORTER_WARNING,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
@@ -552,7 +552,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.copy_file_path = full_file_path;
+	params.copy_source_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
@@ -930,18 +930,19 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 						{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 						{/* Location On Cache */}, {cache_version},
-						{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+						{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
 						{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 					};
 					_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 					if(was_deallocated)
 					{
+						add_exporter_warning_message(exporter, "Cleared one or more deallocated fields with the value 0x%08X (%I32u) to zero.", DEALLOCATED_VALUE, DEALLOCATED_VALUE);
 						log_print(LOG_WARNING, "Internet Explorer 4 to 9: The entry at (%Iu, %Iu) with %I32u block(s) allocated and the signature 0x%08X contained one or more garbage values (0x%08X). These will be cleared to zero. The filename is '%s' and the URL is '%s'.", block_index_in_byte, byte_index, entry->num_allocated_blocks, entry->signature, DEALLOCATED_VALUE, filename, url);
 					}
 
 					Exporter_Params params = {};
-					params.copy_file_path = full_file_path;
+					params.copy_source_path = full_file_path;
 					params.url = url;
 					params.filename = filename;
 					params.headers = headers;
@@ -2004,13 +2005,13 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 										{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 										{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 										{/* Location On Cache */}, {cache_version},
-										{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+										{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
 										{/* Custom File Group*/}, {/* Custom URL Group */}, {/* SHA-256 */}
 									};
 									_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 									Exporter_Params params = {};
-									params.copy_file_path = full_file_path;
+									params.copy_source_path = full_file_path;
 									params.url = url;
 									params.filename = filename;
 									params.headers = cache_headers;

@@ -1386,23 +1386,22 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 		#ifdef BUILD_9X
 			tchar_url = utf_8_url;
 		#endif
-		
 	}
 
 	return tchar_url;
 }
 
-// Skips the scheme in a URL.
+// Skips the scheme in a URL, including the authority separator if it exists
 //
 // For example:
-// 1. "http://www.example.com" 			-> "//www.example.com"
+// 1. "http://www.example.com" 			-> "www.example.com"
 // 2. "HTTP:http://www.example.com" 	-> "http://www.example.com"
 // 3. "example" 						-> ""
-
+//
 // @Parameters:
 // 1. url - The url whose scheme will be skipped.
 //
-// @Returns: The first character in the URL after the scheme. If the URL is NULL, this function returns NULL.
+// @Returns: The first character in the URL after the scheme and authority separator. If the URL is NULL, this function returns NULL.
 // If the URL doesn't contain a scheme, the end of the string is returned.
 TCHAR* skip_url_scheme(TCHAR* url)
 {
@@ -1413,6 +1412,12 @@ TCHAR* skip_url_scheme(TCHAR* url)
 		if(*url == TEXT(':'))
 		{
 			++url;
+
+			if(*url == TEXT('/') && *(url+1) == TEXT('/'))
+			{
+				url += 2;
+			}
+
 			break;
 		}
 		++url;

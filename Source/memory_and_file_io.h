@@ -499,15 +499,16 @@ enum Csv_Type
 	
 	CSV_LOCATION_IN_OUTPUT,
 	CSV_COPY_ERROR,
+	CSV_EXPORTER_WARNING,
 	
 	CSV_CUSTOM_FILE_GROUP,
 	CSV_CUSTOM_URL_GROUP,
 	CSV_SHA_256,
 
-	// For the Shockwave Plugin:
+	// For the Flash Player:
 	CSV_LIBRARY_SHA_256,
 
-	// For the Shockwave Plugin:
+	// For the Shockwave Player:
 	CSV_DIRECTOR_FILE_TYPE,
 	CSV_XTRA_DESCRIPTION,
 	CSV_XTRA_VERSION,
@@ -532,7 +533,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Cache Origin", "Cache Version",
 	
 	"Location On Cache", "Location On Disk", "Missing File",
-	"Location In Output", "Copy Error",
+	"Location In Output", "Copy Error", "Exporter Warning",
 	"Custom File Group", "Custom URL Group", "SHA-256",
 	
 	"Library SHA-256",
@@ -585,6 +586,7 @@ enum Custom_Error_Code
 	CUSTOM_ERROR_FAILED_TO_BUILD_VALID_DESTINATION_PATH 	= CUSTOM_WIN32_ERROR_CODE(2),
 	CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS 				= CUSTOM_WIN32_ERROR_CODE(3),
 	CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION 				= CUSTOM_WIN32_ERROR_CODE(4),
+	// For copy_exporter_file() and copy_file_chunks(6).
 	CUSTOM_ERROR_FAILED_TO_COPY_FILE_CHUNKS 				= CUSTOM_WIN32_ERROR_CODE(5),
 	CUSTOM_ERROR_FAILED_TO_GET_FILE_SIZE 					= CUSTOM_WIN32_ERROR_CODE(6),
 };

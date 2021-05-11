@@ -11,6 +11,7 @@ disk. It runs on Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10, and
 supports the following cache formats:
 
 * The WinINet cache - Internet Explorer 4 to 11.
+* The Mozilla cache - Mozilla Firefox, Netscape Navigator 6.1 to 9, etc.
 * The Flash Player's shared library cache and temporary Flash videos.
 * The Shockwave Player's cache, including Xtras.
 * The Java Plugin's cache - Java 1.3 to 8.
@@ -67,7 +68,8 @@ to 11.
 * Output Name: IE
 
 * Option: -export-mozilla
-* Description: exports the Mozilla cache, including Mozilla Firefox.
+* Description: exports the Mozilla cache, including Mozilla Firefox and
+Netscape Navigator 6.1 to 9.
 * Output Name: MZ
 
 * Option: -export-flash
@@ -159,6 +161,11 @@ before running.
 * Description: Replaces the "Location On Cache" and "Location In Output"
 CSV columns with the absolute paths on disk.
 
+* Option: -group-by-origin
+* Description: Adds a cached file's request origin domain to the beginning
+of the website directory structure. If a cached file doesn't have this
+information, the normal URL structure is used instead.
+
 Using both -no-copy-files and -no-create-csv will result in an error
 and terminate the application. The -show-full-paths option does nothing
 if -no-create-csv is also used.
@@ -176,8 +183,24 @@ the "Groups" folder.
 * Option: -filter-by-groups
 * Description: Only exports files that match any loaded groups.
 
+* Option: -ignore-filter-for <Cache Names>
+* Description: Overrides the previous option for specific browsers or
+plugins.
+
 * Option: -load-group-files <Group Files>
 * Description: Only loads specific group files.
+
+The <Cache Names> argument is mandatory and specifies a list of browser
+or plugin names, separated by forward slashes. These names are lowercase
+and match the -export options. The names "browsers" and "plugins" can be
+used to refer to all browsers or plugins, respectively. These two categories
+are mutually exclusive.
+
+For example:
+WCE.exe -filter-by-groups -ignore-filter-for "plugins/ie" -export-option
+
+This would filter the output based on any loaded groups, except for web
+plugins (Flash, Shockwave, Java) and for Internet Explorer.
 
 The <Group Files> argument is mandatory and specifies a filename list,
 where the filenames are separated by forward slashes and appear without

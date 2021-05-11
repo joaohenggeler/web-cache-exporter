@@ -163,7 +163,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params params = {};
-	params.copy_file_path = full_file_path;
+	params.copy_source_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
@@ -207,7 +207,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.copy_file_path = full_file_path;
+	params.copy_source_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;

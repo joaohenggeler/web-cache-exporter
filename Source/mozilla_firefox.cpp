@@ -93,7 +93,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LAST_MODIFIED_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME, CSV_ACCESS_COUNT,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING, 
 	CSV_LOCATION_ON_CACHE, CSV_CACHE_ORIGIN, CSV_CACHE_VERSION,
-	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR, CSV_EXPORTER_WARNING,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 
@@ -960,7 +960,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		// The file we'll copy will either be the cached file (if the data is stored in its own file),
 		// or the temporary file (if we had to extract some chunks from a block file).
 		TCHAR cached_file_path[MAX_PATH_CHARS] = TEXT("");
-		TCHAR* copy_file_path = NULL;
+		TCHAR* copy_source_path = NULL;
 
 		TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
 		TCHAR full_location_on_cache[MAX_PATH_CHARS] = TEXT("");
@@ -977,7 +977,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 					PathCombine(cached_file_path, exporter->cache_path, short_data_path);
 					PathCombine(short_location_on_cache, exporter->browser_profile, short_data_path);
 
-					copy_file_path = cached_file_path;
+					copy_source_path = cached_file_path;
 				}
 				else
 				{
@@ -1017,6 +1017,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 								_ASSERT(num_null_bytes <= read_cached_file_size);
 								read_cached_file_size -= num_null_bytes;
+
+								add_exporter_warning_message(exporter, "Removed %I32u bytes from the end of the file due to missing metadata. The file size was reduced from %I32u to %I32u.", num_null_bytes, read_cached_file_size + num_null_bytes, read_cached_file_size);
 								log_print(LOG_WARNING, "Mozilla Cache Version 1: Attempted to find the cached file's size in record %I32u since the metadata was missing. Reduced the size to %I32u after finding %I32u null bytes. The exported file may be corrupted.", i, read_cached_file_size, num_null_bytes);
 							}
 
@@ -1024,7 +1026,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 							if(write_success)
 							{
-								copy_file_path = temporary_file_path;
+								copy_source_path = temporary_file_path;
 							}
 							else
 							{
@@ -1064,13 +1066,13 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 			{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 			{/* Location On Cache */}, {exporter->browser_name}, {cache_version},
-			{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+			{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
 			{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 		};
 		_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 		Exporter_Params params = {};
-		params.copy_file_path = copy_file_path;
+		params.copy_source_path = copy_source_path;
 		params.url = url;
 		params.filename = NULL;
 		params.request_origin = request_origin;
@@ -1428,7 +1430,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	// The file we'll copy will always be the intermediate temporary file that was previously created (unless we fail
 	// to extract some chunks from the cached file).
-	TCHAR* copy_file_path = NULL;
+	TCHAR* copy_source_path = NULL;
 	TCHAR* temporary_file_path = find_params->temporary_file_path;
 	HANDLE temporary_file_handle = find_params->temporary_file_handle;
 
@@ -1437,7 +1439,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	if(copy_success)
 	{
-		copy_file_path = temporary_file_path;
+		copy_source_path = temporary_file_path;
 	}
 	else
 	{
@@ -1454,13 +1456,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 		{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 		{/* Location On Cache */}, {exporter->browser_name}, {cache_version},
-		{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params exporter_params = {};
-	exporter_params.copy_file_path = copy_file_path;
+	exporter_params.copy_source_path = copy_source_path;
 	exporter_params.url = url;
 	exporter_params.filename = NULL;
 	exporter_params.request_origin = request_origin;

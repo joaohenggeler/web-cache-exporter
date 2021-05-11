@@ -33,7 +33,7 @@
 	"example.co.uk", etc.
 
 	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
-	starts with a ';' character, then it's considered a comment and is not processed. All group files must end in a newline.
+	starts with a ';' character, then it's considered a comment and is not processed.
 
 	; This is a comment.
 	BEGIN_FILE_GROUP Flash
@@ -728,31 +728,32 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 		log_print(LOG_ERROR, "Load All Group Files: Loaded %d groups when %d were expected.", num_processed_groups, num_groups);
 	}
 
-	log_print(LOG_INFO, "Load All Group Files: Allocating %I32u bytes for the file signature buffer.", max_num_file_signature_bytes);
+	log_print(LOG_INFO, "Load All Group Files: Allocating %d bytes for the file signature buffer.", max_num_file_signature_bytes);
 	custom_groups->file_signature_buffer = push_arena(permanent_arena, max_num_file_signature_bytes, u8);
 	custom_groups->file_signature_buffer_size = max_num_file_signature_bytes;
 
 	exporter->custom_groups = custom_groups;
 }
 
-// Compares a file signature to an array of bytes and wildcards.
+// Compares an array of bytes read from a file to a previously loaded file signature.
 //
 // @Parameters:
 // 1. file_buffer - The buffer that contains the first bytes from a file. 
 // 2. file_buffer_size - The size of this buffer in bytes.
-// 3. bytes_to_compare - The file signature byte array to compare.
-// 4. is_byte_wildcard - The wildcard byte array to used during this comparison.
-// 5. bytes_to_compare_size - The size of this signature and wildcard array in bytes.
+// 3. signature - The file signature whose bytes and wildcards will be used during this comparison.
 //
 // @Returns: True if the file signature matched. Otherwise, false.
-static bool compare_file_bytes_using_wildcards(	u8* file_buffer, u32 file_buffer_size,
-												u8* bytes_to_compare, bool* is_byte_wildcard, u32 bytes_to_compare_size)
+static bool bytes_match_file_signature(u8* file_buffer, u32 file_buffer_size, File_Signature* signature)
 {
-	if(file_buffer_size < bytes_to_compare_size) return false;
+	// Skip invalid file signatures.
+	if(signature->bytes == NULL) return false;
 
-	for(u32 i = 0; i < bytes_to_compare_size; ++i)
+	// Skip signatures that can never match due to their size.
+	if(file_buffer_size < (u32) signature->num_bytes) return false;
+
+	for(int i = 0; i < signature->num_bytes; ++i)
 	{
-		if(!is_byte_wildcard[i] && file_buffer[i] != bytes_to_compare[i])
+		if(!signature->is_wildcard[i] && file_buffer[i] != signature->bytes[i])
 		{
 			return false;
 		}
@@ -773,6 +774,10 @@ static bool compare_file_bytes_using_wildcards(	u8* file_buffer, u32 file_buffer
 // - "lego.com"
 // - "www.lego.com"
 //
+// @Parameters:
+// 1. host - The URL's host to check.
+// 2. suffix - The suffix to use.
+//
 // @Returns: True if the host ends with that suffix. Otherwise, false.
 static bool url_host_ends_with(const TCHAR* host, const TCHAR* suffix)
 {
@@ -786,6 +791,64 @@ static bool url_host_ends_with(const TCHAR* host, const TCHAR* suffix)
 	bool host_has_period_before_suffix = (suffix_length + 1 <= host_length) && ( *(suffix_in_host - 1) == TEXT('.') );
 
 	return host_has_period_before_suffix && strings_are_equal(suffix_in_host, suffix, true);
+}
+
+// Compares an array of bytes read from a file to a previously loaded file signature.
+//
+// @Parameters:
+// 1. host - The URL's host to match. This value may be NULL.
+// 2. path - The URL's path to match. This value cannot be NULL.
+// 3. domain - The domain whose host and path will be used during this comparison. The path may be NULL, but the host
+// must always be defined.
+//
+// @Returns: True if the domain matched. Otherwise, false.
+static bool url_host_and_path_match_domain(TCHAR* host, TCHAR* path, Domain* domain)
+{
+	// The URL we partioned always has a 'path', but the 'host' might be NULL.
+	// The opposite is true for a URL group: the 'path' might be NULL, but the host always exists.
+	_ASSERT(path != NULL);
+	_ASSERT(domain->host != NULL);
+
+	// Match any top level domain if it was requested in the URL group.
+	TCHAR* last_period = NULL;
+	TCHAR* second_to_last_period = NULL;
+
+	// We'll do this by first removing the current host's top level domain before doing the first comparison.
+	if(domain->match_any_top_or_second_level_domain && host != NULL)
+	{
+		last_period = _tcsrchr(host, TEXT('.'));
+		if(last_period != NULL)
+		{
+			*last_period = TEXT('\0');
+			second_to_last_period = _tcsrchr(host, TEXT('.'));
+		}
+	}
+
+	bool urls_match = (host != NULL) && url_host_ends_with(host, domain->host);
+
+	// Put any removed top level domains back.
+	if(last_period != NULL)
+	{
+		*last_period = TEXT('.');
+	}
+
+	// And by then removing the current host's second level domain before doing a second comparison.
+	// We only need to do this if there wasn't a previous match.
+	if(!urls_match && second_to_last_period != NULL)
+	{
+		*second_to_last_period = TEXT('\0');
+		urls_match = (host != NULL) && url_host_ends_with(host, domain->host);
+		// Put any removed second level domains back.
+		*second_to_last_period = TEXT('.');
+	}
+
+	// If there is also a path to compare, it must match the current URL's path. Otherwise, the whole match fails.
+	if(domain->path != NULL)
+	{
+		urls_match = urls_match && string_starts_with(path, domain->path, true);
+	}
+
+	return urls_match;
 }
 
 // Attempts to match a cached file to any previously loaded groups.
@@ -838,10 +901,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 					File_Signature* signature = group.file_info.file_signatures[j];
 					_ASSERT(signature->num_bytes <= custom_groups->file_signature_buffer_size);
 
-					// Skip invalid file signatures.
-					if(signature->bytes != NULL
-						&& compare_file_bytes_using_wildcards(	custom_groups->file_signature_buffer, file_signature_size,
-																signature->bytes, signature->is_wildcard, signature->num_bytes))
+					if(bytes_match_file_signature(custom_groups->file_signature_buffer, file_signature_size, signature))
 					{
 						matched_file_group_name = group.name;
 					}
@@ -882,52 +942,9 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			{
 				for(int j = 0; j < group.url_info.num_domains; ++j)
 				{
-					// The URL we partioned always has a 'path', but the 'host' might be NULL.
-					// The opposite is true for a URL group: the 'path' might be NULL, but the host always exists.
 					Domain* domain = group.url_info.domains[j];
 
-					// Match any top level domain if it was requested in the URL group.
-					TCHAR* host_to_match = url_parts_to_match.host;
-					TCHAR* last_period = NULL;
-					TCHAR* second_to_last_period = NULL;
-
-					// We'll do this by first removing the current host's top level domain before doing the first comparison.
-					if(domain->match_any_top_or_second_level_domain && host_to_match != NULL)
-					{
-						last_period = _tcsrchr(host_to_match, TEXT('.'));
-						if(last_period != NULL)
-						{
-							*last_period = TEXT('\0');
-							second_to_last_period = _tcsrchr(host_to_match, TEXT('.'));
-						}
-					}
-
-					bool urls_match = (host_to_match != NULL) && url_host_ends_with(host_to_match, domain->host);
-
-					// Put any removed top level domains back.
-					if(last_period != NULL)
-					{
-						*last_period = TEXT('.');
-					}
-
-					// And by then removing the current host's second level domain before doing a second comparison.
-					// We only need to do this if there wasn't a previous match.
-					if(!urls_match && second_to_last_period != NULL)
-					{
-						*second_to_last_period = TEXT('\0');
-						urls_match = (host_to_match != NULL) && url_host_ends_with(host_to_match, domain->host);
-						// Put any removed second level domains back.
-						*second_to_last_period = TEXT('.');
-					}
-
-					// If there is also a path to compare, it must necessarily match the current URL's path.
-					// Otherwise, the whole match fails.
-					if(domain->path != NULL)
-					{
-						urls_match = urls_match && string_starts_with(url_parts_to_match.path, domain->path, true);
-					}
-
-					if(urls_match)
+					if(url_host_and_path_match_domain(url_parts_to_match.host, url_parts_to_match.path, domain))
 					{
 						matched_url_group_name = group.name;
 					}

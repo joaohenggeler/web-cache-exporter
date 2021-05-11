@@ -7,9 +7,8 @@ This feature is only available for the -find-and-export-all command line
 option.
 
 The following section will show you how to define profiles. Lines that start
-with a semicolon ";" are treated as comments and are not processed. External
-locations files must always end in a newline. You can only use spaces and tabs
-as whitespace.
+with a semicolon ";" are treated as comments and are not processed. You can
+only use spaces and tabs as whitespace.
 
 ; This defines the beginning of a profile with the name "Username".
 ; Each profile ends when it reaches the "END" keyword. 
@@ -21,6 +20,8 @@ BEGIN_PROFILE Username
 	;
 	; All of these locations must be specified. Otherwise, the profile will
 	; be skipped.
+
+	DRIVE				C:\My Old Drives\Windows XP
 
 	WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
 	TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Temp
@@ -64,36 +65,39 @@ a modern machine, this situation is extremely unlikely to come up.
 Below is a reference of where these default locations are found in every
 supported Windows version:
 
-1. WINDOWS
+1. DRIVE
+- 98, ME, 2000, XP, Vista, 7, 8.1, 10	C:\ 
+
+2. WINDOWS
 - 98, ME, XP, Vista, 7, 8.1, 10 		C:\WINDOWS
 - 2000 									C:\WINNT
 
-2. TEMPORARY
+3. TEMPORARY
 - 98, ME								C:\WINDOWS\TEMP
 - 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Temp
 - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Local\Temp
 
-3. USER_PROFILE
+4. USER_PROFILE
 - 98, ME 								<None>
 - 2000, XP	 							C:\Documents and Settings\<Username>
 - Vista, 7, 8.1, 10						C:\Users\<Username>
 
-4. APPDATA
+5. APPDATA
 - 98, ME 								C:\WINDOWS\Application Data
 - 2000, XP	 							C:\Documents and Settings\<Username>\Application Data
 - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Roaming
 
-5. LOCAL_APPDATA
+6. LOCAL_APPDATA
 - 98, ME 								<None>
 - 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Application Data
 - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\Local
 
-6. LOCAL_LOW_APPDATA
+7. LOCAL_LOW_APPDATA
 - 98, ME 								<None>
 - 2000, XP	 							<None>
 - Vista, 7, 8.1, 10						C:\Users\<Username>\AppData\LocalLow
 
-7. INTERNET_CACHE
+8. INTERNET_CACHE
 - 98, ME 								C:\WINDOWS\Temporary Internet Files
 - 2000, XP	 							C:\Documents and Settings\<Username>\Local Settings\Temporary Internet Files
 - Vista, 7								C:\Users\<Username>\AppData\Local\Microsoft\Windows\Temporary Internet Files

@@ -165,6 +165,23 @@ BEGIN_FILE_GROUP Playlist
 
 END
 
+BEGIN_FILE_GROUP PostScript
+	
+	BEGIN_FILE_SIGNATURES
+		; "%!"
+		25 21
+	END
+
+	BEGIN_MIME_TYPES
+		application/postscript
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		ps
+	END
+
+END
+
 BEGIN_FILE_GROUP Rich Text Format
 
 	BEGIN_FILE_SIGNATURES

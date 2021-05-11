@@ -50,10 +50,6 @@
 	@Author: João Henggeler
 
 	@TODO:
-	- Add an option to group the first website directories by the request origin (-group-by-origin).
-	- Add a "Exporter Warning" CSV column to warn about any potentially corrupted files.
-
-	- Create a "Scripts" directory that's copied to the release build. This can include useful batch files.
 	- Investigate the Unity Web Player cache directory.
 	- Add the DEFAULT_FILE_EXTENSION field to group files.
 */
@@ -78,7 +74,7 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"-export-ie    exports the WinINet cache, including Internet Explorer 4 to 11.\n"
 												"\n"
-												"-export-mozilla    exports the Mozilla cache, including Mozilla Firefox.\n"
+												"-export-mozilla    exports the Mozilla cache, including Mozilla Firefox and Netscape Navigator 6.1 to 9.\n"
 												"\n"
 												"-export-flash    exports the Flash Player cache.\n"
 												"\n"
@@ -137,7 +133,12 @@ static TCHAR* skip_to_suboption(TCHAR* str)
 	return suboption;
 }
 
-// @TODO
+// Maps a cache exporter's short name to its cache type enum.
+//
+// @Parameters:
+// 1. name - The short name.
+//
+// @Returns: The cache type enum if the name was mapped successfully. Otherwise, this function returns CACHE_UNKNOWN.
 static Cache_Type get_cache_type_from_short_name(const TCHAR* name)
 {
 	Cache_Type result = CACHE_UNKNOWN;
@@ -193,6 +194,10 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		else if(strings_are_equal(option, TEXT("-show-full-paths")))
 		{
 			exporter->should_show_full_paths = true;
+		}
+		else if(strings_are_equal(option, TEXT("-group-by-origin")))
+		{
+			exporter->should_group_by_request_origin = true;
 		}
 		else if(strings_are_equal(option, TEXT("-filter-by-groups")))
 		{
@@ -1031,6 +1036,33 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 	StringCchPrintf(result_filename, MAX_PATH_CHARS, TEXT("~WCE-%d"), exporter->num_assigned_filenames);
 }
 
+// Adds a formatted string to the current exporter's warning message. Successive messages are separated by spaces.
+//
+// Use the add_exporter_warning_message() macro to perform this operation without having to wrap the format string with TEXT().
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the current warning message.
+// 2. string_format - The format string.
+// 3. ... - Zero or more arguments to be inserted in the format string.
+// 
+// @Returns: Nothing.
+void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_format, ...)
+{
+	TCHAR message_buffer[MAX_EXPORTER_WARNING_CHARS] = TEXT("");
+
+	va_list arguments;
+	va_start(arguments, string_format);
+	StringCchVPrintf(message_buffer, MAX_EXPORTER_WARNING_CHARS, string_format, arguments);
+	va_end(arguments);
+
+	if(!string_is_empty(exporter->warning_message))
+	{
+		StringCchCat(exporter->warning_message, MAX_EXPORTER_WARNING_CHARS, TEXT(" "));
+	}
+
+	StringCchCat(exporter->warning_message, MAX_EXPORTER_WARNING_CHARS, message_buffer);
+}
+
 // Copies an existing file to a new location while taking into account a few quirks, such as copying a temporary file that's being
 // used by the exporter process.
 //
@@ -1043,11 +1075,9 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, const TCHAR* destination_path)
 {
 	// @Note: Any function used to copy the file here must set the last Windows error code properly so that we can perform the correct
-	// checks using GetLastError() in copy_file_using_url_directory_structure(). This applies to CopyFile(), create_empty_file(),
+	// checks using GetLastError() in copy_exporter_file_using_url_directory_structure(). This applies to CopyFile(), create_empty_file(),
 	// copy_file_chunks(), and this function itself.
 	bool copy_success = false;
-
-	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
 		copy_success = create_empty_file(destination_path, false);
@@ -1062,6 +1092,7 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, con
 			u64 file_size = 0;
 			if(get_file_size(source_path, &file_size))
 			{
+				Arena* temporary_arena = &(exporter->temporary_arena);
 				copy_success = copy_file_chunks(temporary_arena, source_path, file_size, 0, destination_path, false);
 			}
 			else
@@ -1080,7 +1111,7 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, con
 // naming collisions by adding a number to the filename. This function is a core part of the cache exporters.
 //
 // The final path is built by joining the following paths:
-// 1. The base destination directory.
+// 1. The exporter's current base destination directory.
 // 2. The host and path components of the URL (if a URL was passed to this function).
 // 3. The filename.
 //
@@ -1106,22 +1137,20 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, con
 // that will influence how the file is copied.
 //
 // 2. full_source_path - The fully qualified path to the source file to copy.
-// 3. full_base_directory_path - The fully qualified path to base destination directory.
-// 4. url - The URL whose host and path components are converted into a Windows path. If this string is NULL, only the base directory
+// 3. url - The URL whose host and path components are converted into a Windows path. If this string is NULL, only the base directory
 // and filename will be used.
-// 5. filename - The filename to add to the end of the path.
+// 4. filename - The filename to add to the end of the path.
 //
-// 6. result_destination_path - The final destination path after resolving any naming collisions. This string is only set if this function
+// 5. result_destination_path - The final destination path after resolving any naming collisions. This string is only set if this function
 // returns true. Otherwise, this string will be empty.
-// 7. result_error_code - A string containing the Windows system error code generated after attempting to copy the file. This string can
+// 6. result_error_code - A string containing the Windows system error code generated after attempting to copy the file. This string can
 // only be set if this function returns false. Otherwise, this string will be empty. Note that, if the function terminates before attempting
 // to copy the file due to an error early on, this string will also be empty.
 //
 // @Returns: True if the file was copied successfully. Otherwise, false. This function fails if the source file path is empty.
-static bool copy_file_using_url_directory_structure(	Exporter* exporter,
-														const TCHAR* full_source_path, const TCHAR* full_base_directory_path,
-														const TCHAR* url, const TCHAR* filename,
-														TCHAR* result_destination_path, TCHAR* result_error_code)
+static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter, const TCHAR* full_source_path,
+																const TCHAR* url, const TCHAR* filename,
+																TCHAR* result_destination_path, TCHAR* result_error_code)
 {
 	*result_destination_path = TEXT('\0');
 	*result_error_code = TEXT('\0');
@@ -1133,6 +1162,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 	}
 
 	Arena* temporary_arena = &(exporter->temporary_arena);
+	const TCHAR* full_base_directory_path = exporter->output_copy_path;
 
 	// Copy Target = Base Destination Path
 	TCHAR full_destination_path[MAX_PATH_CHARS] = TEXT("");
@@ -1288,13 +1318,13 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 // The following CSV columns are automatically handled by this function, and cannot be set explicitly:
 //
 // - CSV_LOCATION_ON_CACHE - determined using the 'short_location_on_cache' and 'full_location_on_cache' exporter parameters.
-// - CSV_LOCATION_ON_DISK - determined using the 'copy_file_path' exporter parameter.
-// - CSV_MISSING_FILE - determined using the 'copy_file_path' exporter parameter.
-// - CSV_LOCATION_IN_OUTPUT - determined after copying the file using the 'copy_file_path' exporter parameter.
-// - CSV_COPY_ERROR - determined after copying the file using the 'copy_file_path' exporter parameter.
-// - CSV_CUSTOM_FILE_GROUP - determined using the 'copy_file_path' exporter parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
+// - CSV_LOCATION_ON_DISK - determined using the 'copy_source_path' exporter parameter.
+// - CSV_MISSING_FILE - determined using the 'copy_source_path' exporter parameter.
+// - CSV_LOCATION_IN_OUTPUT - determined after copying the file using the 'copy_source_path' exporter parameter.
+// - CSV_COPY_ERROR - determined after copying the file using the 'copy_source_path' exporter parameter.
+// - CSV_CUSTOM_FILE_GROUP - determined using the 'copy_source_path' exporter parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
 // - CSV_CUSTOM_URL_GROUP - determined using the 'url' exporter parameter.
-// - CSV_SHA_256 - determined using the 'copy_file_path' exporter parameter.
+// - CSV_SHA_256 - determined using the 'copy_source_path' exporter parameter.
 //
 // The following values and columns are also changed if the optional parameter 'optional_file_info' is used:
 //
@@ -1318,7 +1348,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 // automatically.
 //
 // 3. params - The basic exporter parameters used to copy the cached file and fill certain CSV columns for each cache exporter:
-// - The 'copy_file_path' should be defined in most cases, but may be NULL if an exporter has to manipulate the cached data using temporary files.
+// - The 'copy_source_path' should be defined in most cases, but may be NULL if an exporter has to manipulate the cached data using temporary files.
 // It's possible that this manipulation may fail (e.g. extracting the payload from a file), leading to a situation where we don't want to copy anything.
 //
 // - The 'url' may be NULL if the cached file has no URL information associated with it.
@@ -1326,7 +1356,7 @@ static bool copy_file_using_url_directory_structure(	Exporter* exporter,
 // the cached file a unique name.
 //
 // - The 'short_location_on_cache' is always required.
-// - The 'full_location_on_cache' defaults to 'copy_file_path' if it's not set.
+// - The 'full_location_on_cache' defaults to 'copy_source_path' if it's not set.
 //
 // 4. optional_file_info - An optional parameter that specifies additional information about the file that may be use to fill some columns.
 // This value defaults to NULL.
@@ -1336,7 +1366,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 {
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
-	TCHAR* entry_copy_path = params->copy_file_path;
+	TCHAR* entry_source_path = params->copy_source_path;
 	TCHAR* entry_url = params->url;
 	TCHAR* entry_filename = params->filename;
 
@@ -1349,7 +1379,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	{
 		TCHAR* short_location_on_cache = params->short_location_on_cache;
 		TCHAR* full_location_on_cache = params->full_location_on_cache;
-		if(IS_STRING_EMPTY(full_location_on_cache)) full_location_on_cache = entry_copy_path;
+		if(IS_STRING_EMPTY(full_location_on_cache)) full_location_on_cache = entry_source_path;
 		
 		location_on_cache = (exporter->should_show_full_paths) ? (full_location_on_cache) : (short_location_on_cache);	
 	}
@@ -1379,12 +1409,11 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 
 	_ASSERT(!IS_STRING_EMPTY(entry_filename));
 
-	bool file_exists = does_file_exist(entry_copy_path);
+	bool file_exists = does_file_exist(entry_source_path);
 	++(exporter->total_processed_files);
 
 	Matchable_Cache_Entry entry_to_match = {};
-	entry_to_match.full_file_path = entry_copy_path;
-	entry_to_match.url_to_match = entry_url;
+	entry_to_match.full_file_path = entry_source_path;
 
 	ssize_t file_group_index = -1;
 	ssize_t url_group_index = -1;
@@ -1446,7 +1475,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 					}
 					else
 					{
-						get_file_size(entry_copy_path, &file_size_value);
+						get_file_size(entry_source_path, &file_size_value);
 					}
 
 					convert_u64_to_string(file_size_value, file_size);
@@ -1544,7 +1573,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			case(CSV_LOCATION_ON_DISK):
 			{
 				_ASSERT(value == NULL);
-				value = entry_copy_path;
+				value = entry_source_path;
 			} break;
 
 			// @ExporterParams
@@ -1552,6 +1581,13 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			{
 				_ASSERT(value == NULL);
 				value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+			} break;
+
+			// @ExporterParams
+			case(CSV_EXPORTER_WARNING):
+			{
+				_ASSERT(value == NULL);
+				value = exporter->warning_message;
 			} break;
 
 			// @CustomGroups
@@ -1568,12 +1604,13 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 				url_group_index = i;
 			} break;
 
+			// @ExporterParams
 			case(CSV_SHA_256):
 			{
 				_ASSERT(value == NULL);
 				if(file_exists)
 				{
-					value = generate_sha_256_from_file(temporary_arena, entry_copy_path);
+					value = generate_sha_256_from_file(temporary_arena, entry_source_path);
 				}
 			} break;
 		}
@@ -1583,6 +1620,30 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 
 	entry_to_match.should_match_file_group = (file_group_index != -1);
 	entry_to_match.should_match_url_group = (url_group_index != -1);
+
+	// Add the request origin to the beginning of the URL if needed.
+	if(exporter->should_group_by_request_origin && entry_url != NULL && entry_request_origin != NULL)
+	{
+		entry_url = skip_url_scheme(entry_url);
+
+		const TCHAR* GENERIC_SCHEME = TEXT("http://");
+		size_t new_url_size = string_size(GENERIC_SCHEME) + string_size(entry_request_origin) + string_size(entry_url);
+		TCHAR* new_url = push_arena(temporary_arena, new_url_size, TCHAR);
+
+		// Add a generic scheme if the request origin doesn't have one.
+		if(string_is_empty(skip_url_scheme(entry_request_origin)))
+		{
+			StringCbCat(new_url, new_url_size, GENERIC_SCHEME);
+		}
+
+		StringCbCat(new_url, new_url_size, entry_request_origin);
+		StringCbCat(new_url, new_url_size, TEXT("/"));
+		StringCbCat(new_url, new_url_size, entry_url);
+
+		entry_url = new_url;
+	}
+
+	entry_to_match.url_to_match = entry_url;
 
 	// Files can match groups even if they don't exist on disk.
 	bool matched_group = match_cache_entry_to_groups(temporary_arena, exporter->custom_groups, &entry_to_match);
@@ -1606,9 +1667,9 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	TCHAR copy_error_code[MAX_INT32_CHARS] = TEXT("");
 	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)
 	{
-		if(copy_file_using_url_directory_structure(	exporter, entry_copy_path,
-													exporter->output_copy_path, entry_url, entry_filename,
-													copy_destination_path, copy_error_code))
+		if(copy_exporter_file_using_url_directory_structure(exporter, entry_source_path,
+															entry_url, entry_filename,
+															copy_destination_path, copy_error_code))
 		{
 			++(exporter->total_copied_files);
 		}
@@ -1643,6 +1704,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	}
 
 	clear_arena(temporary_arena);
+	exporter->warning_message[0] = TEXT('\0');
 }
 
 // Terminates a cache exporter by performing the following:
@@ -1804,7 +1866,7 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 	computer.
 
 	Here's an example of an external locations file which defines three profiles: Windows 98, Windows XP, and Windows 8.1. If a line
-	starts with a ';' character, then it's considered a comment and is not processed. The external locations file must end in a newline.
+	starts with a ';' character, then it's considered a comment and is not processed.
 	
 	If a location specifies "<None>", then the path is assumed to be empty. This is used when the Windows version of the computer where
 	the files originated didn't have that type of location. This application will create multiple subdirectories in the main output
@@ -1812,6 +1874,8 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 
 	; For Windows 98:
 	BEGIN_PROFILE Default User
+
+		DRIVE				C:\My Old Drives\Windows 98
 
 		WINDOWS				C:\My Old Drives\Windows 98\WINDOWS
 		TEMPORARY			C:\My Old Drives\Windows 98\WINDOWS\TEMP
@@ -1828,6 +1892,8 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 	; For Windows XP:
 	BEGIN_PROFILE <Username>
 
+		DRIVE				C:\My Old Drives\Windows XP
+
 		WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
 		TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Temp
 		USER_PROFILE		C:\My Old Drives\Windows XP\Documents and Settings\<Username>
@@ -1842,6 +1908,8 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 
 	; For Windows 8.1:
 	BEGIN_PROFILE <Username>
+
+		DRIVE				C:\My Old Drives\Windows 8.1
 
 		WINDOWS				C:\My Old Drives\Windows 8.1\Windows
 		TEMPORARY			C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local\Temp

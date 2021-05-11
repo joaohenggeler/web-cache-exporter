@@ -301,7 +301,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params exporter_params = {};
-	exporter_params.copy_file_path = full_file_path;
+	exporter_params.copy_source_path = full_file_path;
 	exporter_params.url = NULL;
 	exporter_params.filename = filename;
 	exporter_params.short_location_on_cache = short_location_on_cache;

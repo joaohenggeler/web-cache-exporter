@@ -42,7 +42,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.copy_file_path = full_file_path;
+	params.copy_source_path = full_file_path;
 	params.url = NULL;
 	params.filename = filename;
 

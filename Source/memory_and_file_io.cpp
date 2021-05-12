@@ -3963,12 +3963,25 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		SYSTEM_HANDLE_INFORMATION* handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
 		ULONG actual_handle_info_size = 0;
 		
+		bool used_virtual_alloc = false;
+		#define FREE_IF_USED_VIRTUAL_ALLOC()\
+		do\
+		{\
+			if(used_virtual_alloc)\
+			{\
+				VirtualFree(handle_info, 0, MEM_RELEASE);\
+				used_virtual_alloc = false;\
+				handle_info = NULL;\
+			}\
+		} while(false, false)
+
 		NTSTATUS error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
 		while(error_code == STATUS_INFO_LENGTH_MISMATCH)
 		{
 			// Clear the previous allocated memory so we can try again with the actual size required. Remember that we locked
 			// the arena before trying to query the information.
 			clear_arena(arena);
+			FREE_IF_USED_VIRTUAL_ALLOC();
 
 			// On the next attempt, the overall size of this information may have changed (new handles could have been created),
 			// so we'll go the extra mile and use the actual size plus an extra bit.
@@ -3983,9 +3996,22 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 			}
 			else
 			{
-				// Ran out of memory to hold all the returned handle information.
-				log_print(LOG_ERROR, "Query File Handle: Ran out of memory while trying to query system information. The required buffer size was %lu bytes.", actual_handle_info_size);
-				break;
+				// Ran out of memory in the arena to hold all the returned handle information.
+				log_print(LOG_WARNING, "Query File Handle: Ran out of memory in the arena while trying to query system information. Attempting to use VirtualAlloc to allocate %lu bytes.", handle_info_size);
+
+				// Try to query the handle information again but with VirtualAlloc().
+				handle_info = (SYSTEM_HANDLE_INFORMATION*) VirtualAlloc(NULL, handle_info_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+				if(handle_info != NULL)
+				{
+					used_virtual_alloc = true;
+					error_code = NtQuerySystemInformation(SystemHandleInformation, handle_info, handle_info_size, &actual_handle_info_size);
+				}
+				else
+				{
+					// Ran out of memory in both the arena and VirtualAlloc().
+					log_print(LOG_ERROR, "Query File Handle: Could not allocate enough memory query system information. The required buffer size was %lu bytes.", handle_info_size);
+					break;
+				}
 			}
 		}
 
@@ -3994,8 +4020,11 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		if(!NT_SUCCESS(error_code))
 		{
 			log_print(LOG_ERROR, "Query File Handle: Failed to query system information with error code %ld.", error_code);
+			FREE_IF_USED_VIRTUAL_ALLOC();
 			return false;
 		}
+
+		log_print(LOG_INFO, "Query File Handle: Processing %lu bytes of handle information.", handle_info_size);
 
 		// When we iterate over these handles, we'll want to check which one corresponds to the desired file path.
 		// To do this robustly, we'll need another handle for this file. Since the whole point of this function is
@@ -4006,6 +4035,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		if(read_attributes_file_handle == INVALID_HANDLE_VALUE)
 		{
 			log_print(LOG_ERROR, "Query File Handle: Failed to get the read attributes files handle for '%ls' with error code %lu.", full_file_path, GetLastError());
+			FREE_IF_USED_VIRTUAL_ALLOC();
 			return false;
 		}
 
@@ -4053,6 +4083,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 
 		safe_close_handle(&read_attributes_file_handle);
+
+		FREE_IF_USED_VIRTUAL_ALLOC();
+		#undef FREE_IF_USED_VIRTUAL_ALLOC
 
 		return success;
 	}

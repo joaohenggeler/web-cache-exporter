@@ -75,6 +75,8 @@ struct Group
 
 			int num_file_extensions;
 			TCHAR** file_extensions;
+
+			TCHAR* default_file_extension;
 		} file_info;
 
 		struct
@@ -110,6 +112,7 @@ struct Matchable_Cache_Entry
 
 	TCHAR* matched_file_group_name;
 	TCHAR* matched_url_group_name;
+	const TCHAR* matched_default_file_extension;
 };
 
 size_t get_total_group_files_size(Exporter* exporter, int* num_groups);

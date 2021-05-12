@@ -50,8 +50,11 @@
 	@Author: João Henggeler
 
 	@TODO:
-	- Investigate the Unity Web Player cache directory.
-	- Add the DEFAULT_FILE_EXTENSION field to group files.
+	- Investigate the Unity Web Player cache format.
+
+	@Future:
+	- Investigate the Netscape Navigator (6.0 and older) cache format.
+	- Decompress cached files depending on the Content-Encoding header.
 */
 
 /*
@@ -219,6 +222,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 					{
 						if(strings_are_equal(name, TEXT("plugins")))
 						{
+							log_print(LOG_INFO, "Argument Parsing: Ignoring filter for any plugin cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
 							{
 								if(IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
@@ -226,6 +230,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 						}
 						else if(strings_are_equal(name, TEXT("browsers")))
 						{
+							log_print(LOG_INFO, "Argument Parsing: Ignoring filter for any browser cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
 							{
 								if(!IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
@@ -235,11 +240,12 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 						{
 							success = false;
 							console_print("Unknown cache type '%s' in the -ignore-filter-for option.", name);
-							log_print(LOG_ERROR, "Unknown cache type '%s' in the -ignore-filter-for option.", name);
+							log_print(LOG_ERROR, "Argument Parsing: Unknown cache type '%s' in the -ignore-filter-for option.", name);
 						}
 					}
 					else
 					{
+						log_print(LOG_INFO, "Argument Parsing: Ignoring filter for the cache type '%s'.", name);
 						exporter->should_ignore_filter_for_cache_type[type] = true;
 					}
 				}
@@ -628,6 +634,7 @@ int _tmain(int argc, TCHAR* argv[])
 		#endif
 	}
 
+	log_print(LOG_INFO, "Startup: Parsing command line arguments.");
 	if(!parse_exporter_arguments(argc, argv, &exporter))
 	{
 		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will terminate.");
@@ -1400,9 +1407,11 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		entry_filename = optional_file_info->object_name;
 	}
 	
+	bool assigned_short_filename = false;
 	TCHAR short_filename[MAX_PATH_CHARS] = TEXT("");
 	if(IS_STRING_EMPTY(entry_filename))
 	{
+		assigned_short_filename = true;
 		assign_exporter_short_filename(exporter, short_filename);
 		entry_filename = short_filename;
 	}
@@ -1667,6 +1676,19 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	TCHAR copy_error_code[MAX_INT32_CHARS] = TEXT("");
 	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)
 	{
+		if(assigned_short_filename && entry_to_match.matched_default_file_extension != NULL)
+		{
+			const TCHAR* FILE_EXTENSION_SEPARATOR = TEXT(".");
+			size_t new_filename_size = string_size(short_filename) + string_size(FILE_EXTENSION_SEPARATOR) + string_size(entry_to_match.matched_default_file_extension);
+			TCHAR* new_filename = push_arena(temporary_arena, new_filename_size, TCHAR);
+
+			StringCbCat(new_filename, new_filename_size, short_filename);
+			StringCbCat(new_filename, new_filename_size, TEXT("."));
+			StringCbCat(new_filename, new_filename_size, entry_to_match.matched_default_file_extension);
+
+			entry_filename = new_filename;
+		}
+
 		if(copy_exporter_file_using_url_directory_structure(exporter, entry_source_path,
 															entry_url, entry_filename,
 															copy_destination_path, copy_error_code))
@@ -1988,7 +2010,6 @@ static size_t get_total_external_locations_size(Exporter* exporter, int* result_
 				{
 					char* type = split_tokens->strings[0];
 					char* name = split_tokens->strings[1];
-					name = skip_leading_whitespace(name);
 
 					if(strings_are_equal(type, BEGIN_PROFILE) && !string_is_empty(name))
 					{
@@ -2076,7 +2097,6 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 				{
 					char* type = split_tokens->strings[0];
 					char* name = split_tokens->strings[1];
-					name = skip_leading_whitespace(name);
 
 					if(strings_are_equal(type, BEGIN_PROFILE) && !string_is_empty(name))
 					{
@@ -2120,7 +2140,6 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 					{
 						char* location_type = split_tokens->strings[0];
 						char* path = split_tokens->strings[1];
-						path = skip_leading_whitespace(path);
 
 						if(strings_are_equal(path, NO_LOCATION))
 						{

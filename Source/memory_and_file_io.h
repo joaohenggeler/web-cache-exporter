@@ -649,14 +649,21 @@ String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_T
 	String_Array<Char_Type>* result = push_arena(arena, sizeof(String_Array<Char_Type>), String_Array<Char_Type>);
 	result->num_strings = 0;
 
+	// Helper macro function that adds any non-empty tokens to the array.
+	#define ADD_STRING_TO_RESULT(value)\
+	do\
+	{\
+		if(!string_is_empty(value))\
+		{\
+			if(result->num_strings > 0) push_arena(arena, sizeof(Char_Type*), u8);\
+			result->strings[result->num_strings] = value;\
+			++(result->num_strings);\
+		}\
+	} while(false, false)
+
 	if(optional_max_splits == 0)
 	{
-		if(!string_is_empty(str))
-		{
-			result->strings[0] = str;
-			++(result->num_strings);
-		}
-		
+		ADD_STRING_TO_RESULT(str);
 		return result;
 	}
 
@@ -664,6 +671,7 @@ String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_T
 	size_t num_delimiter_chars = string_length(delimiters);
 
 	Char_Type* last_value_begin = str;
+	bool found_delimiter = false;
 
 	for(size_t i = 0; i < num_string_chars; ++i)
 	{
@@ -672,43 +680,33 @@ String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_T
 			if(str[i] == delimiters[j])
 			{
 				str[i] = '\0';
-				
-				// Skip any empty values caused by multiple delimiters in a row.
-				if(!string_is_empty(last_value_begin))
-				{
-					if(result->num_strings > 0)
-					{
-						push_arena(arena, sizeof(Char_Type*), u8);
-					}
+				found_delimiter = true;
 
-					result->strings[result->num_strings] = last_value_begin;
-					++(result->num_strings);
-				}
+				// Skip consecutive delimiters.
+				goto continue_outer_loop;
+			}
+		}
 
-				last_value_begin = str + i + 1;
+		if(found_delimiter)
+		{
+			ADD_STRING_TO_RESULT(last_value_begin);
+			found_delimiter = false;
+			last_value_begin = str + i;
+
+			if(optional_max_splits != -1 && result->num_strings >= optional_max_splits)
+			{
 				break;
 			}
 		}
 
-		if(optional_max_splits != -1 && result->num_strings >= optional_max_splits)
-		{
-			break;
-		}
+		continue_outer_loop:;
 	}
 
-	if(!string_is_empty(last_value_begin))
-	{
-		// Add the remainder of the string (which might include delimiters) as
-		// the last value.
-		if(result->num_strings > 0)
-		{
-			push_arena(arena, sizeof(Char_Type*), u8);
-		}
+	// Add the remainder of the string (which might include delimiters) as the last value.
+	ADD_STRING_TO_RESULT(last_value_begin);
+	last_value_begin = NULL;
 
-		result->strings[result->num_strings] = last_value_begin;
-		++(result->num_strings);
-		last_value_begin = NULL;
-	}
+	#undef ADD_STRING_TO_RESULT
 
 	_ASSERT(optional_max_splits == -1 || result->num_strings <= optional_max_splits + 1);
 

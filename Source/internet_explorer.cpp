@@ -453,28 +453,20 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 
 		log_print(LOG_INFO, "Internet Explorer 4 to 9: Exporting the cache from '%s'.", exporter->cache_path);
 
-		TCHAR* index_file_path = NULL;
+		#define EXPORT_USING_INDEX_FILE(short_index_path)\
+		do\
+		{\
+			log_print_newline();\
+			log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking the index file '%hs'.", short_index_path);\
+			PathCombine(exporter->index_path, exporter->cache_path, TEXT(short_index_path));\
+			export_internet_explorer_4_to_9_cache(exporter);\
+			ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);\
+		} while(false, false)
 
-		index_file_path = TEXT("index.dat");
-		log_print_newline();
-		log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking for the index.dat file in '.\\%s'.", index_file_path);
-		PathCombine(exporter->index_path, exporter->cache_path, index_file_path);
-		export_internet_explorer_4_to_9_cache(exporter);
-		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
-
-		index_file_path = TEXT("Content.IE5\\index.dat");
-		log_print_newline();
-		log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking for the index.dat file in '.\\%s'.", index_file_path);
-		PathCombine(exporter->index_path, exporter->cache_path, index_file_path);
-		export_internet_explorer_4_to_9_cache(exporter);
-		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
-
-		index_file_path = TEXT("Low\\Content.IE5\\index.dat");
-		log_print_newline();
-		log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking for the index.dat file in '.\\%s'.", index_file_path);
-		PathCombine(exporter->index_path, exporter->cache_path, index_file_path);
-		export_internet_explorer_4_to_9_cache(exporter);
-		ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);
+		EXPORT_USING_INDEX_FILE("index.dat");
+		EXPORT_USING_INDEX_FILE("Low\\index.dat");
+		EXPORT_USING_INDEX_FILE("Content.IE5\\index.dat");
+		EXPORT_USING_INDEX_FILE("Low\\Content.IE5\\index.dat");
 
 		#ifndef BUILD_9X
 

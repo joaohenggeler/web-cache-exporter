@@ -56,6 +56,18 @@ BEGIN_FILE_GROUP HTML
 		xhtml
 	END
 
+	; This defines a file extension that is added to the end of any cached
+	; file without a name (i.e. a file with a generic name assigned by the
+	; application). This feature makes it easier to use external programs
+	; to view common file formats since the file may match the group due to
+	; its signature and MIME type.
+
+	; If a default file extension is not specified, but the group lists
+	; exactly one file extension, then that one will be used. Default file
+	; extensions have precedence over lists with a single element.
+
+	DEFAULT_FILE_EXTENSION html
+
 END
 
 Although these three types of lists may appear in any order and more than

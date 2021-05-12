@@ -142,6 +142,8 @@ BEGIN_FILE_GROUP Flash
 		swz
 	END
 
+	DEFAULT_FILE_EXTENSION swf
+
 END
 
 BEGIN_FILE_GROUP Flash Cache Metadata

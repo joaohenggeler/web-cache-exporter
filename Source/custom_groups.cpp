@@ -16,9 +16,12 @@
 	1. If a group specifies the file signature "3C 68 74 6D 6C" it will match any file that exists and whose contents begin with "<html".
 	A special identifier "__" can be used to match any byte. If the bytes "3C 68 __ 6D __" are specified, it will match "<html", "<hxmy",
 	"<hamb", etc. If the file's size is smaller than the file signature, it will never match it.
-	2. If a group specifies the MIME type "text/java", it will match "text/javascript", "TEXT/JAVASCRIPT",
-	and "text/javascript; charset=UTF-8".
+	2. If a group specifies the MIME type "text/java", it will match "text/javascript", "TEXT/JAVASCRIPT", and "text/javascript; charset=UTF-8".
 	3. If a group specifies the file extension "htm", it will match .htm and .HTM files, but not .html.
+
+	File groups may also optionally specify a default file extension that is added to the end of any cached file without a name (i.e. a
+	file with a generic name assigned by the application). If a default file extension is not specified, but the group lists exactly one
+	file extension, then that one will be used. Default file extensions have precedence over lists with a single element.
 
 	For URL groups:
 	1. Check if the cached file's original URL matches the group's URL. The entry's URL is separated into a host and path, and the check
@@ -61,6 +64,8 @@
 			swz
 		END
 
+		DEFAULT_FILE_EXTENSION swf
+
 	END
 
 	BEGIN_URL_GROUP Cartoon Network
@@ -94,6 +99,7 @@ static const char* BEGIN_FILE_SIGNATURES = "BEGIN_FILE_SIGNATURES";
 static const TCHAR* BYTE_DELIMITERS = TEXT(" ");
 static const char* BEGIN_MIME_TYPES = "BEGIN_MIME_TYPES";
 static const char* BEGIN_FILE_EXTENSIONS = "BEGIN_FILE_EXTENSIONS";
+static const char* DEFAULT_FILE_EXTENSION = "DEFAULT_FILE_EXTENSION";
 static const char* BEGIN_DOMAINS = "BEGIN_DOMAINS";
 static const TCHAR* ANY_TOP_OR_SECOND_LEVEL_DOMAIN = TEXT(".*");
 static const TCHAR* URL_PATH_DELIMITERS = TEXT("/");
@@ -196,7 +202,6 @@ size_t get_total_group_files_size(Exporter* exporter, int* result_num_groups)
 					{
 						char* group_type = split_tokens->strings[0];
 						char* group_name = split_tokens->strings[1];
-						group_name = skip_leading_whitespace(group_name);
 
 						if( (strings_are_equal(group_type, BEGIN_FILE_GROUP) || strings_are_equal(group_type, BEGIN_URL_GROUP))
 							&& !string_is_empty(group_name) )
@@ -470,6 +475,11 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 					num_domains = 0;
 					domain_strings = NULL;
 				} break;
+
+				default:
+				{
+					_ASSERT(false);
+				} break;
 			}
 
 			current_list_type = LIST_NONE;
@@ -503,8 +513,6 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						{
 							current_group_type = GROUP_URL;
 						}
-
-						group_name = skip_leading_whitespace(group_name);
 
 						if(current_group_type != GROUP_NONE && !string_is_empty(group_name))
 						{
@@ -549,21 +557,37 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						// Found the start of a list.
 						case(LIST_NONE):
 						{
-							if(strings_are_equal(line, BEGIN_FILE_SIGNATURES))
+							String_Array<char>* split_tokens = split_string(temporary_arena, line, TOKEN_DELIMITERS, 1);
+							_ASSERT(split_tokens->num_strings > 0);
+							char* first_token = split_tokens->strings[0];
+
+							if(strings_are_equal(first_token, BEGIN_FILE_SIGNATURES))
 							{
 								current_list_type = LIST_FILE_SIGNATURES;
 							}
-							else if(strings_are_equal(line, BEGIN_MIME_TYPES))
+							else if(strings_are_equal(first_token, BEGIN_MIME_TYPES))
 							{
 								current_list_type = LIST_MIME_TYPES;
 							}
-							else if(strings_are_equal(line, BEGIN_FILE_EXTENSIONS))
+							else if(strings_are_equal(first_token, BEGIN_FILE_EXTENSIONS))
 							{
 								current_list_type = LIST_FILE_EXTENSIONS;
 							}
+							else if(strings_are_equal(first_token, DEFAULT_FILE_EXTENSION))
+							{
+								if(split_tokens->num_strings == 2)
+								{
+									char* second_token = split_tokens->strings[1];
+									group->file_info.default_file_extension = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, second_token);
+								}
+								else
+								{
+									log_print(LOG_ERROR, "Load Group Files: Found %d tokens while looking for a default file extension when two were expected.", split_tokens->num_strings);
+								}
+							}
 							else
 							{
-								log_print(LOG_ERROR, "Load Group File: Unknown group file list type '%hs'.", line);
+								log_print(LOG_ERROR, "Load Group File: Unknown group file list type '%hs'.", first_token);
 							}
 						} break;
 
@@ -591,6 +615,11 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							copy_string_from_list_to_group(	permanent_arena, temporary_arena,
 															line, TOKEN_DELIMITERS,
 															&file_extension_strings, &num_file_extensions);
+						} break;
+
+						default:
+						{
+							_ASSERT(false);
 						} break;
 					}
 				} break;
@@ -620,7 +649,17 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							if(domain_strings == NULL) domain_strings = push_arena(temporary_arena, 0, TCHAR);
 							convert_utf_8_string_to_tchar(temporary_arena, secondary_temporary_arena, line);
 						} break;
+
+						default:
+						{
+							_ASSERT(false);
+						} break;
 					}
+				} break;
+
+				default:
+				{
+					_ASSERT(false);
 				} break;
 			}
 		}
@@ -865,11 +904,12 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 	// If no groups were loaded.
 	if(custom_groups == NULL) return false;
 
+	Group* file_group = NULL;
+	Group* url_group = NULL;
+	
 	bool should_match_file_group = entry_to_match->should_match_file_group;
 	bool should_match_url_group = entry_to_match->should_match_url_group;
-	TCHAR* matched_file_group_name = NULL;
-	TCHAR* matched_url_group_name = NULL;
-	
+
 	TCHAR* full_file_path = entry_to_match->full_file_path;
 	TCHAR* mime_type_to_match = entry_to_match->mime_type_to_match;
 	TCHAR* file_extension_to_match = entry_to_match->file_extension_to_match;
@@ -888,65 +928,63 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 
 	for(int i = 0; i < custom_groups->num_groups; ++i)
 	{
-		Group group = custom_groups->groups[i];
+		Group* group = &(custom_groups->groups[i]);
 
-		// If we have yet to match a file group ('matched_file_group_name' is NULL).
-		if(group.type == GROUP_FILE && should_match_file_group)
+		if(group->type == GROUP_FILE && should_match_file_group)
 		{
 			// Match a file signature by comparing each individual byte while taking into account wildcards, which match any byte.
-			if(matched_file_group_name == NULL && read_file_signature_successfully)
+			if(file_group == NULL && read_file_signature_successfully)
 			{
-				for(int j = 0; j < group.file_info.num_file_signatures; ++j)
+				for(int j = 0; j < group->file_info.num_file_signatures; ++j)
 				{
-					File_Signature* signature = group.file_info.file_signatures[j];
+					File_Signature* signature = group->file_info.file_signatures[j];
 					_ASSERT(signature->num_bytes <= custom_groups->file_signature_buffer_size);
 
 					if(bytes_match_file_signature(custom_groups->file_signature_buffer, file_signature_size, signature))
 					{
-						matched_file_group_name = group.name;
+						file_group = group;
 					}
 				}
 			}
 
 			// Match a MIME type by comparing the beginning of the string (case insensitive).
-			if(matched_file_group_name == NULL && mime_type_to_match != NULL)
+			if(file_group == NULL && mime_type_to_match != NULL)
 			{
-				for(int j = 0; j < group.file_info.num_mime_types; ++j)
+				for(int j = 0; j < group->file_info.num_mime_types; ++j)
 				{
-					TCHAR* mime_type_in_group = group.file_info.mime_types[j];
+					TCHAR* mime_type_in_group = group->file_info.mime_types[j];
 					if(string_starts_with(mime_type_to_match, mime_type_in_group, true))
 					{
-						matched_file_group_name = group.name;
+						file_group = group;
 					}
 				}		
 			}
 
 			// Match a file extension by comparing strings (case insensitive).
-			if(matched_file_group_name == NULL && file_extension_to_match != NULL)
+			if(file_group == NULL && file_extension_to_match != NULL)
 			{
-				for(int j = 0; j < group.file_info.num_file_extensions; ++j)
+				for(int j = 0; j < group->file_info.num_file_extensions; ++j)
 				{
-					TCHAR* file_extension_in_group = group.file_info.file_extensions[j];
+					TCHAR* file_extension_in_group = group->file_info.file_extensions[j];
 					if(strings_are_equal(file_extension_to_match, file_extension_in_group, true))
 					{
-						matched_file_group_name = group.name;
+						file_group = group;
 					}
 				}
 			}
 		}
-		// If we have yet to match a URL group ('matched_url_group_name' is NULL).
-		else if(group.type == GROUP_URL && should_match_url_group)
+		else if(group->type == GROUP_URL && should_match_url_group)
 		{
 			// Match a URL by comparing the ending of the host and beginning of the path components (case insensitive).
-			if(matched_url_group_name == NULL && partioned_url_successfully)
+			if(url_group == NULL && partioned_url_successfully)
 			{
-				for(int j = 0; j < group.url_info.num_domains; ++j)
+				for(int j = 0; j < group->url_info.num_domains; ++j)
 				{
-					Domain* domain = group.url_info.domains[j];
+					Domain* domain = group->url_info.domains[j];
 
 					if(url_host_and_path_match_domain(url_parts_to_match.host, url_parts_to_match.path, domain))
 					{
-						matched_url_group_name = group.name;
+						url_group = group;
 					}
 				}
 			}
@@ -955,16 +993,29 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 		// If we matched the groups we wanted, we don't need to continue checking.
 		// We either don't want to match a given group type (meaning we can exit if we got the other),
 		// or we do want to match it (meaning we need to check if we got it).
-		if( (!should_match_file_group || matched_file_group_name != NULL)
-			&& (!should_match_url_group || matched_url_group_name != NULL) )
+		if( (!should_match_file_group || file_group != NULL) && (!should_match_url_group || url_group != NULL) )
 		{
 			break;
 		}
 	}
 
-	entry_to_match->matched_file_group_name = matched_file_group_name;
-	entry_to_match->matched_url_group_name = matched_url_group_name;
+	entry_to_match->matched_file_group_name = (file_group != NULL) ? (file_group->name) : (NULL);
+	entry_to_match->matched_url_group_name = (url_group != NULL) ? (url_group->name) : (NULL);
+
+	entry_to_match->matched_default_file_extension = NULL;
+
+	if(file_group != NULL)
+	{
+		if(file_group->file_info.default_file_extension != NULL)
+		{
+			entry_to_match->matched_default_file_extension = file_group->file_info.default_file_extension;
+		}
+		else if(file_group->file_info.num_file_extensions == 1)
+		{
+			entry_to_match->matched_default_file_extension = file_group->file_info.file_extensions[0];
+		}
+	}
 
 	// If we matched at least one group.
-	return (matched_file_group_name != NULL) || (matched_url_group_name != NULL);
+	return (file_group != NULL) || (url_group != NULL);
 }

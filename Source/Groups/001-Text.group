@@ -29,6 +29,8 @@ BEGIN_FILE_GROUP Server-Side Script
 		shtml shtm stm
 	END
 
+	DEFAULT_FILE_EXTENSION html
+
 END
 
 BEGIN_FILE_GROUP HTML
@@ -57,6 +59,8 @@ BEGIN_FILE_GROUP HTML
 		htm html
 		xhtml
 	END
+
+	DEFAULT_FILE_EXTENSION html
 
 END
 

@@ -480,6 +480,7 @@ BEGIN_URL_GROUP Microsoft
 	BEGIN_DOMAINS
 		microsoft.com
 		microsoftonline.com
+		s-microsoft.com
 	END
 
 END

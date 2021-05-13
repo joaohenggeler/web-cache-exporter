@@ -15,6 +15,7 @@ supports the following cache formats:
 * The Flash Player's shared library cache and temporary Flash videos.
 * The Shockwave Player's cache, including Xtras.
 * The Java Plugin's cache - Java 1.3 to 8.
+* The Unity Web Player's cache.
 
 This tool was developed to aid the recovery and preservation of lost web
 media (games, animations, virtual worlds, etc) whose files might exist
@@ -84,6 +85,10 @@ temporary Flash videos.
 * Option: -export-java
 * Description: Exports the Java Plugin's cache from Java 1.3 to 8.
 * Output Name: JV
+
+* Option: -export-unity
+* Description: Exports the Unity Web Player's cache.
+* Output Name: UN
 
 For example:
 WCE.exe -export-ie

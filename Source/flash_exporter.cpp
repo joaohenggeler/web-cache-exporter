@@ -1,5 +1,5 @@
 #include "web_cache_exporter.h"
-#include "flash_plugin.h"
+#include "flash_exporter.h"
 
 /*
 	This file defines how the exporter processes the Adobe (previously Macromedia) Flash Player's cache. Note that this cache doesn't
@@ -20,7 +20,7 @@
 
 	This exporter will also look for FLV video files in the Temporary Files directory. These were cached by Flash video players, like
 	YouTube, when these type of files were played in the browser. Note that these videos may also exist in the browser's cache, and
-	should be handled by that specific cache exporter. The Flash Plugin exporter only checks the Temporary Files directory.
+	should be handled by that specific cache exporter. The Flash Player exporter only checks the Temporary Files directory.
 
 	@SupportsCustomCacheLocations:
 	- Same Machine: Unknown if this location can be changed by the user.
@@ -44,7 +44,7 @@ static const TCHAR* OUTPUT_NAME = TEXT("FL");
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
+	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_ACCESS_COUNT, CSV_LIBRARY_SHA_256,
 	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
@@ -62,18 +62,18 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback);
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback);
-void export_default_or_specific_flash_plugin_cache(Exporter* exporter)
+void export_default_or_specific_flash_cache(Exporter* exporter)
 {
-	console_print("Exporting the Flash Plugin's cache...");
+	console_print("Exporting the Flash Player's cache...");
 	
-	initialize_cache_exporter(exporter, CACHE_FLASH_PLUGIN, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_FLASH, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
 			PathCombine(exporter->cache_path, exporter->appdata_path, TEXT("Adobe\\Flash Player"));
 		}
 
-		log_print(LOG_INFO, "Flash Plugin: Exporting the cache and videos from '%s'.", exporter->cache_path);
+		log_print(LOG_INFO, "Flash Player: Exporting the cache and videos from '%s'.", exporter->cache_path);
 		
 		set_exporter_output_copy_subdirectory(exporter, TEXT("Cache"));
 		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_flash_cache_files_callback, exporter);
@@ -87,7 +87,7 @@ void export_default_or_specific_flash_plugin_cache(Exporter* exporter)
 			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, false, find_flash_video_files_callback, exporter);
 		}
 
-		log_print(LOG_INFO, "Flash Plugin: Finished exporting the cache.");
+		log_print(LOG_INFO, "Flash Player: Finished exporting the cache.");
 	}
 	terminate_cache_exporter(exporter);
 }
@@ -103,13 +103,21 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	Arena* arena = &(exporter->temporary_arena);
 
 	TCHAR* filename = callback_info->object_name;
+	TCHAR* file_extension = skip_to_file_extension(filename, true);
+
+	// Skip the HEU metadata files.
+	if(strings_are_equal(file_extension, TEXT(".heu"), true))
+	{
+		return true;
+	}
+
 	TCHAR* full_file_path = callback_info->object_path;
 	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
 
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	TCHAR* access_count = NULL;
 	TCHAR* library_sha_256 = NULL;
 	{
-		TCHAR* file_extension = skip_to_file_extension(filename, true);
 		if(strings_are_equal(file_extension, TEXT(".swz"), true))
 		{
 			TCHAR previous_char = *file_extension;
@@ -126,16 +134,33 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 				// @FormatVersion: Flash Player 9 and later.
 				// @ByteOrder: None. The data is stored as null terminated ASCII strings.
 				// @CharacterEncoding: ASCII.
-				// @DateTimeFormat: Unix time.
+				// @DateTimeFormat: Unix time in milliseconds (_time32 or _time64 * 1000).
 
-				// @Format: Each HEU metadata file contains a few null terminated strings with information about
-				// its respective SWZ file (which packages a shared Flash library).
+				/*
+					Each HEU metadata file contains a few null terminated strings with information about
+					its respective SWZ file (which packages a shared Flash library). For example:
+					
+					0<Null>
+					1226440693312<Null>
+					20<Null>
+					AF62E91CD3379900D89DDF6A3E235D6FADB952B74A00F19CE4E3DCE8630B110A<Null>
+					E389BAC057BA2167FC68536A1032CED6723901C01B6B4A4427AEB576E5E13085<Null>
+				*/
+
 				char* first_in_file 				= metadata_file;
 				char* last_modified_time_in_file 	= skip_to_next_string(first_in_file);
 				char* access_count_in_file 			= skip_to_next_string(last_modified_time_in_file);
 				char* library_sha_256_in_file 		= skip_to_next_string(access_count_in_file);
 				char* fifth_in_file 				= skip_to_next_string(library_sha_256_in_file);
+				
 				fifth_in_file;
+
+				u64 last_modified_time_value = 0;
+				if(convert_string_to_u64(last_modified_time_in_file, &last_modified_time_value))
+				{
+					last_modified_time_value /= 1000;
+					format_time64_t_date_time(last_modified_time_value, last_modified_time);
+				}
 
 				access_count = convert_ansi_string_to_tchar(arena, access_count_in_file);
 				library_sha_256 = convert_ansi_string_to_tchar(arena, library_sha_256_in_file);
@@ -145,7 +170,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Flash Plugin: Failed to open the metadata file '%s'. No additional information about this library will be extracted.", metadata_file_path);
+				log_print(LOG_ERROR, "Flash Player: Failed to open the metadata file '%s'. No additional information about this library will be extracted.", metadata_file_path);
 			}
 
 			*file_extension = previous_char;
@@ -155,7 +180,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
-		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
+		{last_modified_time}, {/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
 		{access_count}, {library_sha_256},
 		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}
@@ -197,7 +222,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
-		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
+		{/* Last Modified Time */}, {/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
 		{/* Access Count */}, {/* Library SHA-256 */},
 		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}

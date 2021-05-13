@@ -1,5 +1,5 @@
 #include "web_cache_exporter.h"
-#include "shockwave_plugin.h"
+#include "shockwave_exporter.h"
 
 /*
 	This file defines how the exporter processes the Adobe (previously Macromedia) Shockwave Player's web plugin cache.
@@ -196,18 +196,18 @@ struct Find_Shockwave_Files_Params
 //
 // @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback);
-void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
+void export_default_or_specific_shockwave_cache(Exporter* exporter)
 {
-	console_print("Exporting the Shockwave Plugin's cache...");
+	console_print("Exporting the Shockwave Player's cache...");
 
-	initialize_cache_exporter(exporter, CACHE_SHOCKWAVE_PLUGIN, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_SHOCKWAVE, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
 			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
 		}
 
-		log_print(LOG_INFO, "Shockwave Plugin: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
+		log_print(LOG_INFO, "Shockwave Player: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
 
 		Find_Shockwave_Files_Params file_params = {};
 		file_params.exporter = exporter;
@@ -227,7 +227,7 @@ void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 			do\
 			{\
 				file_params.location_identifier = identifier;\
-				log_print(LOG_INFO, "Shockwave Plugin: Exporting Xtras from '%s'.", path);\
+				log_print(LOG_INFO, "Shockwave Player: Exporting Xtras from '%s'.", path);\
 				\
 				PathCombine(exporter->cache_path, path, TEXT("Macromedia"));\
 				traverse_directory_objects(exporter->cache_path, TEXT("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);\
@@ -242,7 +242,7 @@ void export_default_or_specific_shockwave_plugin_cache(Exporter* exporter)
 			#undef TRAVERSE_APPDATA_XTRA_FILES
 		}
 
-		log_print(LOG_INFO, "Shockwave Plugin: Finished exporting the cache.");	
+		log_print(LOG_INFO, "Shockwave Player: Finished exporting the cache.");	
 	}
 	terminate_cache_exporter(exporter);
 }
@@ -277,12 +277,12 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 
 		if(!get_file_info(arena, full_file_path, INFO_FILE_DESCRIPTION, &xtra_description))
 		{
-			log_print(LOG_WARNING, "Shockwave Plugin: No file description found for the Xtra '%s'.", filename);
+			log_print(LOG_WARNING, "Shockwave Player: No file description found for the Xtra '%s'.", filename);
 		}
 
 		if(!get_file_info(arena, full_file_path, INFO_PRODUCT_VERSION, &xtra_version))
 		{
-			log_print(LOG_WARNING, "Shockwave Plugin: No product version found for the Xtra '%s'.", filename);
+			log_print(LOG_WARNING, "Shockwave Player: No product version found for the Xtra '%s'.", filename);
 		}
 	}
 	else

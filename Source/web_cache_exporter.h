@@ -145,11 +145,12 @@ enum Cache_Type
 	CACHE_INTERNET_EXPLORER = 3,
 	CACHE_MOZILLA = 4,
 
-	CACHE_FLASH_PLUGIN = 5,
-	CACHE_SHOCKWAVE_PLUGIN = 6,
-	CACHE_JAVA_PLUGIN = 7,
+	CACHE_FLASH = 5,
+	CACHE_SHOCKWAVE = 6,
+	CACHE_JAVA = 7,
+	CACHE_UNITY = 8,
 	
-	NUM_CACHE_TYPES = 8
+	NUM_CACHE_TYPES = 9
 };
 
 // An array that maps the previous values to full and short names.
@@ -157,14 +158,14 @@ const TCHAR* const CACHE_TYPE_TO_FULL_NAME[NUM_CACHE_TYPES] =
 {
 	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
 	TEXT("Internet Explorer"), TEXT("Mozilla"),
-	TEXT("Flash Player"), TEXT("Shockwave Player"), TEXT("Java Plugin")
+	TEXT("Flash Player"), TEXT("Shockwave Player"), TEXT("Java Plugin"), TEXT("Unity Web Player")
 };
 
 const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[NUM_CACHE_TYPES] =
 {
 	TEXT("unknown"), TEXT("all"), TEXT("explore"),
 	TEXT("ie"), TEXT("mozilla"),
-	TEXT("flash"), TEXT("shockwave"), TEXT("java")
+	TEXT("flash"), TEXT("shockwave"), TEXT("java"), TEXT("unity")
 };
 
 // Whether a given cache type belongs to a web plugin or not (i.e. a web browser).
@@ -172,7 +173,7 @@ const bool IS_CACHE_TYPE_PLUGIN[NUM_CACHE_TYPES] =
 {
 	false, false, false,
 	false, false,
-	true, true, true
+	true, true, true, true
 };
 
 #include "memory_and_file_io.h"

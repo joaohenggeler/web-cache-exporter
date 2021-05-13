@@ -785,23 +785,6 @@ bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_
 	return strings_are_equal(suffix_in_str, suffix, optional_case_insensitive);
 }
 
-// Checks if a string contains a specific character.
-//
-// @Parameters:
-// 1. str - The string to check.
-// 2. chars - The character to search for.
-//
-// @Returns: True if the character appears in the string. Otherwise, false.
-bool string_contains_char(const char* str, char chr)
-{
-	return strchr(str, chr) != NULL;
-}
-
-bool string_contains_char(const wchar_t* str, wchar_t chr)
-{
-	return wcschr(str, chr) != NULL;
-}
-
 // Converts a string to uppercase.
 //
 // @Parameters:
@@ -876,15 +859,15 @@ wchar_t* skip_leading_whitespace(wchar_t* str)
 }
 
 // Converts an integer of a given size in base 10 to a string.
-// Supported integer sizes: u32, u64, and s64.
 //
 // @Parameters:
 // 1. value - The integer value to convert.
-// 2. result_string - The resulting string conversion.
+// 2. result_string - The converted string.
 //
-// @Returns: True if the integer was converted correctly. Otherwise, it returns false.
+// @Returns: True if the integer was converted successfully. Otherwise, false.
 
 static const size_t INT_FORMAT_RADIX = 10;
+
 bool convert_u32_to_string(u32 value, TCHAR* result_string)
 {
 	bool success = _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
@@ -908,6 +891,21 @@ bool convert_s64_to_string(s64 value, TCHAR* result_string)
 	bool success = _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
 	if(!success) *result_string = TEXT('\0');
 	return success;
+}
+
+// Converts a string containing a value in base 10 to an integer of a given size.
+//
+// @Parameters:
+// 1. str - The string to convert.
+// 2. result_value - The converted integer value.
+//
+// @Returns: True if the string was converted successfully. Otherwise, false.
+
+bool convert_string_to_u64(const char* str, u64* result_value)
+{
+	char* end = NULL;
+	*result_value = _strtoui64(str, &end, INT_FORMAT_RADIX);
+	return (end != str);
 }
 
 // Converts a single hexadecimal character to an integer.
@@ -1664,7 +1662,7 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Parse Cache Headers: The following header line could not be separated into a key and value pair: '%hs'.", line);
+				log_print(LOG_WARNING, "Parse Cache Headers: Could not separate the header line into a key and value pair.");
 			}
 
 		}
@@ -4167,6 +4165,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 				bool reached_end_of_file = false;
 				u32 num_read_retry_attempts = 0;
 				const u32 MAX_READ_RETRY_ATTEMPTS = 10;
+
+				// @Future: Could NtSuspendProcess() be used to suspend the process that is holding the file open
+				// while we read it? Though that might not be a good idea when copying the cache database that is
+				// being used by Windows...
 
 				do
 				{

@@ -1,5 +1,5 @@
 #include "web_cache_exporter.h"
-#include "java_plugin.h"
+#include "java_exporter.h"
 
 /*
 	This file defines how the exporter processes the Java Plugin's cache, which stores resources that are requested by Java applets.
@@ -115,20 +115,20 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // @Returns: Nothing.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback);
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback);
-void export_default_or_specific_java_plugin_cache(Exporter* exporter)
+void export_default_or_specific_java_cache(Exporter* exporter)
 {
 	console_print("Exporting the Java Plugin's cache...");
 
-	initialize_cache_exporter(exporter, CACHE_JAVA_PLUGIN, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_JAVA, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
-		TCHAR* appdata_path = NULL;
+		TCHAR* java_appdata_path = NULL;
 		if(exporter->is_exporting_from_default_locations)
 		{
-			appdata_path = exporter->local_low_appdata_path;
-			if(string_is_empty(appdata_path)) appdata_path = exporter->appdata_path;
+			java_appdata_path = exporter->local_low_appdata_path;
+			if(string_is_empty(java_appdata_path)) java_appdata_path = exporter->appdata_path;
 
 			// For Java 1.4 and later (distributed by Sun or Oracle).
-			PathCombine(exporter->cache_path, appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
+			PathCombine(exporter->cache_path, java_appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
 		}
 
 		log_print(LOG_INFO, "Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
@@ -137,21 +137,21 @@ void export_default_or_specific_java_plugin_cache(Exporter* exporter)
 		
 		if(exporter->is_exporting_from_default_locations)
 		{
-			TCHAR* user_home_path = exporter->user_profile_path;
-			if(string_is_empty(user_home_path)) user_home_path = exporter->windows_path;
+			TCHAR* java_user_home_path = exporter->user_profile_path;
+			if(string_is_empty(java_user_home_path)) java_user_home_path = exporter->windows_path;
 		
 			// For Java 1.4 and later (distributed by IBM).
-			PathCombine(exporter->cache_path, appdata_path, TEXT("IBM\\Java\\Deployment\\cache"));
+			PathCombine(exporter->cache_path, java_appdata_path, TEXT("IBM\\Java\\Deployment\\cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
 			// For Java 1.4.
-			PathCombine(exporter->cache_path, user_home_path, TEXT(".jpi_cache"));
+			PathCombine(exporter->cache_path, java_user_home_path, TEXT(".jpi_cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
 			// For Java 1.3.
-			PathCombine(exporter->cache_path, user_home_path, TEXT("java_plugin_AppletStore"));
+			PathCombine(exporter->cache_path, java_user_home_path, TEXT("java_plugin_AppletStore"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
 			set_exporter_output_copy_subdirectory(exporter, TEXT("AppletStore"));
 			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);

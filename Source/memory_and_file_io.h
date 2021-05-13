@@ -82,6 +82,9 @@ u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
 #define SWAP_BYTE_ORDER(variable) variable = swap_byte_order(variable)
 
+// @Future: Maybe it would be clearer if we had two macros, like LITTLE_ENDIAN_TO_HOST() and BIG_ENDIAN_TO_HOST(), that
+// would convert from one endianness to the host one.
+
 bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_compare);
 
 /*
@@ -133,9 +136,6 @@ bool string_starts_with(const wchar_t* str, const wchar_t* prefix, bool optional
 
 bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_insensitive = false);
 
-bool string_contains_char(const char* str, char chr);
-bool string_contains_char(const wchar_t* str, wchar_t chr);
-
 void string_to_uppercase(TCHAR* str);
 void string_unescape(TCHAR* str);
 
@@ -152,6 +152,7 @@ bool convert_u32_to_string(u32 value, TCHAR* result_string);
 bool convert_s32_to_string(s32 value, TCHAR* result_string);
 bool convert_u64_to_string(u64 value, TCHAR* result_string);
 bool convert_s64_to_string(s64 value, TCHAR* result_string);
+bool convert_string_to_u64(const char* str, u64* result_value);
 
 bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byte);
 

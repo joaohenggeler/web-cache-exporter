@@ -1,5 +1,5 @@
 #include "web_cache_exporter.h"
-#include "internet_explorer.h"
+#include "internet_explorer_exporter.h"
 
 #ifndef BUILD_9X
 	// Minimum supported version for the JET Blue / ESE API used by the Internet Explorer 10 and 11's exporter:
@@ -18,6 +18,9 @@
 	// - Check this option when installing: Install the Windows Vista Headers and Libraries.
 	// - Installs to: C:\Program Files\Microsoft SDKs\Windows\v6.0
 	// Newer Visual Studio versions already include this file.
+
+	// @Future: We could maybe parse a subset of the format ourselves and remove the dependency above by investigating the source code:
+	// https://github.com/microsoft/Extensible-Storage-Engine
 #endif
 
 /*

@@ -1,10 +1,11 @@
 #include "web_cache_exporter.h"
 
-#include "internet_explorer.h"
-#include "mozilla_firefox.h"
-#include "flash_plugin.h"
-#include "shockwave_plugin.h"
-#include "java_plugin.h"
+#include "internet_explorer_exporter.h"
+#include "mozilla_exporter.h"
+#include "flash_exporter.h"
+#include "shockwave_exporter.h"
+#include "java_exporter.h"
+#include "unity_exporter.h"
 
 #include "explore_files.h"
 
@@ -26,10 +27,9 @@
 	maintain compatibility with Windows 98 and ME. This was the first real C/C++ program I wrote outside of university assignments
 	so it may not do certain things in the most optimal way.
 
-	- The exporters are located in a .cpp file called "<Browser Name>.cpp" for web browsers and "<Plugin Name>_plugin.cpp" for web
-	plugins. For example, "internet_explorer.cpp" and "shockwave_plugin.cpp". Each one is free to implement how they read their
-	respective cache formats in the way that best suits the data, exposing one function called export_default_or_specific_<Name>_cache
-	that takes the Exporter as a parameter.
+	- The exporters are located in a .cpp file called "<Name>_exporter.cpp" for both web browsers and web plugins. Each one is free
+	to implement how they read their respective cache formats in the way that best suits the data, exposing one function called
+	export_default_or_specific_<Name>_cache that takes the Exporter as a parameter.
 
 	- The "memory_and_file_io.cpp" file defines functions for memory management, file I/O, date time formatting, string, path, and
 	URL manipulation, etc. The "custom_groups.cpp" file defines the functions used to load .group files, and match each cache entry
@@ -48,9 +48,6 @@
 	average user to check their cache, this behavior is not desirable.
 
 	@Author: João Henggeler
-
-	@TODO:
-	- Investigate the Unity Web Player cache format.
 
 	@Future:
 	- Investigate the Netscape Navigator (6.0 and older) cache format.
@@ -84,6 +81,8 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"-export-shockwave    exports the Shockwave Player cache.\n"
 												"\n"
 												"-export-java    exports the Java Plugin cache.\n"
+												"\n"
+												"-export-unity    exports the Unity Web Player cache.\n"
 												"\n"
 												"########## [1] EXAMPLES:\n"
 												"\n"
@@ -851,19 +850,24 @@ int _tmain(int argc, TCHAR* argv[])
 			export_default_or_specific_mozilla_cache(&exporter);
 		} break;
 
-		case(CACHE_FLASH_PLUGIN):
+		case(CACHE_FLASH):
 		{
-			export_default_or_specific_flash_plugin_cache(&exporter);
+			export_default_or_specific_flash_cache(&exporter);
 		} break;
 
-		case(CACHE_SHOCKWAVE_PLUGIN):
+		case(CACHE_SHOCKWAVE):
 		{
-			export_default_or_specific_shockwave_plugin_cache(&exporter);
+			export_default_or_specific_shockwave_cache(&exporter);
 		} break;
 
-		case(CACHE_JAVA_PLUGIN):
+		case(CACHE_JAVA):
 		{
-			export_default_or_specific_java_plugin_cache(&exporter);
+			export_default_or_specific_java_cache(&exporter);
+		} break;
+
+		case(CACHE_UNITY):
+		{
+			export_default_or_specific_unity_cache(&exporter);
 		} break;
 
 		case(CACHE_ALL):
@@ -2215,13 +2219,16 @@ static void export_all_cache_locations(Exporter* exporter)
 	export_default_or_specific_mozilla_cache(exporter);
 	log_print_newline();
 
-	export_default_or_specific_flash_plugin_cache(exporter);
+	export_default_or_specific_flash_cache(exporter);
 	log_print_newline();
 
-	export_default_or_specific_shockwave_plugin_cache(exporter);
+	export_default_or_specific_shockwave_cache(exporter);
 	log_print_newline();
 
-	export_default_or_specific_java_plugin_cache(exporter);
+	export_default_or_specific_java_cache(exporter);
+	log_print_newline();
+
+	export_default_or_specific_unity_cache(exporter);
 }
 
 // Entry point for a cache exporter that handles every supported cache type. This function exports from a given number of locations if

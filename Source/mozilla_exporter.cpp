@@ -1,5 +1,5 @@
 #include "web_cache_exporter.h"
-#include "mozilla_firefox.h"
+#include "mozilla_exporter.h"
 
 /*
 	This file defines how the exporter processes the cache format used by Mozilla-based browsers, like Firefox and SeaMonkey.
@@ -20,6 +20,7 @@
 	- SeaMonkey 					"Mozilla\SeaMonkey"
 	- Pale Moon 					"Moonchild Productions\Pale Moon"
 	- Basilisk						"Moonchild Productions\Basilisk"
+	- Waterfox						"Waterfox"
 	- K-Meleon						"K-Meleon"
 	- Netscape Navigator			"Netscape\Navigator" (for 9.x)
 									"Netscape\NSB" (for 8.x)

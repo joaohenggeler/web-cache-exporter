@@ -18,9 +18,8 @@
 
 	The previously mentioned Asset Cache is in: <Cache Location>\AssetCache\<8 Character Directory>
 
-	This exporter will also look for FLV video files in the Temporary Files directory. These were cached by Flash video players, like
-	YouTube, when these type of files were played in the browser. Note that these videos may also exist in the browser's cache, and
-	should be handled by that specific cache exporter. The Flash Player exporter only checks the Temporary Files directory.
+	This exporter will also look for FLV video files in the Temporary Files directory. These were cached by Flash video players (e.g. 
+	YouTube's old player) when they were watched in a browser.
 
 	@SupportsCustomCacheLocations:
 	- Same Machine: Unknown if this location can be changed by the user.

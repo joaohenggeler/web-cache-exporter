@@ -1,10 +1,11 @@
-; This file lists any websites that contain one or more pieces of lost web media
-; that are relevant to web game preservation.
+; This file lists any websites that contain one or more pieces of lost web media, such
+; as games, animations, and virtual worlds.
 ;
 ; This list isn't meant to be exhaustive and should generally be used for games
 ; and websites that fit one of the following criteria:
 ;
-; 1. HTML5 games since HTML and JavaScript files may be excluded to save space.
+; 1. HTML5 games since HTML and JavaScript files may be excluded when running the
+; application in order to save space.
 ; 2. Games with a lot of files and whose structure (filenames, directory structure,
 ; embed tags) is largely unknown (e.g. Big Fat Awesome House Party).
 ; 3. Websites that hosted one or more original games that are now lost (e.g. Postopia).

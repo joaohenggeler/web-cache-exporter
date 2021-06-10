@@ -36,7 +36,7 @@ static const TCHAR* OUTPUT_NAME = TEXT("UN");
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME,
+	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
@@ -102,7 +102,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 		set_exporter_output_copy_subdirectory(exporter, copy_subdirectory);
 	}
 
-	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
 	{
 		TCHAR metadata_file_path[MAX_PATH_CHARS] = TEXT("");
 		PathCombine(metadata_file_path, callback_info->directory_path, TEXT("__info"));
@@ -130,7 +130,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 			#define GET_VALUE_OR_EMPTY_STRING(index) (split_lines->num_strings > index + 1) ? (split_lines->strings[index]) : ("")
 
 			char* first_in_file = GET_VALUE_OR_EMPTY_STRING(0);
-			char* expiry_time_in_file = GET_VALUE_OR_EMPTY_STRING(1);
+			char* last_modified_time_in_file = GET_VALUE_OR_EMPTY_STRING(1);
 			char* third_in_file = GET_VALUE_OR_EMPTY_STRING(2);
 			char* filename_in_file = GET_VALUE_OR_EMPTY_STRING(3);
 
@@ -138,10 +138,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 
 			#undef GET_VALUE_OR_EMPTY_STRING
 
-			u64 expiry_time_value = 0;
-			if(convert_string_to_u64(expiry_time_in_file, &expiry_time_value))
+			u64 last_modified_time_value = 0;
+			if(convert_string_to_u64(last_modified_time_in_file, &last_modified_time_value))
 			{
-				format_time64_t_date_time(expiry_time_value, expiry_time);
+				format_time64_t_date_time(last_modified_time_value, last_modified_time);
 			}
 		}
 		else
@@ -153,7 +153,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
-		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */}, {expiry_time}, 
+		{last_modified_time}, {/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
 		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}
 	};

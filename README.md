@@ -3,9 +3,11 @@
 This command line tool allows you to more easily view and obtain the contents of a web browser or web plugin's HTTP cache that's stored on disk. It runs on Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10, and supports the following cache formats:
 
 * The WinINet cache - Internet Explorer 4 to 11.
+* The Mozilla cache - Mozilla Firefox, Netscape Navigator 6.1 to 9, etc.
 * The Flash Player's shared library cache and temporary Flash videos.
 * The Shockwave Player's cache, including Xtras.
 * The Java Plugin's cache - Java 1.3 to 8.
+* The Unity Web Player's cache.
 
 This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed or played when they were still available.
 
@@ -58,12 +60,14 @@ You can use "." to refer to the current working directory's path. Note that all 
 
 The names of the output folder and CSV file depend on the export option (see the "Output Name" columns below). For example, using `-export-ie` would create a directory called `IE` and a CSV file called `IE.csv` in the output path.
 
-| Option            | Description                                                                        | Output Name |
-|-------------------|------------------------------------------------------------------------------------|-------------|
-| -export-ie        | Exports the WinINet cache, including Internet Explorer 4 to 11.                    | IE          |
-| -export-flash     | Exports the Flash Player's shared library cache and temporary Flash videos.        | FL          |
-| -export-shockwave | Exports the Shockwave Player's cache, including Xtras.                             | SW          |
-| -export-java      | Exports the Java Plugin's cache from Java 1.3 to 8.                                | JV          |
+| Option            | Description                                                                           | Output Name |
+|-------------------|---------------------------------------------------------------------------------------|-------------|
+| -export-ie        | Exports the WinINet cache, including Internet Explorer 4 to 11.                       | IE          |
+| -export-mozilla   | Exports the Mozilla cache, including Mozilla Firefox and Netscape Navigator 6.1 to 9. | MZ          |
+| -export-flash     | Exports the Flash Player's shared library cache and temporary Flash videos.           | FL          |
+| -export-shockwave | Exports the Shockwave Player's cache, including Xtras.                                | SW          |
+| -export-java      | Exports the Java Plugin's cache from Java 1.3 to 8.                                   | JV          |
+| -export-unity     | Exports the Unity Web Player's cache.                                                 | UN          |
 
 For example:
 ```
@@ -115,12 +119,13 @@ These extra command line arguments are optional. The **-export-option** argument
 
 The following options don't require any additional arguments.
 
-| Option           | Description                                                                                            |
-|------------------|--------------------------------------------------------------------------------------------------------|
-| -no-copy-files   | Stops the exporter from copying files.                                                                 |
-| -no-create-csv   | Stops the exporter from creating CSV files.                                                            |
-| -overwrite       | Deletes the previous output folder of the same name before running.                                    |
-| -show-full-paths | Replaces the "Location On Cache" and "Location In Output" CSV columns with the absolute paths on disk. |
+| Option           | Description                                                                                                    |
+|------------------|----------------------------------------------------------------------------------------------------------------|
+| -no-copy-files   | Stops the exporter from copying files.                                                                         |
+| -no-create-csv   | Stops the exporter from creating CSV files.                                                                    |
+| -overwrite       | Deletes the previous output folder of the same name before running.                                            |
+| -show-full-paths | Replaces the "Location On Cache" and "Location In Output" CSV columns with the absolute paths on disk.         |
+| -group-by-origin | Adds a cached file's request origin domain (if it exists) to the beginning of the website directory structure. |
 
 Using both `-no-copy-files` and `-no-create-csv` will result in an error and terminate the application.
 The `-show-full-paths` option does nothing if `-no-create-csv` is also used.
@@ -133,10 +138,20 @@ WCE.exe -no-create-csv -overwrite -export-option
 
 The following options change how [group files](#group-files) behave.
 
-| Option                                | Description                                      |
-|---------------------------------------|--------------------------------------------------|
-| -filter-by-groups                     | Only exports files that match any loaded groups. |
-| -load-group-files &lt;Group Files&gt; | Only loads specific group files.                 |
+| Option                                 | Description                                                     |
+|----------------------------------------|-----------------------------------------------------------------|
+| -filter-by-groups                      | Only exports files that match any loaded groups.                |
+| -ignore-filter-for &lt;Cache Names&gt; | Overrides the previous option for specific browsers or plugins. |
+| -load-group-files &lt;Group Files&gt;  | Only loads specific group files.                                |
+
+The &lt;Cache Names&gt; argument is mandatory and specifies a list of browser or plugin names, separated by forward slashes. These names are lowercase and match the -export options. The names "browsers" and "plugins" can be used to refer to all browsers or plugins, respectively. These two categories are mutually exclusive.
+
+For example:
+```
+WCE.exe -filter-by-groups -ignore-filter-for "plugins/ie" -export-option
+```
+
+This would filter the output based on any loaded groups, except for web plugins (Flash, Shockwave, Java) and for Internet Explorer.
 
 The &lt;Group Files&gt; argument is mandatory and specifies a filename list, where the filenames are separated by forward slashes and appear without the .group file extension. All group files are loaded by default. This tool will always look for group files in the "Groups" subdirectory in the executable's directory (and not in the current working directory).
 
@@ -193,6 +208,8 @@ BEGIN_FILE_GROUP Flash
 		swz
 	END
 
+	DEFAULT_FILE_EXTENSION swf
+
 END
 
 BEGIN_URL_GROUP Cartoon Network
@@ -232,7 +249,7 @@ See the [Dependencies](Source/ThirdParty/Dependencies.txt) help file to learn mo
 
 ## Resources And Tools
 
-This section will list some resources and tools that were used to learn how to process certain cache formats and to validate this application's output.
+This section will list some useful resources and tools that were used throughout this application's development. This includes learning how to process certain cache formats, validating the application's output, extracting assets from plugin-specific file formats, and other general purpose tools.
 
 ### Internet Explorer
 
@@ -243,11 +260,29 @@ This section will list some resources and tools that were used to learn how to p
 * [NirSoft - A few words about the cache / history on Internet Explorer 10](https://blog.nirsoft.net/2012/12/08/a-few-words-about-the-cache-history-on-internet-explorer-10/).
 * [NirSoft - Improved solution for reading the history of Internet Explorer 10](https://blog.nirsoft.net/2013/05/02/improved-solution-for-reading-the-history-of-internet-explorer-10/).
 
+### Mozilla Firefox And Friends
+
+* [firefox-cache-forensics - FfFormat.wiki](https://code.google.com/archive/p/firefox-cache-forensics/wikis/FfFormat.wiki).
+* [dtformats - Firefox cache file format](https://github.com/libyal/dtformats/blob/main/documentation/Firefox%20cache%20file%20format.asciidoc).
+* The Mozilla Firefox repository - [first](https://hg.mozilla.org/mozilla-central/file/2d6becec52a482ad114c633cf3a0a5aa2909263b/netwerk/cache) and [second](https://hg.mozilla.org/mozilla-central/file/tip/netwerk/cache2) version of the Mozilla cache format.
+
+* [NirSoft - MZCacheView - View the cache files of Firefox Web browsers](https://www.nirsoft.net/utils/mozilla_cache_viewer.html).
+
+### Flash Player
+
+* [NirSoft's FlashCookiesView](https://www.nirsoft.net/utils/flash_cookies_view.html) can be used to view Flash cookies (.SOL files) where a game might save its progress or cache assets.
+
+* [NirSoft's VideoCacheView](https://www.nirsoft.net/utils/video_cache_view.html) can be used to recover Flash videos (.FLV files) from the web cache.
+
 ### Shockwave Player
 
 * [TOMYSSHADOW's Movie Restorer Xtra](https://github.com/tomysshadow/Movie-Restorer-Xtra) allows you to open Shockwave movies in Director. This is useful when trying to find out the name of a Shockwave game (e.g. by looking at the game's menu screen) since the plugin's cache does not store the original filename or URL.
 
 * [Valentin's Unpack tool](https://valentin.dasdeck.com/lingo/unpack/) allows you to extract Xtras from Xtra-Packages (.W32 files). This is useful for finding out which Xtras were stored in the plugin's cache.
+
+### Unity Web Player
+
+* [uTinyRipper](https://github.com/mafaca/UtinyRipper) and [Unity Assets Bundle Extractor](https://github.com/DerPopo/UABE) can be used to extract assets from the cached AssetBundle files.
 
 ### Other
 
@@ -255,7 +290,7 @@ This section will list some resources and tools that were used to learn how to p
 
 * [NirSoft's CSVFileView](https://www.nirsoft.net/utils/csv_file_view.html) is a useful lightweight tool for viewing the resulting CSV files.
 
-* See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.html), including [ChromeCacheView](https://www.nirsoft.net/utils/chrome_cache_view.html), [MZCacheView](https://www.nirsoft.net/utils/mozilla_cache_viewer.html), [OperaCacheView](https://www.nirsoft.net/utils/opera_cache_view.html), [SafariCacheView](https://www.nirsoft.net/utils/safari_cache_view.html), and [VideoCacheView](https://www.nirsoft.net/utils/video_cache_view.html).
+* See also [NirSoft's browser tools](https://www.nirsoft.net/web_browser_tools.html), including [ChromeCacheView](https://www.nirsoft.net/utils/chrome_cache_view.html), [OperaCacheView](https://www.nirsoft.net/utils/opera_cache_view.html), and [SafariCacheView](https://www.nirsoft.net/utils/safari_cache_view.html).
 
 ## Special Thanks
 

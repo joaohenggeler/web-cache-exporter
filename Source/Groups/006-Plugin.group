@@ -27,6 +27,34 @@ BEGIN_FILE_GROUP 3DVIA Player
 
 END
 
+BEGIN_FILE_GROUP Alambik
+
+	BEGIN_FILE_SIGNATURES
+
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-alambik-script
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		tv tvs tvd tvv tvb tvl
+	END
+
+END
+
+BEGIN_FILE_GROUP AnimaFlex
+
+	BEGIN_MIME_TYPES
+		; video/animaflex
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		afl
+	END
+
+END
+
 ; Adobe Atmosphere
 BEGIN_FILE_GROUP Atmosphere
 
@@ -35,7 +63,7 @@ BEGIN_FILE_GROUP Atmosphere
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		aer
+		aer atmo
 	END
 
 END
@@ -65,6 +93,18 @@ BEGIN_FILE_GROUP Authorware
 
 	BEGIN_FILE_EXTENSIONS
 		aab aam aas
+	END
+
+END
+
+BEGIN_FILE_GROUP AXEL Player
+
+	BEGIN_MIME_TYPES
+		application/x-MindAvenueAXELStream
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		axs
 	END
 
 END
@@ -113,6 +153,18 @@ BEGIN_FILE_GROUP Cult3D
 
 	BEGIN_FILE_EXTENSIONS
 		co
+	END
+
+END
+
+BEGIN_FILE_GROUP DeepV
+
+	BEGIN_MIME_TYPES
+		application/x-deepv
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		DeepV
 	END
 
 END
@@ -167,6 +219,14 @@ BEGIN_FILE_GROUP GoBit Games Plugin
 
 	BEGIN_MIME_TYPES
 		application/x-gobitgamesplugin
+	END
+
+END
+
+BEGIN_FILE_GROUP Hyper-G
+
+	BEGIN_FILE_EXTENSIONS
+		sdf
 	END
 
 END
@@ -247,10 +307,54 @@ BEGIN_FILE_GROUP Java
 
 END
 
+BEGIN_FILE_GROUP LiveMath
+
+	BEGIN_MIME_TYPES
+		plugin/x-theorist
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		thp
+	END
+
+END
+
+BEGIN_FILE_GROUP Octree View
+
+	BEGIN_FILE_EXTENSIONS
+		oct
+	END
+
+END
+
+BEGIN_FILE_GROUP Play3D
+
+	BEGIN_MIME_TYPES
+		application/x-p3d
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		p3d
+	END
+
+END
+
 BEGIN_FILE_GROUP PopCap Plugin
 
 	BEGIN_MIME_TYPES
 		application/x-popcaploader
+	END
+
+END
+
+BEGIN_FILE_GROUP ProtoPlay
+
+	BEGIN_MIME_TYPES
+		application/x-altiadsn
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		dsn rtm
 	END
 
 END
@@ -269,6 +373,19 @@ BEGIN_FILE_GROUP Pulse
 
 	BEGIN_FILE_EXTENSIONS
 		pwc pw3 pws pwn pwv pwr
+	END
+
+END
+
+BEGIN_FILE_GROUP REBOL
+
+	BEGIN_FILE_SIGNATURES
+		; "REBOL"
+		52 45 42 4F 4C
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		; r
 	END
 
 END
@@ -400,6 +517,18 @@ BEGIN_FILE_GROUP Viscape
 
 END
 
+BEGIN_FILE_GROUP Visual WebMap
+
+	BEGIN_MIME_TYPES
+		; image/dgn image/rle image/cit image/vec
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		dgn rle cit vec
+	END
+
+END
+
 BEGIN_FILE_GROUP Vitalize
 
 	BEGIN_FILE_SIGNATURES
@@ -463,6 +592,24 @@ BEGIN_FILE_GROUP X3D
 
 		; For the FreeWRL plugin:
 		x3z
+	END
+
+END
+
+BEGIN_FILE_GROUP Xara
+
+	BEGIN_FILE_SIGNATURES
+		; "XARA"
+		58 41 52 41
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-corelxara
+		application/vnd.xara
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		xar web
 	END
 
 END

@@ -69,7 +69,7 @@ to 11.
 * Output Name: IE
 
 * Option: -export-mozilla
-* Description: exports the Mozilla cache, including Mozilla Firefox and
+* Description: Exports the Mozilla cache, including Mozilla Firefox and
 Netscape Navigator 6.1 to 9.
 * Output Name: MZ
 

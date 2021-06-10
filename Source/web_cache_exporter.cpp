@@ -463,7 +463,7 @@ static size_t get_temporary_exporter_memory_size_for_os_version(Exporter* export
 	// Windows 8.1 (6.3) and 10 (10.0).
 	else if(os_version.dwMajorVersion >= 6)
 	{
-		size_for_os_version = megabytes_to_bytes(10); // x2 for wchar_t
+		size_for_os_version = megabytes_to_bytes(8); // x2 for wchar_t
 	}
 	else
 	{
@@ -916,8 +916,8 @@ int _tmain(int argc, TCHAR* argv[])
 // - Resolving the exporter's output paths for copying cache entries and creating CSV files.
 // - Creating a CSV file with a given header.
 //
-// This function should be called by each exporter before processing any cached files, and may be called multiple times by the same
-// exporter. After finishing exporting, the terminate_cache_exporter() function should be called.
+// This function must be called by each exporter before processing any cached files, and may be called multiple times by the same
+// exporter. After finishing exporting, the terminate_cache_exporter() function must be called.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure where the resolved paths and CSV file's handle will be stored.
@@ -926,7 +926,7 @@ int _tmain(int argc, TCHAR* argv[])
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void initialize_cache_exporter(	Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns)
+void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns)
 {
 	_ASSERT(count_path_components(cache_identifier) == 1);
 
@@ -1003,7 +1003,7 @@ void initialize_cache_exporter(	Exporter* exporter, Cache_Type cache_type, const
 // Builds a cache exporter's output path for copying files and adds a given subdirectory's name to the end.
 //
 // This function is called by initialize_cache_exporter() to set the default output copy path for each cache exporter, and may be
-// optionally called later to create more specific subdirectories. This function should be called after initialize_cache_exporter()
+// optionally called later to create more specific subdirectories. This function must be called after initialize_cache_exporter()
 // and before terminate_cache_exporter().
 //
 // @Parameters:
@@ -1324,52 +1324,28 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 // Exports a cache entry by copying its file to the output location using the original website's directory structure, and by adding a
 // new row to the CSV file. This function will also match the cache entry to any loaded group files.
 //
-// This function should be called after initialize_cache_exporter() and before terminate_cache_exporter().
-//
-// The following CSV columns are automatically handled by this function, and cannot be set explicitly:
-//
-// - CSV_LOCATION_ON_CACHE - determined using the 'short_location_on_cache' and 'full_location_on_cache' exporter parameters.
-// - CSV_LOCATION_ON_DISK - determined using the 'copy_source_path' exporter parameter.
-// - CSV_MISSING_FILE - determined using the 'copy_source_path' exporter parameter.
-// - CSV_LOCATION_IN_OUTPUT - determined after copying the file using the 'copy_source_path' exporter parameter.
-// - CSV_COPY_ERROR - determined after copying the file using the 'copy_source_path' exporter parameter.
-// - CSV_CUSTOM_FILE_GROUP - determined using the 'copy_source_path' exporter parameter, and the CSV_CONTENT_TYPE and CSV_FILE_EXTENSION columns.
-// - CSV_CUSTOM_URL_GROUP - determined using the 'url' exporter parameter.
-// - CSV_SHA_256 - determined using the 'copy_source_path' exporter parameter.
-//
-// The following values and columns are also changed if the optional parameter 'optional_file_info' is used:
-//
-// If these columns should be automatically handled, their corresponding array element must be set to {NULL}. For CSV columns that
-// aren't listed above, you can override this behavior by explicitly setting their value instead of using NULL.
-//
-// - CSV_FILE_SIZE - determined using the 'object_size' member.
-// - CSV_CREATION_TIME - determined using the 'creation_time' member.
-// - CSV_LAST_ACCESS_TIME - determined using the 'last_access_time' member.
-// - CSV_LAST_WRITE_TIME - determined using the 'last_write_time' member.
-//
-// - CSV_FILENAME - determined using the 'filename' or 'url' exporter parameters, or the 'object_name' member if 'optional_file_info' is set.
-// - CSV_FILE_EXTENSION - determined using the CSV_FILENAME column.
-// - CSV_URL - determined using the 'url' exporter parameter.
+// This function must be called after initialize_cache_exporter() and before terminate_cache_exporter().
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the current cache exporter's parameters and the values of command line options
 // that will influence how the entry is exported.
 //
-// 2. column_values - The array of values to write. Some values don't need to set explicitly if their respective column type is handled
+// 2. column_values - The array of CSV column values to write. Some values don't need to set explicitly if their respective column type is handled
 // automatically.
 //
 // 3. params - The basic exporter parameters used to copy the cached file and fill certain CSV columns for each cache exporter:
+//
 // - The 'copy_source_path' should be defined in most cases, but may be NULL if an exporter has to manipulate the cached data using temporary files.
 // It's possible that this manipulation may fail (e.g. extracting the payload from a file), leading to a situation where we don't want to copy anything.
 //
 // - The 'url' may be NULL if the cached file has no URL information associated with it.
-// - The 'filename' may be NULL only if 'url' or 'optional_file_info' were set and contain a non-empty value. Otherwise, this function assigns
-// the cached file a unique name.
+// - The 'filename' may be NULL if 'url' or 'optional_file_info' were set and contain a non-empty string. Otherwise, this function assigns the cached
+// file a unique name.
 //
 // - The 'short_location_on_cache' is always required.
 // - The 'full_location_on_cache' defaults to 'copy_source_path' if it's not set.
 //
-// 4. optional_file_info - An optional parameter that specifies additional information about the file that may be use to fill some columns.
+// 4. optional_file_info - An optional parameter that specifies additional information about the file that may be use to fill some CSV columns.
 // This value defaults to NULL.
 // 
 // @Returns: Nothing.
@@ -1738,8 +1714,8 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 // - Clearing the temporary exporter directory.
 // - Clearing the temporary memory arena.
 //
-// This function should be called by each exporter after processing any cached files, and may be called multiple times by the same
-// exporter. Before starting the export process, the initialize_cache_exporter() function should be called first.
+// This function must be called by each exporter after processing any cached files, and may be called multiple times by the same
+// exporter. Before starting the export process, the initialize_cache_exporter() function must be called.
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the CSV file's handle.
@@ -2038,7 +2014,7 @@ static size_t get_total_external_locations_size(Exporter* exporter, int* result_
 			+ total_locations_size * sizeof(TCHAR);
 }
 
-// Loads the external locations file on disk. This function should be called after get_total_external_locations_size() and with a
+// Loads the external locations file on disk. This function must be called after get_total_external_locations_size() and with a
 // memory arena that is capable of holding the number of bytes it returned.
 //
 // @Parameters:

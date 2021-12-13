@@ -99,7 +99,7 @@
 	--> Used to explore an existing JET Blue / ESE database in order to figure out how to process the cache for IE 10 and 11.
 */
 
-static const TCHAR* OUTPUT_NAME = TEXT("IE");
+static const TCHAR* OUTPUT_NAME = T("IE");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -122,7 +122,7 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // However, not every cache type lends itself to this kind of operation (e.g. if we're missing the database file, we might not even
 // be able to find the files themselves). For now, we'll only do this for IE 4 through 9.
 
-static const TCHAR* RAW_OUTPUT_NAME = TEXT("IE-RAW");
+static const TCHAR* RAW_OUTPUT_NAME = T("IE-RAW");
 // Notice how we have less information due to not relying on the index/database file. We only know the file's properties.
 static Csv_Type RAW_CSV_COLUMN_TYPES[] =
 {
@@ -331,7 +331,7 @@ bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size)
 // @Returns: True if it's able to find Internet Explorer's version in the registry. Otherwise, false.
 static void undecorate_path(TCHAR* path)
 {
-	#if defined(DEBUG) && !defined(BUILD_9X)
+	#if defined(BUILD_DEBUG) && !defined(BUILD_9X)
 		wchar_t actual_undecorated_path[MAX_PATH_CHARS] = L"";
 		StringCchCopyW(actual_undecorated_path, MAX_PATH_CHARS, path);
 		PathUndecorateW(actual_undecorated_path);
@@ -362,9 +362,9 @@ static void undecorate_path(TCHAR* path)
 	// "C:\path\file.ext[1]" 		-> 		"C:\path\file.ext[1]" 	(no change)
 	// "C:\path\file[1].ext[2]" 	-> 		"C:\path\file.ext[2]"
 	// "C:\path\file.ext[1].gz" 	-> 		"C:\path\file.ext.gz"
-	while(*filename != TEXT('\0'))
+	while(*filename != T('\0'))
 	{
-		if(*filename == TEXT('[') && !is_first_char && filename < file_extension)
+		if(*filename == T('[') && !is_first_char && filename < file_extension)
 		{
 			decoration_begin = filename;
 			++filename;
@@ -374,7 +374,7 @@ static void undecorate_path(TCHAR* path)
 				++filename;
 			}
 
-			if(*filename == TEXT(']'))
+			if(*filename == T(']'))
 			{
 				decoration_end = filename;
 			}
@@ -382,7 +382,7 @@ static void undecorate_path(TCHAR* path)
 
 		// Check if it's different than NUL for the case where the decoration isn't closed (e.g. "C:\path\file[1"),
 		// meaning 'filename' would already point to the end of the string.
-		if(*filename != TEXT('\0')) ++filename;
+		if(*filename != T('\0')) ++filename;
 		is_first_char = false;
 	}
 
@@ -393,7 +393,7 @@ static void undecorate_path(TCHAR* path)
 		MoveMemory(decoration_begin, remaining_path, string_size(remaining_path));
 	}
 
-	#if defined(DEBUG) && !defined(BUILD_9X)
+	#if defined(BUILD_DEBUG) && !defined(BUILD_9X)
 		// @Assert: Guarantee that our result matches PathUndecorate()'s.
 		_ASSERT(strings_are_equal(path, actual_undecorated_path));
 	#endif
@@ -461,7 +461,7 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 		{\
 			log_print_newline();\
 			log_print(LOG_INFO, "Internet Explorer 4 to 9: Checking the index file '%hs'.", short_index_path);\
-			PathCombine(exporter->index_path, exporter->cache_path, TEXT(short_index_path));\
+			PathCombine(exporter->index_path, exporter->cache_path, T(short_index_path));\
 			export_internet_explorer_4_to_9_cache(exporter);\
 			ie_4_to_9_cache_exists = ie_4_to_9_cache_exists || does_file_exist(exporter->index_path);\
 		} while(false, false)
@@ -525,7 +525,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 {
 	TCHAR* filename = callback_info->object_name;
 	// Skip the index.dat file itself. We only want the cached files.
-	if(strings_are_equal(filename, TEXT("index.dat"), true)) return true;
+	if(filenames_are_equal(filename, T("index.dat"))) return true;
 
 	TCHAR* full_file_path = callback_info->object_path;
 
@@ -548,11 +548,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_cal
 
 	Exporter_Params params = {};
 	params.copy_source_path = full_file_path;
-	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
+	params.file_info = callback_info;
 
-	export_cache_entry(exporter, csv_row, &params, callback_info);
+	export_cache_entry(exporter, csv_row, &params);
 
 	return true;
 }
@@ -583,7 +583,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		{
 			log_print(LOG_WARNING, "Internet Explorer 4 to 9: Failed to open the index file since its being used by another process. Attempting to create a temporary copy.");
 		
-			TCHAR temporary_index_path[MAX_PATH_CHARS] = TEXT("");
+			TCHAR temporary_index_path[MAX_PATH_CHARS] = T("");
 			bool copy_success = create_empty_temporary_exporter_file(exporter, temporary_index_path)
 								&& copy_open_file(arena, exporter->index_path, temporary_index_path);
 
@@ -626,7 +626,36 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 	Ie_Index_Header* header = (Ie_Index_Header*) index_file;
 
-	if(strncmp(header->signature, "Client UrlCache MMF Ver ", 24) != 0)
+	{
+		// No need to swap the byte order of the byte array: header->signature
+		
+		LITTLE_ENDIAN_TO_HOST(header->file_size);
+		LITTLE_ENDIAN_TO_HOST(header->file_offset_to_first_hash_table_page);
+		
+		LITTLE_ENDIAN_TO_HOST(header->num_blocks);
+		LITTLE_ENDIAN_TO_HOST(header->num_allocated_blocks);
+		LITTLE_ENDIAN_TO_HOST(header->_reserved_1);
+		
+		LITTLE_ENDIAN_TO_HOST(header->max_size);
+		LITTLE_ENDIAN_TO_HOST(header->_reserved_2);
+		LITTLE_ENDIAN_TO_HOST(header->cache_size);
+		LITTLE_ENDIAN_TO_HOST(header->_reserved_3);
+		LITTLE_ENDIAN_TO_HOST(header->sticky_cache_size);
+		LITTLE_ENDIAN_TO_HOST(header->_reserved_4);
+
+		LITTLE_ENDIAN_TO_HOST(header->num_directories);
+		for(int i = 0; i < _countof(header->cache_directories); ++i)
+		{
+			LITTLE_ENDIAN_TO_HOST(header->cache_directories[i].num_files);
+			// No need to swap the byte order of the byte array: header->cache_directories[i].name
+		}
+
+		for(int i = 0; i < _countof(header->header_data); ++i) LITTLE_ENDIAN_TO_HOST(header->header_data[i]);
+
+		LITTLE_ENDIAN_TO_HOST(header->_reserved_5);
+	}
+
+	if(!string_starts_with(header->signature, "Client UrlCache MMF Ver "))
 	{
 		char signature_string[NUM_SIGNATURE_CHARS + 1] = "";
 		CopyMemory(signature_string, header->signature, NUM_SIGNATURE_CHARS);
@@ -650,8 +679,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 	char major_version = header->signature[24];
 	char minor_version = header->signature[26];
 	const size_t MAX_CACHE_VERSION_CHARS = 4;
-	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
-	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("%hc.%hc"), major_version, minor_version);
+	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = T("");
+	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("%hc.%hc"), major_version, minor_version);
 
 	if( (major_version == '4' && minor_version == '7') || (major_version == '5' && minor_version == '2') )
 	{
@@ -691,8 +720,11 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 		if(is_block_allocated)
 		{
-			void* current_block = advance_bytes(blocks, i * BLOCK_SIZE);
-			Ie_Index_File_Map_Entry* entry = (Ie_Index_File_Map_Entry*) current_block;
+			Ie_Index_File_Map_Entry* entry = (Ie_Index_File_Map_Entry*) advance_bytes(blocks, i * BLOCK_SIZE);
+			
+			LITTLE_ENDIAN_TO_HOST(entry->signature);
+			LITTLE_ENDIAN_TO_HOST(entry->num_allocated_blocks);
+
 			_ASSERT(entry->num_allocated_blocks > 0);
 
 			switch(entry->signature)
@@ -708,7 +740,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					void* url_entry = advance_bytes(entry, sizeof(Ie_Index_File_Map_Entry));
 					
 					// @Aliasing: These two variables point to the same memory but they're never deferenced at the same time.
-					Ie_4_Index_Url_Entry* url_entry_4 			= (Ie_4_Index_Url_Entry*) 		url_entry;
+					Ie_4_Index_Url_Entry* url_entry_4 				= (Ie_4_Index_Url_Entry*) 		url_entry;
 					Ie_5_To_9_Index_Url_Entry* url_entry_5_to_9 	= (Ie_5_To_9_Index_Url_Entry*) 	url_entry;
 
 					// Some entries may contain garbage fields whose value is DEALLOCATED_VALUE (which is used to fill deallocated
@@ -747,6 +779,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 							variable_name = url_entry_5_to_9->member_name;\
 						}\
 					\
+						LITTLE_ENDIAN_TO_HOST(variable_name);\
 						CLEAR_DEALLOCATED_VALUE(variable_name);\
 					} while(false, false)
 
@@ -755,8 +788,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					// We'll keep two versions of the filename: the original decorated name (e.g. image[1].gif)
 					// which is the name of the actual cached file on disk, and the undecorated name (e.g. image.gif)
 					// which is what we'll show in the CSV.
-					TCHAR* decorated_filename = TEXT("");
-					TCHAR* filename = TEXT("");
+					TCHAR* decorated_filename = T("");
+					TCHAR* filename = T("");
 					if(entry_offset_to_filename > 0)
 					{
 						const char* filename_in_mmf = (char*) advance_bytes(entry, entry_offset_to_filename);
@@ -769,7 +802,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					GET_URL_ENTRY_MEMBER(entry_offset_to_url, entry_offset_to_url);
 					// @Format: The stored URL is encoded. We'll decode it for the CSV and to correctly create
 					// the website's original directory structure when we copy the cached file.
-					TCHAR* url = TEXT("");
+					TCHAR* url = T("");
 					if(entry_offset_to_url > 0)
 					{
 						const char* url_in_mmf = (char*) advance_bytes(entry, entry_offset_to_url);
@@ -814,21 +847,23 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 						format_dos_date_time(dos_date_time_value, variable_name);\
 					} while(false, false)
 
-					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 					GET_URL_ENTRY_FILETIME_MEMBER(last_modified_time, last_modified_time);
 					
-					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 					GET_URL_ENTRY_FILETIME_MEMBER(last_access_time, last_access_time);
 
-					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 					GET_URL_ENTRY_DOS_DATE_TIME_MEMBER(creation_time, creation_time);
 
 					// @Format: The file's expiry time is stored as two different types depending on the index file's version.
-					TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+					TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 					if(major_version == '4')
 					{
 						u64 u64_expiry_time = url_entry_4->expiry_time;
+						LITTLE_ENDIAN_TO_HOST(u64_expiry_time);
 						CLEAR_DEALLOCATED_VALUE(u64_expiry_time);
+						
 						FILETIME filetime_expiry_time = {};
 						convert_u64_to_filetime(u64_expiry_time, &filetime_expiry_time);
 						format_filetime_date_time(filetime_expiry_time, expiry_time);
@@ -836,15 +871,17 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					else
 					{
 						u32 u32_expiry_time = url_entry_5_to_9->expiry_time;
+						LITTLE_ENDIAN_TO_HOST(u32_expiry_time);
 						CLEAR_DEALLOCATED_VALUE(u32_expiry_time);
+						
 						Dos_Date_Time dos_date_time_expiry_time = {};
 						convert_u32_to_dos_date_time(u32_expiry_time, &dos_date_time_expiry_time);
 						format_dos_date_time(dos_date_time_expiry_time, expiry_time);
 					}
 					
-					TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
+					TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
 					const TCHAR* short_location_on_cache_pointer = NULL;
-					TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
+					TCHAR full_file_path[MAX_PATH_CHARS] = T("");
 
 					const u8 CHANNEL_DEFINITION_FORMAT_INDEX = 0xFF;
 
@@ -868,46 +905,52 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 						// Build the absolute file path to the cache file. The cache directories are next to the index file
 						// in this version of Internet Explorer. Here, exporter->index_path is already a full path.
-						PathCombine(full_file_path, exporter->index_path, TEXT(".."));
+						PathCombine(full_file_path, exporter->index_path, T(".."));
 						PathAppend(full_file_path, short_location_on_cache);
 					}
 					else if(cache_directory_index == CHANNEL_DEFINITION_FORMAT_INDEX)
 					{
 						// CDF files are marked with this special string since they're not stored on disk.
-						short_location_on_cache_pointer = TEXT("<CDF>");
+						short_location_on_cache_pointer = T("<CDF>");
 					}
 					else
 					{
 						// Any other unknown indexes.
-						short_location_on_cache_pointer = TEXT("<?>");
+						short_location_on_cache_pointer = T("<?>");
 						log_print(LOG_WARNING, "Internet Explorer 4 to 9: Unknown cache directory index 0x%02X for file '%s' with the following URL: '%s'.", cache_directory_index, filename, url);
 					}
 			
-					TCHAR cached_file_size[MAX_INT64_CHARS] = TEXT("");
+					TCHAR cached_file_size[MAX_INT64_CHARS] = T("");
 					if(major_version == '4')
 					{
 						u32 u32_cached_file_size = url_entry_4->cached_file_size;
+						LITTLE_ENDIAN_TO_HOST(u32_cached_file_size);
+						CLEAR_DEALLOCATED_VALUE(u32_cached_file_size);
 						convert_u32_to_string(u32_cached_file_size, cached_file_size);
 					}
 					else
 					{
 						u32 high_cached_file_size = url_entry_5_to_9->high_cached_file_size;
 						u32 low_cached_file_size = url_entry_5_to_9->low_cached_file_size;
+						
+						LITTLE_ENDIAN_TO_HOST(high_cached_file_size);
+						LITTLE_ENDIAN_TO_HOST(low_cached_file_size);
 						CLEAR_DEALLOCATED_VALUE(high_cached_file_size);
 						CLEAR_DEALLOCATED_VALUE(low_cached_file_size);
+						
 						u64 cached_file_size_value = combine_high_and_low_u32s_into_u64(high_cached_file_size, low_cached_file_size);
 						convert_u64_to_string(cached_file_size_value, cached_file_size);
 					}
 
-					TCHAR access_count[MAX_INT32_CHARS] = TEXT("");
+					TCHAR access_count[MAX_INT32_CHARS] = T("");
 					u32 num_entry_locks = 0;
 					GET_URL_ENTRY_MEMBER(num_entry_locks, num_entry_locks);
 					convert_u32_to_string(num_entry_locks, access_count);
 
-					TCHAR* format_version_prefix = TEXT("");
+					TCHAR* format_version_prefix = T("");
 					if(major_version == '5')
 					{
-						format_version_prefix = TEXT("Content.IE5");
+						format_version_prefix = T("Content.IE5");
 					}
 
 					// @Alias: 'short_location_on_cache_pointer' may alias 'short_location_on_cache'.
@@ -1553,7 +1596,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				++num_copy_failures;
 				log_print(LOG_ERROR, "Internet Explorer 10 to 11: Failed to copy the ESE file '%ls' to the temporary exporter directory.", filename);
 			}
-			else if(strings_are_equal(index_filename, filename, true))
+			else if(filenames_are_equal(index_filename, filename))
 			{
 				StringCchCopyW(temporary_database_path, MAX_PATH_CHARS, copy_destination_path);
 			}
@@ -1599,10 +1642,10 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		JET_DBINFOMISC database_info = {};
 		error_code = JetGetDatabaseFileInfoW(temporary_database_path, &database_info, sizeof(database_info), JET_DbInfoMisc);
 		const size_t MAX_CACHE_VERSION_CHARS = 64;
-		wchar_t cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
+		wchar_t cache_version[MAX_CACHE_VERSION_CHARS] = T("");
 		if(error_code == JET_errSuccess)
 		{
-			StringCchPrintfW(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("ESE-v%X-u%X"), database_info.ulVersion, database_info.ulUpdate);
+			StringCchPrintfW(cache_version, MAX_CACHE_VERSION_CHARS, T("ESE-v%X-u%X"), database_info.ulVersion, database_info.ulUpdate);
 			log_print(LOG_INFO, "Internet Explorer 10 to 11: The ESE database's version is '%ls' and the state is '%ls'.", cache_version, get_database_state_string(database_info.dbstate));
 		}
 

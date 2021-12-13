@@ -14,7 +14,6 @@ LICENSE text
 *.rc text eol=crlf
 *.txt text eol=crlf
 *.group text eol=crlf
-*.locations text eol=crlf
 
 *.png binary
 *.ico binary

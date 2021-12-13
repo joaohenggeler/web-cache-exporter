@@ -87,8 +87,8 @@ End If
 ExecutablePath = FS.BuildPath("..", ExecutablePath)
 
 Dim ExporterCommand
-Const COPY_FILES_OPTIONS = "-overwrite -no-create-csv -filter-by-groups -ignore-filter-for ""plugins"" -load-group-files ""006-Plugin/100-Lost-Media-Websites"" -find-and-export-all ""WebMedia\Files"""
-Const CREATE_CSV_OPTIONS = "-overwrite -no-copy-files -find-and-export-all ""WebMedia\FullList"""
+Const COPY_FILES_OPTIONS = "-overwrite -files-only -filter-by-groups ""006-Plugin/100-Lost-Media-Websites"" -ignore-filter-for ""plugins"" -find-and-export-all ""WebMedia\Files"""
+Const CREATE_CSV_OPTIONS = "-overwrite -csv-only -find-and-export-all ""WebMedia\FullList"""
 
 ExporterCommand = """" & ExecutablePath & """ " & COPY_FILES_OPTIONS
 WScript.Echo("Searching for lost web media using the command: " & ExporterCommand)

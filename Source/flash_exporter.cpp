@@ -38,7 +38,7 @@
 	--> https://www.nirsoft.net/utils/video_cache_view.html
 */
 
-static const TCHAR* OUTPUT_NAME = TEXT("FL");
+static const TCHAR* OUTPUT_NAME = T("FL");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -69,12 +69,12 @@ void export_default_or_specific_flash_cache(Exporter* exporter)
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
-			PathCombine(exporter->cache_path, exporter->appdata_path, TEXT("Adobe\\Flash Player"));
+			PathCombine(exporter->cache_path, exporter->appdata_path, T("Adobe\\Flash Player"));
 		}
 
 		log_print(LOG_INFO, "Flash Player: Exporting the cache and videos from '%s'.", exporter->cache_path);
 		
-		set_exporter_output_copy_subdirectory(exporter, TEXT("Cache"));
+		set_exporter_output_copy_subdirectory(exporter, T("Cache"));
 		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_flash_cache_files_callback, exporter);
 		
 		if(exporter->is_exporting_from_default_locations)
@@ -82,7 +82,7 @@ void export_default_or_specific_flash_cache(Exporter* exporter)
 			// This is currently only checked when using default locations since the previous
 			// traversal already includes these video files.
 			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
-			set_exporter_output_copy_subdirectory(exporter, TEXT("Videos"));
+			set_exporter_output_copy_subdirectory(exporter, T("Videos"));
 			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, false, find_flash_video_files_callback, exporter);
 		}
 
@@ -105,7 +105,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	TCHAR* file_extension = skip_to_file_extension(filename, true);
 
 	// Skip the HEU metadata files.
-	if(strings_are_equal(file_extension, TEXT(".heu"), true))
+	if(filenames_are_equal(file_extension, T(".heu")))
 	{
 		return true;
 	}
@@ -113,18 +113,18 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	TCHAR* full_file_path = callback_info->object_path;
 	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
 
-	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	TCHAR* access_count = NULL;
 	TCHAR* library_sha_256 = NULL;
 	{
-		if(strings_are_equal(file_extension, TEXT(".swz"), true))
+		if(filenames_are_equal(file_extension, T(".swz")))
 		{
 			TCHAR previous_char = *file_extension;
-			*file_extension = TEXT('\0');
+			*file_extension = T('\0');
 
-			TCHAR metadata_file_path[MAX_PATH_CHARS] = TEXT("");
+			TCHAR metadata_file_path[MAX_PATH_CHARS] = T("");
 			PathCombine(metadata_file_path, callback_info->directory_path, filename);
-			StringCchCat(metadata_file_path, MAX_PATH_CHARS, TEXT(".heu"));
+			StringCchCat(metadata_file_path, MAX_PATH_CHARS, T(".heu"));
 
 			u64 metadata_file_size = 0;
 			char* metadata_file = (char*) read_entire_file(arena, metadata_file_path, &metadata_file_size, true);
@@ -188,11 +188,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 
 	Exporter_Params params = {};
 	params.copy_source_path = full_file_path;
-	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
+	params.file_info = callback_info;
 
-	export_cache_entry(exporter, csv_row, &params, callback_info);
+	export_cache_entry(exporter, csv_row, &params);
 
 	return true;
 }
@@ -215,8 +215,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 	// Skip non-FLV files.
 	if(!is_flv_file) return true;
 
-	TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(short_location_on_cache, TEXT("<Temporary>"), filename);
+	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
+	PathCombine(short_location_on_cache, T("<Temporary>"), filename);
 
 	Csv_Entry csv_row[] =
 	{
@@ -232,11 +232,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 
 	Exporter_Params params = {};
 	params.copy_source_path = full_file_path;
-	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
+	params.file_info =callback_info;
 
-	export_cache_entry(exporter, csv_row, &params, callback_info);	
+	export_cache_entry(exporter, csv_row, &params);	
 
 	return true;
 }

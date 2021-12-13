@@ -59,39 +59,45 @@ You can use "." to refer to the current working directory's path. Note
 that all paths passed to this application are limited to 260 characters.
 
 The names of the output folder and CSV file depend on the export option
-(see the "Output Name" fields below). For example, using -export-ie
-would create a directory called "IE" and a CSV file called "IE.csv" in
+(see the "Output Name" fields below). For example, using -export-mozilla
+would create a directory called "MZ" and a CSV file called "MZ.csv" in
 the output path.
 
-* Option: -export-ie
+* Long Option: -export-internet-explorer
+* Short Option: -eie
 * Description: Exports the WinINet cache, including Internet Explorer 4
 to 11.
 * Output Name: IE
 
-* Option: -export-mozilla
+* Long Option: -export-mozilla
+* Short Option: -emz
 * Description: Exports the Mozilla cache, including Mozilla Firefox and
 Netscape Navigator 6.1 to 9.
 * Output Name: MZ
 
-* Option: -export-flash
+* Long Option: -export-flash
+* Short Option: -efl
 * Description: Exports the Flash Player's shared library cache and
 temporary Flash videos.
 * Output Name: FL
 
-* Option: -export-shockwave
+* Long Option: -export-shockwave
+* Short Option: -esw
 * Description: Exports the Shockwave Player's cache, including Xtras.
 * Output Name: SW
 
-* Option: -export-java
+* Long Option: -export-java
+* Short Option: -ejv
 * Description: Exports the Java Plugin's cache from Java 1.3 to 8.
 * Output Name: JV
 
-* Option: -export-unity
+* Long Option: -export-unity
+* Short Option: -eun
 * Description: Exports the Unity Web Player's cache.
 * Output Name: UN
 
 For example:
-WCE.exe -export-ie
+WCE.exe -export-internet-explorer
 WCE.exe -export-flash "C:\PathToTheCache"
 WCE.exe -export-shockwave "C:\PathToTheCache" "My Cache"
 WCE.exe -export-java "" "My Default Cache"
@@ -105,17 +111,18 @@ is only supported in Windows Vista and later.
 There are two other options that have a similar behavior but that take
 different arguments:
 
-* Option: -find-and-export-all
+* Long Option: -find-and-export-all
+* Short Option: -faea
 * Description: Exports all of the above at once.
 * Output Name: <See Above>
 
-* Option: -explore-files
+* Long Option: -explore-files
+* Short Option: -ef
 * Description: Exports any files in a directory and its subdirectories.
 * Output Name: EXPLORE
 
 The -find-and-export-all option can take two arguments:
-WCE.exe -find-and-export-all [Optional Output Path] [Optional External
-Locations File Path]
+WCE.exe -find-and-export-all [Optional Output Path] [Optional External Locations File Path]
 
 This option is used to export every supported cache format from their
 default locations at the same time. The second optional argument specifies
@@ -136,12 +143,12 @@ WCE.exe -explore-files <Mandatory Cache Path> [Optional Output Path]
 This option may be used to explore the files in an unsupported cache location
 (e.g. from an obscure web plugin), meaning the first argument must always be
 passed. This feature is useful when combined with group files. You can also
-use the -no-copy-files option to only create the CSV file and prevent a large
+use the -csv-only option to only create the CSV file and prevent a large
 number of files from being copied.
 
 For example:
 WCE.exe -explore-files "C:\PathToExplore"
-WCE.exe -no-copy-files -explore-files "C:\PathToExplore" "My Exploration"
+WCE.exe -csv-only -explore-files "C:\PathToExplore" "My Exploration"
 
 ======================================================================
 OTHER ARGUMENTS
@@ -152,32 +159,37 @@ argument is used to refer to any of the previous export options.
 
 The following options don't require any additional arguments.
 
-* Option: -no-copy-files
-* Description: Stops the exporter from copying files.
+* Long Option: -csv-only
+* Short Option: -co
+* Description: Only creates CSV files (don't export cached files).
 
-* Option: -no-create-csv
-* Description: Stops the exporter from creating CSV files.
+* Long Option: -files-only
+* Short Option: -fo
+* Description: Only exports cached files (don't create CSV files).
 
-* Option: -overwrite
+* Long Option: -overwrite
+* Short Option: -o
 * Description: Deletes the previous output folder of the same name
 before running.
 
-* Option: -show-full-paths
+* Long Option: -show-full-paths
+* Short Option: -sfp
 * Description: Replaces the "Location On Cache" and "Location In Output"
 CSV columns with the absolute paths on disk.
 
-* Option: -group-by-origin
+* Long Option: -group-by-origin
+* Short Option: -gbo
 * Description: Adds a cached file's request origin domain to the beginning
 of the website directory structure. If a cached file doesn't have this
 information, the normal URL structure is used instead.
 
-Using both -no-copy-files and -no-create-csv will result in an error
-and terminate the application. The -show-full-paths option does nothing
-if -no-create-csv is also used.
+Using both -csv-only and -files-only will result in an error and terminate
+the application. The -show-full-paths option does nothing if -files-only is
+also used.
 
 For example:
-WCE.exe -no-copy-files -show-full-paths -export-option
-WCE.exe -no-create-csv -overwrite -export-option
+WCE.exe -csv-only -show-full-paths -export-option
+WCE.exe -files-only -overwrite -export-option
 
 The following options change how group files behave. Group files are
 simple text files that tell the application how to label cached files
@@ -185,45 +197,45 @@ based on their file signatures, MIME types, file extensions, and URLs.
 To learn more about this feature, see the "About Groups" help file in
 the "Groups" folder.
 
-* Option: -filter-by-groups
-* Description: Only exports files that match any loaded groups.
-
-* Option: -ignore-filter-for <Cache Names>
-* Description: Overrides the previous option for specific browsers or
-plugins.
-
-* Option: -load-group-files <Group Files>
-* Description: Only loads specific group files.
-
-The <Cache Names> argument is mandatory and specifies a list of browser
-or plugin names, separated by forward slashes. These names are lowercase
-and match the -export options. The names "browsers" and "plugins" can be
-used to refer to all browsers or plugins, respectively. These two categories
-are mutually exclusive.
-
-For example:
-WCE.exe -filter-by-groups -ignore-filter-for "plugins/ie" -export-option
-
-This would filter the output based on any loaded groups, except for web
-plugins (Flash, Shockwave, Java) and for Internet Explorer.
+* Long Option: -filter-by-groups <Group Files>
+* Short Option: -fbg <Group Files>
+* Description: Only exports files that match groups defined in the
+specified group files.
 
 The <Group Files> argument is mandatory and specifies a filename list,
 where the filenames are separated by forward slashes and appear without
-the .group file extension. All group files are loaded by default. This
-tool will always look for group files in the "Groups" subdirectory in
-the executable's directory (and not in the current working directory).
+the .group file extension. This option tells the application that a cached
+file may only be exported if it matches the groups that are defined in the
+files specified by this list.
 
 For example:
-WCE.exe -filter-by-groups -load-group-files "006-Plugin/101-Gaming-Websites"
--export-option
+WCE.exe -filter-by-groups "006-Plugin/101-Gaming-Websites" -export-option
 
-This would load the group files "006-Plugin.group" and "101-Gaming-Websites.group",
-and would filter the output based on the groups that they define.
+This would filter the output based on the groups that are defined in the
+files "006-Plugin.group" and "101-Gaming-Websites.group".
+
+* Long Option: -ignore-filter-for <Cache Names>
+* Short Option: -iff <Cache Names>
+* Description: Overrides the previous option for specific browsers or
+plugins.
+
+The <Cache Names> argument is mandatory and specifies a list of browser
+or plugin names, separated by forward slashes. These names are lowercase
+and match the long -export options. The names "browsers" and "plugins"
+can be used to refer to all browsers or plugins, respectively. These two
+categories are mutually exclusive.
+
+For example:
+WCE.exe -fbg "006-Plugin/101-Gaming-Websites" -ignore-filter-for "plugins/ie" -export-option
+
+This would filter the output based on any loaded groups, except for web
+plugins (Flash, Shockwave, Java, Unity) and for Internet Explorer.
 
 The following options should only be used when exporting the WinINet
-cache using -export-ie or -find-and-export-all.
+cache using -export-internet-explorer or -find-and-export-all.
 
-* Option: -hint-ie <Local AppData Path>
+* Long Option: -hint-ie <Local AppData Path>
+* Short Option: -hie <Local AppData Path>
 * Description: Specifies the absolute path to the Local AppData folder
 in the computer where the cache originated.
 
@@ -238,7 +250,7 @@ location. You should rerun this application with this option if you meet
 the criteria above and you notice that some cached files were not exported.
 
 For example:
-WCE.exe -hint-ie "C:\Users\My Old PC\AppData\Local" -export-ie "C:\Path To
+WCE.exe -hint-ie "C:\Users\My Old PC\AppData\Local" -export-internet-explorer "C:\Path To
 The Cache Database Files That Came From Another Computer"
 
 ======================================================================

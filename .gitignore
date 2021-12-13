@@ -18,7 +18,7 @@ Source/Other/JavaPlugin/*
 !Source/Other/JavaPlugin/*.bat
 !Source/Other/JavaPlugin/*.java
 
-# Used by the Build.bat to package the releases.
+# The 7-Zip executable used by the Build.bat to package the releases.
 _7za920
 
 # Other directories with tools and documentation.

@@ -86,7 +86,7 @@
 	--> Used to validate the output of this application.
 */
 
-static const TCHAR* OUTPUT_NAME = TEXT("MZ");
+static const TCHAR* OUTPUT_NAME = T("MZ");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -114,7 +114,7 @@ static void export_mozilla_cache_version_2(Exporter* exporter);
 // @Returns: True if a user-defined cache location was found. Otherwise, false.
 static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, const TCHAR* prefs_file_path, TCHAR* result_cache_path)
 {
-	*result_cache_path = TEXT('\0');
+	*result_cache_path = T('\0');
 	bool success = false;
 
 	Arena* arena = &(exporter->temporary_arena);
@@ -195,7 +195,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 	// We need to check both paths since older versions used to store the cache in AppData.
 	const TCHAR* cache_appdata_path_array[] = {exporter->local_appdata_path, exporter->appdata_path};
-	const TCHAR* CACHE_PROFILES_DIRECTORY_NAME = (optional_use_old_profiles_directory) ? (TEXT("Users50")) : (TEXT("Profiles"));
+	const TCHAR* CACHE_PROFILES_DIRECTORY_NAME = (optional_use_old_profiles_directory) ? (T("Users50")) : (T("Profiles"));
 
 	for(int i = 0; i < _countof(cache_appdata_path_array); ++i)
 	{
@@ -203,7 +203,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 		// Local AppData is skipped for Windows 98 and ME.
 		if(string_is_empty(cache_appdata_path)) continue;
 
-		TCHAR cache_profile_path[MAX_PATH_CHARS] = TEXT("");
+		TCHAR cache_profile_path[MAX_PATH_CHARS] = T("");
 		PathCombine(cache_profile_path, cache_appdata_path, vendor_and_browser_subdirectories);
 		PathAppend(cache_profile_path, CACHE_PROFILES_DIRECTORY_NAME);
 
@@ -219,23 +219,23 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			// We only check for custom locations in the prefs.js file when iterating over AppData (which is defined for all Windows versions and
 			// is where this preferences file is located).
 			bool should_check_prefs = (cache_appdata_path == exporter->appdata_path);
-			TCHAR prefs_file_path[MAX_PATH_CHARS] = TEXT("");
+			TCHAR prefs_file_path[MAX_PATH_CHARS] = T("");
 			PathCombine(prefs_file_path, cache_profile_path, profile_info.object_name);
-			PathAppend(prefs_file_path, TEXT("prefs.js"));
+			PathAppend(prefs_file_path, T("prefs.js"));
 
-			TCHAR prefs_cache_path[MAX_PATH_CHARS] = TEXT("");
+			TCHAR prefs_cache_path[MAX_PATH_CHARS] = T("");
 			if(should_check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
 			{
 				log_print(LOG_INFO, "Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
 			
-				PathCombine(exporter->cache_path, prefs_cache_path, TEXT("."));
+				PathCombine(exporter->cache_path, prefs_cache_path, T("."));
 				export_mozilla_cache_version_1(exporter);
 				export_mozilla_cache_version_2(exporter);
 
-				PathCombine(exporter->cache_path, prefs_cache_path, TEXT("Cache"));
+				PathCombine(exporter->cache_path, prefs_cache_path, T("Cache"));
 				export_mozilla_cache_version_1(exporter);
 
-				PathCombine(exporter->cache_path, prefs_cache_path, TEXT("cache2"));
+				PathCombine(exporter->cache_path, prefs_cache_path, T("cache2"));
 				export_mozilla_cache_version_2(exporter);
 			}
 
@@ -247,10 +247,10 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			// normally below.
 			if(!do_paths_refer_to_the_same_directory(prefs_cache_path, parent_cache_path))
 			{
-				PathCombine(exporter->cache_path, parent_cache_path, TEXT("Cache"));
+				PathCombine(exporter->cache_path, parent_cache_path, T("Cache"));
 				export_mozilla_cache_version_1(exporter);
 
-				PathCombine(exporter->cache_path, parent_cache_path, TEXT("cache2"));
+				PathCombine(exporter->cache_path, parent_cache_path, T("cache2"));
 				export_mozilla_cache_version_2(exporter);				
 			}
 			else
@@ -258,7 +258,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 				log_print(LOG_WARNING, "Default Mozilla Cache Exporter: Skipping the cache path '%s' since it's the same directory as the one found in the prefs: '%s'.", parent_cache_path, prefs_cache_path);
 			}
 
-			Traversal_Result* salt_directories = find_objects_in_directory(arena, profile_info.object_path, TEXT("*.slt"), TRAVERSE_DIRECTORIES, false);
+			Traversal_Result* salt_directories = find_objects_in_directory(arena, profile_info.object_path, T("*.slt"), TRAVERSE_DIRECTORIES, false);
 			lock_arena(arena);
 
 			// Look for salt directories inside each browser profiles (for the old structure).
@@ -268,19 +268,19 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 				PathCombine(prefs_file_path, cache_profile_path, profile_info.object_name);
 				PathAppend(prefs_file_path, salt_directory_info.object_name);
-				PathAppend(prefs_file_path, TEXT("prefs.js"));
+				PathAppend(prefs_file_path, T("prefs.js"));
 
 				if(should_check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
 				{
 					log_print(LOG_INFO, "Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
 				
-					PathCombine(exporter->cache_path, prefs_cache_path, TEXT("."));
+					PathCombine(exporter->cache_path, prefs_cache_path, T("."));
 					export_mozilla_cache_version_1(exporter);
 
-					PathCombine(exporter->cache_path, prefs_cache_path, TEXT("Cache"));
+					PathCombine(exporter->cache_path, prefs_cache_path, T("Cache"));
 					export_mozilla_cache_version_1(exporter);
 
-					PathCombine(exporter->cache_path, prefs_cache_path, TEXT("NewCache"));
+					PathCombine(exporter->cache_path, prefs_cache_path, T("NewCache"));
 					export_mozilla_cache_version_1(exporter);
 				}
 
@@ -288,10 +288,10 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 				if(!do_paths_refer_to_the_same_directory(prefs_cache_path, parent_cache_path))
 				{
-					PathCombine(exporter->cache_path, parent_cache_path, TEXT("Cache"));
+					PathCombine(exporter->cache_path, parent_cache_path, T("Cache"));
 					export_mozilla_cache_version_1(exporter);
 
-					PathCombine(exporter->cache_path, parent_cache_path, TEXT("NewCache"));
+					PathCombine(exporter->cache_path, parent_cache_path, T("NewCache"));
 					export_mozilla_cache_version_1(exporter);					
 				}
 				else
@@ -326,18 +326,18 @@ void export_default_or_specific_mozilla_cache(Exporter* exporter)
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
-			export_default_mozilla_cache(exporter, TEXT("Mozilla\\Firefox"), 					TEXT("FF"));
-			export_default_mozilla_cache(exporter, TEXT("Mozilla\\SeaMonkey"), 					TEXT("SM"));
-			export_default_mozilla_cache(exporter, TEXT("Moonchild Productions\\Pale Moon"), 	TEXT("PM"));
-			export_default_mozilla_cache(exporter, TEXT("Moonchild Productions\\Basilisk"), 	TEXT("BS"));
-			export_default_mozilla_cache(exporter, TEXT("Waterfox"), 							TEXT("WF"));
-			export_default_mozilla_cache(exporter, TEXT("K-Meleon"), 							TEXT("KM"));
-			export_default_mozilla_cache(exporter, TEXT("Netscape\\Navigator"), 				TEXT("NS"));
-			export_default_mozilla_cache(exporter, TEXT("Netscape\\NSB"), 						TEXT("NS"));
+			export_default_mozilla_cache(exporter, T("Mozilla\\Firefox"), 					T("FF"));
+			export_default_mozilla_cache(exporter, T("Mozilla\\SeaMonkey"), 					T("SM"));
+			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Pale Moon"), 	T("PM"));
+			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Basilisk"), 	T("BS"));
+			export_default_mozilla_cache(exporter, T("Waterfox"), 							T("WF"));
+			export_default_mozilla_cache(exporter, T("K-Meleon"), 							T("KM"));
+			export_default_mozilla_cache(exporter, T("Netscape\\Navigator"), 				T("NS"));
+			export_default_mozilla_cache(exporter, T("Netscape\\NSB"), 						T("NS"));
 
-			export_default_mozilla_cache(exporter, TEXT("Phoenix"), 							TEXT("PH-FB"));
-			export_default_mozilla_cache(exporter, TEXT("Mozilla"), 							TEXT("MS-NS"), false);
-			export_default_mozilla_cache(exporter, TEXT("Mozilla"), 							TEXT("MS-NS"), true);
+			export_default_mozilla_cache(exporter, T("Phoenix"), 							T("PH-FB"));
+			export_default_mozilla_cache(exporter, T("Mozilla"), 							T("MS-NS"), false);
+			export_default_mozilla_cache(exporter, T("Mozilla"), 							T("MS-NS"), true);
 		}
 		else
 		{
@@ -505,7 +505,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 	Arena* arena = &(exporter->temporary_arena);
 
-	PathCombine(exporter->index_path, exporter->cache_path, TEXT("_CACHE_MAP_"));
+	PathCombine(exporter->index_path, exporter->cache_path, T("_CACHE_MAP_"));
 	u64 map_file_size = 0;
 	void* map_file = read_entire_file(arena, exporter->index_path, &map_file_size);
 
@@ -531,7 +531,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		return;
 	}
 
-	TCHAR temporary_file_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR temporary_file_path[MAX_PATH_CHARS] = T("");
 	HANDLE temporary_file_handle = INVALID_HANDLE_VALUE;
 	
 	if(!create_temporary_exporter_file(exporter, temporary_file_path, &temporary_file_handle))
@@ -552,7 +552,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		if(reached_end_of_header) break;\
 		\
 		CopyMemory(&variable, header_cursor, sizeof(variable));\
-		SWAP_BYTE_ORDER(variable);\
+		BIG_ENDIAN_TO_HOST(variable);\
 		\
 		header_cursor = advance_bytes(header_cursor, sizeof(variable));\
 		remaining_header_size -= sizeof(variable);\
@@ -603,11 +603,11 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	}
 
 	#undef READ_INTEGER
-	#undef READ_ARRAY		
+	#undef READ_ARRAY
 
 	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT16_CHARS + 1 + MAX_INT16_CHARS;
-	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
-	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("%hu.%hu"), header.major_version, header.minor_version);
+	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = T("");
+	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("%hu.%hu"), header.major_version, header.minor_version);
 
 	log_print(LOG_INFO, "Mozilla Cache Version 1: The map file (version %s) was opened successfully.", cache_version);
 
@@ -651,7 +651,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	{
 		Block_File* block_file = &block_file_array[i];
 
-		StringCchPrintf(block_file->filename, MAX_BLOCK_FILENAME_CHARS, TEXT("_CACHE_00%d_"), i);
+		StringCchPrintf(block_file->filename, MAX_BLOCK_FILENAME_CHARS, T("_CACHE_00%d_"), i);
 		PathCombine(block_file->file_path, exporter->cache_path, block_file->filename);
 
 		block_file->file_handle = create_handle(block_file->file_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0);
@@ -727,7 +727,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	exporter->browser_profile = find_path_component(arena, exporter->cache_path, -2);
 
 	// E.g. "C:\Documents and Settings\<Username>\Local Settings\Application Data\<Vendor and Browser>\Profiles\<Profile Name>\<8 Characters>.slt\Cache".
-	bool using_old_directory_format = string_ends_with(exporter->browser_profile, TEXT(".slt"), true);
+	bool using_old_directory_format = string_ends_with(exporter->browser_profile, T(".slt"), true);
 	if(using_old_directory_format)
 	{
 		TCHAR* profile_name = find_path_component(arena, exporter->cache_path, -3);
@@ -757,12 +757,19 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		// little endian, even though the header and cache entries are in big endian. The data for version 1.6
 		// onwards is always big endian. I don't understand why this only happens for the records in the first
 		// version, maybe I'm missing something. This has been tested with versions 1.3, 1.5, 1.6, 1.11, and 1.19.
-		if(!is_version_1_5_or_earlier)
+		if(is_version_1_5_or_earlier)
 		{
-			SWAP_BYTE_ORDER(record.hash_number);
-			SWAP_BYTE_ORDER(record.eviction_rank);
-			SWAP_BYTE_ORDER(record.data_location);
-			SWAP_BYTE_ORDER(record.metadata_location);			
+			LITTLE_ENDIAN_TO_HOST(record.hash_number);
+			LITTLE_ENDIAN_TO_HOST(record.eviction_rank);
+			LITTLE_ENDIAN_TO_HOST(record.data_location);
+			LITTLE_ENDIAN_TO_HOST(record.metadata_location);			
+		}
+		else
+		{
+			BIG_ENDIAN_TO_HOST(record.hash_number);
+			BIG_ENDIAN_TO_HOST(record.eviction_rank);
+			BIG_ENDIAN_TO_HOST(record.data_location);
+			BIG_ENDIAN_TO_HOST(record.metadata_location);	
 		}
 	
 		u32 file_initialized = (record.data_location & MZ1_LOCATION_INITIALIZED_MASK);
@@ -793,19 +800,19 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		#define GET_EXTERNAL_DATA_FILE_PATH(is_metadata, result_path)\
 		do\
 		{\
-			TCHAR hash[MAX_INT32_CHARS] = TEXT("");\
-			StringCchPrintf(hash, MAX_INT32_CHARS, TEXT("%08X"), record.hash_number);\
-			const TCHAR* identifier = (is_metadata) ? (TEXT("m")) : (TEXT("d"));\
+			TCHAR hash[MAX_INT32_CHARS] = T("");\
+			StringCchPrintf(hash, MAX_INT32_CHARS, T("%08X"), record.hash_number);\
+			const TCHAR* identifier = (is_metadata) ? (T("m")) : (T("d"));\
 			u8 generation = (is_metadata) ? (metadata_generation) : (file_generation);\
 			/* For example: data file (hash 0E0A6E00 and generation 1) -> "0\E0\A6E00d01" */\
 			if(is_version_1_19_or_later)\
 			{\
-				StringCchPrintf(result_path, MAX_PATH_CHARS, TEXT("%.1s\\") TEXT("%.2s\\") TEXT("%s") TEXT("%s") TEXT("%02X"), hash, hash + 1, hash + 3, identifier, generation);\
+				StringCchPrintf(result_path, MAX_PATH_CHARS, T("%.1s\\") T("%.2s\\") T("%s") T("%s") T("%02X"), hash, hash + 1, hash + 3, identifier, generation);\
 			}\
 			/* For example: data file (hash 0E0A6E00 and generation 1) -> "0E0A6E00d01" */\
 			else\
 			{\
-				StringCchPrintf(result_path, MAX_PATH_CHARS, TEXT("%s") TEXT("%s") TEXT("%02X"), hash, identifier, generation);\
+				StringCchPrintf(result_path, MAX_PATH_CHARS, T("%s") T("%s") T("%02X"), hash, identifier, generation);\
 			}\
 		} while(false, false)
 
@@ -817,7 +824,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			{
 				if(metadata_selector == 0)
 				{				
-					TCHAR full_metadata_path[MAX_PATH_CHARS] = TEXT("");
+					TCHAR full_metadata_path[MAX_PATH_CHARS] = T("");
 					GET_EXTERNAL_DATA_FILE_PATH(true, full_metadata_path);
 					PathCombine(full_metadata_path, exporter->cache_path, full_metadata_path);
 					
@@ -871,12 +878,12 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			}	
 		}
 
-		TCHAR cached_file_size_string[MAX_INT32_CHARS] = TEXT("");
-		TCHAR access_count[MAX_INT32_CHARS] = TEXT("");
+		TCHAR cached_file_size_string[MAX_INT32_CHARS] = T("");
+		TCHAR access_count[MAX_INT32_CHARS] = T("");
 
-		TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-		TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-		TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+		TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
+		TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
+		TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 		
 		TCHAR* url = NULL;
 		TCHAR* request_origin = NULL;
@@ -886,18 +893,18 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		{
 			// Here, the metadata size is at least sizeof(Mozilla_1_Metadata_Entry).
 
-			SWAP_BYTE_ORDER(metadata->header_major_version);
-			SWAP_BYTE_ORDER(metadata->header_minor_version);
-			SWAP_BYTE_ORDER(metadata->meta_location);
-			SWAP_BYTE_ORDER(metadata->access_count);
+			BIG_ENDIAN_TO_HOST(metadata->header_major_version);
+			BIG_ENDIAN_TO_HOST(metadata->header_minor_version);
+			BIG_ENDIAN_TO_HOST(metadata->meta_location);
+			BIG_ENDIAN_TO_HOST(metadata->access_count);
 			
-			SWAP_BYTE_ORDER(metadata->last_access_time);
-			SWAP_BYTE_ORDER(metadata->last_modified_time);
-			SWAP_BYTE_ORDER(metadata->expiry_time);
-			SWAP_BYTE_ORDER(metadata->data_size);
+			BIG_ENDIAN_TO_HOST(metadata->last_access_time);
+			BIG_ENDIAN_TO_HOST(metadata->last_modified_time);
+			BIG_ENDIAN_TO_HOST(metadata->expiry_time);
+			BIG_ENDIAN_TO_HOST(metadata->data_size);
 			
-			SWAP_BYTE_ORDER(metadata->key_size);
-			SWAP_BYTE_ORDER(metadata->elements_size);
+			BIG_ENDIAN_TO_HOST(metadata->key_size);
+			BIG_ENDIAN_TO_HOST(metadata->elements_size);
 
 			_ASSERT( (metadata->header_major_version == header.major_version) && (metadata->header_minor_version == header.minor_version) );
 
@@ -926,7 +933,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 				char* key_in_metadata = (char*) advance_bytes(metadata, sizeof(Mozilla_1_Metadata_Entry));
 				TCHAR* key = convert_ansi_string_to_tchar(arena, key_in_metadata);
 				
-				String_Array<TCHAR>* split_key = split_string(arena, key, TEXT(":"), 1);
+				String_Array<TCHAR>* split_key = split_string(arena, key, T(":"), 1);
 
 				if(split_key->num_strings == 2)
 				{
@@ -960,11 +967,11 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 		// The file we'll copy will either be the cached file (if the data is stored in its own file),
 		// or the temporary file (if we had to extract some chunks from a block file).
-		TCHAR cached_file_path[MAX_PATH_CHARS] = TEXT("");
+		TCHAR cached_file_path[MAX_PATH_CHARS] = T("");
 		TCHAR* copy_source_path = NULL;
 
-		TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
-		TCHAR full_location_on_cache[MAX_PATH_CHARS] = TEXT("");
+		TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
+		TCHAR full_location_on_cache[MAX_PATH_CHARS] = T("");
 
 		if(is_file_initialized)
 		{
@@ -972,7 +979,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			{
 				if(file_selector == 0)
 				{	
-					TCHAR short_data_path[MAX_PATH_CHARS] = TEXT("");		
+					TCHAR short_data_path[MAX_PATH_CHARS] = T("");		
 					GET_EXTERNAL_DATA_FILE_PATH(false, short_data_path);
 					
 					PathCombine(cached_file_path, exporter->cache_path, short_data_path);
@@ -1036,8 +1043,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 
 							// Create a pretty version of the location on cache which includes the address and size in the block file.
 							const size_t MAX_LOCATION_IN_FILE_CHARS = MAX_INT32_CHARS * 2 + 2;
-							TCHAR location_in_file[MAX_LOCATION_IN_FILE_CHARS] = TEXT("");
-							StringCchPrintf(location_in_file, MAX_LOCATION_IN_FILE_CHARS, TEXT("@%08X") TEXT("#%08X"), offset_in_block_file, read_cached_file_size);
+							TCHAR location_in_file[MAX_LOCATION_IN_FILE_CHARS] = T("");
+							StringCchPrintf(location_in_file, MAX_LOCATION_IN_FILE_CHARS, T("@%08X") T("#%08X"), offset_in_block_file, read_cached_file_size);
 
 							PathCombine(short_location_on_cache, exporter->browser_profile, block_file.filename);
 							StringCchCat(short_location_on_cache, MAX_PATH_CHARS, location_in_file);
@@ -1075,7 +1082,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		Exporter_Params params = {};
 		params.copy_source_path = copy_source_path;
 		params.url = url;
-		params.filename = NULL;
+		params.filename = NULL; // Comes from the URL.
 		params.request_origin = request_origin;
 		params.headers = headers;
 		params.short_location_on_cache = short_location_on_cache;
@@ -1195,7 +1202,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		return true;
 	}
 
-	SWAP_BYTE_ORDER(metadata_offset);
+	BIG_ENDIAN_TO_HOST(metadata_offset);
 
 	if(metadata_offset > total_file_size)
 	{
@@ -1225,17 +1232,17 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		metadata = NULL;
 	}
 
-	TCHAR cached_file_size[MAX_INT32_CHARS] = TEXT("");
+	TCHAR cached_file_size[MAX_INT32_CHARS] = T("");
 	convert_u32_to_string(metadata_offset, cached_file_size);
 
-	TCHAR access_count[MAX_INT32_CHARS] = TEXT("");
+	TCHAR access_count[MAX_INT32_CHARS] = T("");
 
-	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
+	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 
 	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT32_CHARS + 3 + MAX_INT32_CHARS;
-	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = TEXT("");
+	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = T("");
 
 	TCHAR* url = NULL;
 	TCHAR* request_origin = NULL;
@@ -1260,7 +1267,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 			if(reached_end_of_metadata) break;\
 			\
 			CopyMemory(&variable, metadata, sizeof(variable));\
-			SWAP_BYTE_ORDER(variable);\
+			BIG_ENDIAN_TO_HOST(variable);\
 			\
 			metadata = advance_bytes(metadata, sizeof(variable));\
 			remaining_metadata_size -= sizeof(variable);\
@@ -1310,7 +1317,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 			format_time64_t_date_time(metadata_header.last_modified_time, last_modified_time);
 			format_time64_t_date_time(metadata_header.expiry_time, expiry_time);
 
-			StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, TEXT("2-i%I32u-e%I32u"), find_params->index_version, metadata_header.version);
+			StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("2-i%I32u-e%I32u"), find_params->index_version, metadata_header.version);
 
 			u32 key_size = metadata_header.key_length + 1;
 			if(remaining_metadata_size >= key_size)
@@ -1340,7 +1347,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 				// - URLParams::Serialize() in https://hg.mozilla.org/mozilla-central/file/tip/netwerk/base/nsURLHelper.cpp
 				TCHAR* key = convert_ansi_string_to_tchar(arena, (char*) metadata);
 
-				String_Array<TCHAR>* split_key = split_string(arena, key, TEXT(":"), 1);
+				String_Array<TCHAR>* split_key = split_string(arena, key, T(":"), 1);
 
 				if(split_key->num_strings == 2)
 				{
@@ -1348,30 +1355,30 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 					url = split_key->strings[1];
 					url = decode_url(arena, url);
 
-					String_Array<TCHAR>* split_tags = split_string(arena, tags, TEXT(","));
+					String_Array<TCHAR>* split_tags = split_string(arena, tags, T(","));
 
 					for(int i = 0; i < split_tags->num_strings; ++i)
 					{
 						TCHAR* tag = split_tags->strings[i];
 
-						if(string_starts_with(tag, TEXT("O^")))
+						if(string_starts_with(tag, T("O^")))
 						{
-							String_Array<TCHAR>* tag_params = split_string(arena, tag + 2, TEXT("&"));
+							String_Array<TCHAR>* tag_params = split_string(arena, tag + 2, T("&"));
 
 							for(int j = 0; j < tag_params->num_strings; ++j)
 							{
 								TCHAR* pair = tag_params->strings[j];
-								String_Array<TCHAR>* split_pair = split_string(arena, pair, TEXT("="), 1);
+								String_Array<TCHAR>* split_pair = split_string(arena, pair, T("="), 1);
 
 								if(split_pair->num_strings == 2)
 								{
 									TCHAR* key = split_pair->strings[0];
 									TCHAR* value = split_pair->strings[1];
 
-									if(strings_are_equal(key, TEXT("partitionKey")))
+									if(strings_are_equal(key, T("partitionKey")))
 									{
 										value = decode_url(arena, value);
-										String_Array<TCHAR>* url_parts = split_string(arena, value, TEXT("(),"), 2);
+										String_Array<TCHAR>* url_parts = split_string(arena, value, T("(),"), 2);
 
 										// We split two times at most for the scheme, host, and port, but we only
 										// care about the first two.
@@ -1383,7 +1390,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 											size_t num_partition_key_chars = string_length(scheme) + 3 + string_length(host) + 1;
 											partition_key = push_arena(arena, num_partition_key_chars * sizeof(TCHAR), TCHAR);
 
-											StringCchPrintf(partition_key, num_partition_key_chars, TEXT("%s://%s"), scheme, host);
+											StringCchPrintf(partition_key, num_partition_key_chars, T("%s://%s"), scheme, host);
 										}
 										else
 										{
@@ -1447,7 +1454,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		log_print(LOG_ERROR, "Mozilla Cache Version 2: Failed to copy the cached file of size %I32u in the file '%s' to the temporary exporter directory.", metadata_offset, cached_filename);
 	}
 
-	TCHAR short_location_on_cache[MAX_PATH_CHARS] = TEXT("");
+	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
 	PathCombine(short_location_on_cache, exporter->browser_profile, cached_filename);
 
 	Csv_Entry csv_row[] =
@@ -1465,11 +1472,12 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 	Exporter_Params exporter_params = {};
 	exporter_params.copy_source_path = copy_source_path;
 	exporter_params.url = url;
-	exporter_params.filename = NULL;
+	exporter_params.filename = NULL; // Comes from the URL.
 	exporter_params.request_origin = request_origin;
 	exporter_params.headers = headers;
 	exporter_params.short_location_on_cache = short_location_on_cache;
 	exporter_params.full_location_on_cache = full_location_on_cache;
+	exporter_params.file_info = NULL; // We don't want to use the file's real name on disk if we can't use the URL to determine the output filename.
 
 	export_cache_entry(exporter, csv_row, &exporter_params);
 
@@ -1489,9 +1497,9 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 	Arena* arena = &(exporter->temporary_arena);
 
 	TCHAR* cache_directory_name = PathFindFileName(exporter->cache_path);
-	const TCHAR* CACHE_ENTRY_DIRECTORY_NAME = TEXT("entries");
+	const TCHAR* CACHE_ENTRY_DIRECTORY_NAME = T("entries");
 
-	if(!strings_are_equal(cache_directory_name, CACHE_ENTRY_DIRECTORY_NAME, true))
+	if(!filenames_are_equal(cache_directory_name, CACHE_ENTRY_DIRECTORY_NAME))
 	{
 		PathAppend(exporter->cache_path, CACHE_ENTRY_DIRECTORY_NAME);
 	}
@@ -1502,14 +1510,14 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 		return;
 	}
 
-	PathCombine(exporter->index_path, exporter->cache_path, TEXT("..\\index"));
+	PathCombine(exporter->index_path, exporter->cache_path, T("..\\index"));
 
 	Mozilla_2_Index_Header index_header = {};
 	if(read_first_file_bytes(exporter->index_path, &index_header, sizeof(index_header)))
 	{
-		SWAP_BYTE_ORDER(index_header.version);
-		SWAP_BYTE_ORDER(index_header.last_write_time);
-		SWAP_BYTE_ORDER(index_header.dirty_flag);
+		BIG_ENDIAN_TO_HOST(index_header.version);
+		BIG_ENDIAN_TO_HOST(index_header.last_write_time);
+		BIG_ENDIAN_TO_HOST(index_header.dirty_flag);
 
 		if(index_header.dirty_flag != 0)
 		{
@@ -1524,7 +1532,7 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 	Find_Mozilla_2_Files_Params params = {};
 	params.exporter = exporter;
 	params.index_version = index_header.version;
-	params.temporary_file_path[0] = TEXT('\0');
+	params.temporary_file_path[0] = T('\0');
 	params.temporary_file_handle = INVALID_HANDLE_VALUE;
 
 	// E.g. "C:\Users\<Username>\AppData\Local\<Vendor and Browser>\Profiles\<Profile Name>\cache2\entries".

@@ -25,7 +25,7 @@
 	- This application was written in C-style C++03 and built using Visual Studio 2005 Professional (version 8.0, _MSC_VER = 1400)
 	to target both Windows 98 and later 64-bit Windows versions. Because of this, we'll often use the TCHAR and TEXT() macros to
 	maintain compatibility with Windows 98 and ME. This was the first real C/C++ program I wrote outside of university assignments
-	so it may not do certain things in the most optimal way.
+	so it may not do certain things in the most optimal way. For brevity's sake, the shorthand macro T() is used instead of TEXT().
 
 	- The exporters are located in a .cpp file called "<Name>_exporter.cpp" for both web browsers and web plugins. Each one is free
 	to implement how they read their respective cache formats in the way that best suits the data, exposing one function called
@@ -49,9 +49,18 @@
 
 	@Author: João Henggeler
 
-	@Future:
-	- Investigate the Netscape Navigator (6.0 and older) cache format.
+	@TODO:
 	- Decompress cached files depending on the Content-Encoding header.
+
+	@Future:
+	- Investigate the Chromium (Google Chrome, Microsoft Edge, Brave, Opera, Vivaldi, etc) cache format.
+	- Investigate the Netscape Navigator (6.0 and older) cache format.
+	- Investigate the Opera (14 or older) cache format.
+	- Investigate the Safari cache format.
+	- Investigate the Internet Explorer 3 cache format.
+	- Investigate the Internet Explorer Mac (WAF) cache format.
+	- Parse the JET Blue / ESE database format ourselves instead of relying on ESENT.dll. This should make it easier to lower the
+	complexity of the IE exporter while also removing a dependency. See: https://github.com/microsoft/Extensible-Storage-Engine
 */
 
 /*
@@ -62,8 +71,8 @@
 	>>>>>>>>>>>>>>>>>>>>
 */
 
-static const TCHAR* LOG_FILE_NAME = TEXT("WCE.log");
-static const TCHAR* DEFAULT_EXPORT_DIRECTORY_NAME = TEXT("ExportedCache");
+static const TCHAR* LOG_FILE_NAME = T("WCE.log");
+static const TCHAR* DEFAULT_EXPORT_DIRECTORY_NAME = T("ExportedCache");
 static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Arguments] <Export Argument>\n"
 												"\n"
 												"Below are some commonly used arguments. To see the full list of arguments, check the readme.txt file.\n"
@@ -72,68 +81,40 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"If you specify an empty path, then a default location is used.\n"
 												"\n"
-												"-export-ie    exports the WinINet cache, including Internet Explorer 4 to 11.\n"
+												"-export-internet-explorer (-eie)    exports the WinINet cache, including Internet Explorer 4 to 11.\n"
 												"\n"
-												"-export-mozilla    exports the Mozilla cache, including Mozilla Firefox and Netscape Navigator 6.1 to 9.\n"
+												"-export-mozilla (-emz)    exports the Mozilla cache, including Mozilla Firefox and Netscape Navigator 6.1 to 9.\n"
 												"\n"
-												"-export-flash    exports the Flash Player cache.\n"
+												"-export-flash (-efl)    exports the Flash Player cache.\n"
 												"\n"
-												"-export-shockwave    exports the Shockwave Player cache.\n"
+												"-export-shockwave (-esw)    exports the Shockwave Player cache.\n"
 												"\n"
-												"-export-java    exports the Java Plugin cache.\n"
+												"-export-java (-ejv)    exports the Java Plugin cache.\n"
 												"\n"
-												"-export-unity    exports the Unity Web Player cache.\n"
+												"-export-unity (-eun)    exports the Unity Web Player cache.\n"
 												"\n"
 												"########## [1] EXAMPLES:\n"
 												"\n"
-												"WCE.exe -export-ie\n"
-												"WCE.exe -export-ie \"C:\\PathToTheCache\"\n"
-												"WCE.exe -export-ie \"C:\\PathToTheCache\" \"My Cache\"\n"
-												"WCE.exe -export-ie \"\" \"My Cache\"    (choose the output path but use the default cache path)\n"
-												"WCE.exe -export-ie \"C:\\PathToTheCache\" \"\"    (choose the cache path but use the default output path)\n"
+												"WCE.exe -export-internet-explorer\n"
+												"WCE.exe -eie \"C:\\PathToTheCache\"\n"
+												"WCE.exe -eie \"C:\\PathToTheCache\" \"My Cache\"\n"
+												"WCE.exe -eie \"\" \"My Cache\"    (choose the output path but use the default cache path)\n"
+												"WCE.exe -eie \"C:\\PathToTheCache\" \"\"    (choose the cache path but use the default output path)\n"
 												"\n"
 												"\n"
 												"########## [2] OPTIONAL ARGUMENTS: Put them before the export option.\n"
 												"\n"
-												"-no-copy-files    stops the exporter from copying files.\n"
+												"-csv-only (-co)    only creates CSV files (don't export cached files).\n"
 												"\n"
-												"-no-create-csv    stops the exporter from creating CSV files.\n"
+												"-files-only (-fo)    only exports cached files (don't create CSV files).\n"
 												"\n"
-												"-overwrite    deletes the previous output folder before running.\n"
-												"\n"
-												"-filter-by-groups    only exports files that match any loaded groups.\n"
+												"-overwrite (-o)    deletes the previous output folder before running.\n"
 												"\n"
 												"########## [2] EXAMPLES:\n"
 												"\n"
-												"WCE.exe -no-copy-files -export-flash\n"
-												"WCE.exe -overwrite -no-create-csv -export-shockwave\n"
-												"WCE.exe -filter-by-groups -export-java"
+												"WCE.exe -csv-only -export-flash\n"
+												"WCE.exe -overwrite -files-only -export-shockwave"
 												;
-
-// Skips to the second dash in a command line argument. For example, "-export-ie" -> "-ie".
-//
-// @Parameters:
-// 1. str - The command line argument string.
-//
-// @Returns: The beginning of the second option in the command line argument. This function returns NULL if this suboption doesn't exist.
-static TCHAR* skip_to_suboption(TCHAR* str)
-{
-	TCHAR* suboption = NULL;
-
-	if(*str == TEXT('-'))
-	{
-		++str;
-	}
-
-	while(*str != TEXT('\0') && *str != TEXT('-'))
-	{
-		++str;
-	}
-
-	suboption = (*str != TEXT('\0')) ? (str) : (NULL);
-
-	return suboption;
-}
 
 // Maps a cache exporter's short name to its cache type enum.
 //
@@ -176,41 +157,49 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 	exporter->should_copy_files = true;
 	exporter->should_create_csv = true;
 
+	#define IS_OPTION(long_option, short_option) (strings_are_equal(option, T(long_option)) || strings_are_equal(option, T(short_option)))
+
 	// Skip the first argument which contains the executable's name.
 	for(int i = 1; i < num_arguments; ++i)
 	{
 		TCHAR* option = arguments[i];
 
-		if(strings_are_equal(option, TEXT("-no-copy-files")))
+		if(IS_OPTION("-csv-only", "-co"))
 		{
 			exporter->should_copy_files = false;
 		}
-		else if(strings_are_equal(option, TEXT("-no-create-csv")))
+		else if(IS_OPTION("-files-only", "-fo"))
 		{
 			exporter->should_create_csv = false;
 		}
-		else if(strings_are_equal(option, TEXT("-overwrite")))
+		else if(IS_OPTION("-overwrite", "-o"))
 		{
 			exporter->should_overwrite_previous_output = true;
 		}
-		else if(strings_are_equal(option, TEXT("-show-full-paths")))
+		else if(IS_OPTION("-show-full-paths", "-sfp"))
 		{
 			exporter->should_show_full_paths = true;
 		}
-		else if(strings_are_equal(option, TEXT("-group-by-origin")))
+		else if(IS_OPTION("-group-by-origin", "-gbo"))
 		{
 			exporter->should_group_by_request_origin = true;
 		}
-		else if(strings_are_equal(option, TEXT("-filter-by-groups")))
+		else if(IS_OPTION("-filter-by-groups", "-fbg"))
 		{
 			exporter->should_filter_by_groups = true;
+			if(i+1 < num_arguments)
+			{
+				const TCHAR* group_file_list = arguments[i+1];
+				exporter->group_files_for_filtering = split_string(temporary_arena, group_file_list, T("/"));
+				i += 1;
+			}
 		}
-		else if(strings_are_equal(option, TEXT("-ignore-filter-for")))
+		else if(IS_OPTION("-ignore-filter-for", "-iff"))
 		{
 			if(i+1 < num_arguments)
 			{
 				const TCHAR* name_list = arguments[i+1];
-				String_Array<TCHAR>* split_names = split_string(temporary_arena, name_list, TEXT("/"));
+				String_Array<TCHAR>* split_names = split_string(temporary_arena, name_list, T("/"));
 
 				for(int j = 0; j < split_names->num_strings; ++j)
 				{
@@ -219,7 +208,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 
 					if(type == CACHE_UNKNOWN || type == CACHE_ALL || type == CACHE_EXPLORE)
 					{
-						if(strings_are_equal(name, TEXT("plugins")))
+						if(strings_are_equal(name, T("plugins")))
 						{
 							log_print(LOG_INFO, "Argument Parsing: Ignoring filter for any plugin cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
@@ -227,7 +216,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 								if(IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
 							}
 						}
-						else if(strings_are_equal(name, TEXT("browsers")))
+						else if(strings_are_equal(name, T("browsers")))
 						{
 							log_print(LOG_INFO, "Argument Parsing: Ignoring filter for any browser cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
@@ -251,19 +240,8 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 
 				i += 1;
 			}
-		}
-		else if(strings_are_equal(option, TEXT("-load-group-files")))
-		{
-			exporter->should_load_specific_groups_files = true;
-
-			if(i+1 < num_arguments)
-			{
-				const TCHAR* group_file_list = arguments[i+1];
-				exporter->group_files_to_load = split_string(temporary_arena, group_file_list, TEXT("/"));
-				i += 1;
-			}
-		}
-		else if(strings_are_equal(option, TEXT("-hint-ie")))
+		}		
+		else if(IS_OPTION("-hint-ie", "-hie"))
 		{
 			exporter->should_use_ie_hint = true;
 			if(i+1 < num_arguments)
@@ -272,7 +250,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 				i += 1;
 			}
 		}
-		else if(strings_are_equal(option, TEXT("-explore-files")))
+		else if(IS_OPTION("-explore-files", "-ef"))
 		{
 			exporter->command_line_cache_type = CACHE_EXPLORE;
 
@@ -300,7 +278,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			seen_export_option = true;
 			break;
 		}
-		else if(strings_are_equal(option, TEXT("-find-and-export-all")))
+		else if(IS_OPTION("-find-and-export-all", "-faea"))
 		{
 			exporter->command_line_cache_type = CACHE_ALL;
 
@@ -323,28 +301,38 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			seen_export_option = true;
 			break;
 		}
-		else if(string_starts_with(option, TEXT("-export")))
+		else if(string_starts_with(option, T("-e")))
 		{
-			TCHAR* cache_name = skip_to_suboption(option);
-
-			if(cache_name == NULL)
+			if(IS_OPTION("-export-internet-explorer", "-eie"))
 			{
-				console_print("Missing cache type in the command line option '%s'.", option);
-				log_print(LOG_ERROR, "Argument Parsing: Missing cache type in the command line option '%s'.", option);
-				exporter->command_line_cache_type = CACHE_UNKNOWN;
-				success = false;
+				exporter->command_line_cache_type = CACHE_INTERNET_EXPLORER;
+			}
+			else if(IS_OPTION("-export-mozilla", "-emz"))
+			{
+				exporter->command_line_cache_type = CACHE_MOZILLA;
+			}
+			else if(IS_OPTION("-export-flash", "-efl"))
+			{
+				exporter->command_line_cache_type = CACHE_FLASH;
+			}
+			else if(IS_OPTION("-export-shockwave", "-esw"))
+			{
+				exporter->command_line_cache_type = CACHE_SHOCKWAVE;
+			}
+			else if(IS_OPTION("-export-java", "-ejv"))
+			{
+				exporter->command_line_cache_type = CACHE_JAVA;
+			}
+			else if(IS_OPTION("-export-unity", "-eun"))
+			{
+				exporter->command_line_cache_type = CACHE_UNITY;
 			}
 			else
 			{
-				// E.g. "-ie".
-				exporter->command_line_cache_type = get_cache_type_from_short_name(cache_name + 1);
-
-				if(exporter->command_line_cache_type == CACHE_UNKNOWN)
-				{
-					console_print("Unknown cache type '%s' in the command line option '%s'.", cache_name, option);
-					log_print(LOG_ERROR, "Argument Parsing: Unknown cache type '%s' in the command line option '%s'.", cache_name, option);
-					success = false;
-				}
+				console_print("Unknown export option '%s'.", option);
+				log_print(LOG_ERROR, "Argument Parsing: Unknown export option '%s'.", option);
+				exporter->command_line_cache_type = CACHE_UNKNOWN;
+				success = false;
 			}
 
 			bool was_given_cache_path = false;
@@ -367,16 +355,6 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			seen_export_option = true;
 			break;
 		}
-		#ifdef DEBUG
-			else if(strings_are_equal(option, TEXT("-debug-assert")))
-			{
-				debug_log_print("Argument Parsing: Forcing failed assertion.");
-				_ASSERT(false);
-				success = false;
-				seen_export_option = true;
-				break;
-			}
-		#endif
 		else
 		{
 			console_print("Unknown command line option '%s'.", option);
@@ -385,6 +363,8 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			break;
 		}
 	}
+
+	#undef IS_OPTION
 
 	if(!seen_export_option)
 	{
@@ -395,10 +375,13 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 
 	if(!exporter->should_copy_files && !exporter->should_create_csv)
 	{
-		console_print("The options -no-copy-files and no-create-csv can't be used at the same time.");
-		log_print(LOG_ERROR, "Argument Parsing: The options '-no-copy-files' and '-no-create-csv' were used at the same time.");
+		console_print("The options -csv-only and -files-only can't be used at the same time.");
+		log_print(LOG_ERROR, "Argument Parsing: The options '-csv-only' and '-files-only' were used at the same time.");
 		success = false;
 	}
+
+	// These empty string checks may seem overkill but remember that an empty path is used to specify the default
+	// locations for the export command line options. This means that we want to warn the user about this behavior.
 
 	if(exporter->should_load_external_locations)
 	{
@@ -573,7 +556,7 @@ int _tmain(int argc, TCHAR* argv[])
 
 	{
 		const size_t NUM_IE_VERSION_CHARS = 32;
-		TCHAR ie_version[NUM_IE_VERSION_CHARS] = TEXT("");
+		TCHAR ie_version[NUM_IE_VERSION_CHARS] = T("");
 		if(find_internet_explorer_version(ie_version, sizeof(ie_version)))
 		{
 			log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);
@@ -649,14 +632,14 @@ int _tmain(int argc, TCHAR* argv[])
 		if(GetModuleFileName(NULL, exporter.executable_path, MAX_PATH_CHARS) != 0)
 		{
 			// Remove the executable's name from the path.
-			PathAppend(exporter.executable_path, TEXT(".."));
+			PathAppend(exporter.executable_path, T(".."));
 		}
 		else
 		{
 			log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
 		}
 
-		PathCombine(exporter.group_files_path, exporter.executable_path, TEXT("Groups"));
+		PathCombine(exporter.group_files_path, exporter.executable_path, T("Groups"));
 
 		int num_groups = 0;
 		int num_profiles = 0;
@@ -747,11 +730,11 @@ int _tmain(int argc, TCHAR* argv[])
 	{
 		// @Future: Is there a better way to find LocalLow?
 		StringCchCopy(exporter.local_low_appdata_path, MAX_PATH_CHARS, exporter.local_appdata_path);
-		PathAppend(exporter.local_low_appdata_path, TEXT("..\\LocalLow"));
+		PathAppend(exporter.local_low_appdata_path, T("..\\LocalLow"));
 
 		if(!does_directory_exist(exporter.local_low_appdata_path))
 		{
-			exporter.local_low_appdata_path[0] = TEXT('\0');
+			exporter.local_low_appdata_path[0] = T('\0');
 		}
 	}
 	else
@@ -799,8 +782,7 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", (exporter.should_overwrite_previous_output) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Show Full Paths: %hs", (exporter.should_show_full_paths) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Should Filter By Groups: %hs", (exporter.should_filter_by_groups) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Should Load Specific Groups: %hs", (exporter.should_load_specific_groups_files) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Number Of Groups To Load: %d", (exporter.group_files_to_load != NULL) ? (exporter.group_files_to_load->num_strings) : (-1));
+	log_print(LOG_NONE, "- Number Of Group Files Enabled For Filtering: %d", (exporter.group_files_for_filtering != NULL) ? (exporter.group_files_for_filtering->num_strings) : (-1));
 	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
 	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
 	log_print(LOG_NONE, "------------------------------------------------------------");
@@ -834,9 +816,9 @@ int _tmain(int argc, TCHAR* argv[])
 	_ASSERT(permanent_arena->num_locks == 1);
 	_ASSERT(temporary_arena->num_locks == 0);
 
-	// Get rid of any variable-length that is no longer necessary.
+	// Get rid of any variable-length values that is no longer necessary.
 	clear_arena(temporary_arena);
-	exporter.group_files_to_load = NULL;
+	exporter.group_files_for_filtering = NULL;
 
 	switch(exporter.command_line_cache_type)
 	{
@@ -931,7 +913,7 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 	_ASSERT(count_path_components(cache_identifier) == 1);
 
 	exporter->csv_file_handle = INVALID_HANDLE_VALUE;
-	exporter->index_path[0] = TEXT('\0');
+	exporter->index_path[0] = T('\0');
 	exporter->browser_name = NULL;
 	exporter->browser_profile = NULL;
 	exporter->num_assigned_filenames = 0;
@@ -952,7 +934,7 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 	
 	// Don't use PathCombine() since we're just adding a file extension to the previous path.
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
-	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, TEXT(".csv"));
+	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, T(".csv"));
 
 	if(exporter->should_create_csv)
 	{
@@ -1044,12 +1026,12 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 {
 	++(exporter->num_assigned_filenames);
 	++(exporter->total_assigned_filenames);
-	StringCchPrintf(result_filename, MAX_PATH_CHARS, TEXT("~WCE-%d"), exporter->num_assigned_filenames);
+	StringCchPrintf(result_filename, MAX_PATH_CHARS, T("~WCE-%d"), exporter->num_assigned_filenames);
 }
 
 // Adds a formatted string to the current exporter's warning message. Successive messages are separated by spaces.
 //
-// Use the add_exporter_warning_message() macro to perform this operation without having to wrap the format string with TEXT().
+// Use the add_exporter_warning_message() macro to perform this operation without having to wrap the format string with T().
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the current warning message.
@@ -1059,7 +1041,7 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 // @Returns: Nothing.
 void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_format, ...)
 {
-	TCHAR message_buffer[MAX_EXPORTER_WARNING_CHARS] = TEXT("");
+	TCHAR message_buffer[MAX_EXPORTER_WARNING_CHARS] = T("");
 
 	va_list arguments;
 	va_start(arguments, string_format);
@@ -1068,7 +1050,7 @@ void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_
 
 	if(!string_is_empty(exporter->warning_message))
 	{
-		StringCchCat(exporter->warning_message, MAX_EXPORTER_WARNING_CHARS, TEXT(" "));
+		StringCchCat(exporter->warning_message, MAX_EXPORTER_WARNING_CHARS, T(" "));
 	}
 
 	StringCchCat(exporter->warning_message, MAX_EXPORTER_WARNING_CHARS, message_buffer);
@@ -1090,7 +1072,7 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, con
 	// copy_file_chunks(), and this function itself.
 	bool copy_success = false;
 
-	#if defined(DEBUG) && defined(EXPORT_EMPTY_FILES)
+	#if defined(BUILD_DEBUG) && defined(EXPORT_EMPTY_FILES)
 		copy_success = create_empty_file(destination_path, false);
 	#else
 		copy_success = CopyFile(source_path, destination_path, TRUE) != FALSE;
@@ -1163,8 +1145,8 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 																const TCHAR* url, const TCHAR* filename,
 																TCHAR* result_destination_path, TCHAR* result_error_code)
 {
-	*result_destination_path = TEXT('\0');
-	*result_error_code = TEXT('\0');
+	*result_destination_path = T('\0');
+	*result_error_code = T('\0');
 
 	if(full_source_path == NULL || string_is_empty(full_source_path))
 	{
@@ -1176,7 +1158,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	const TCHAR* full_base_directory_path = exporter->output_copy_path;
 
 	// Copy Target = Base Destination Path
-	TCHAR full_destination_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR full_destination_path[MAX_PATH_CHARS] = T("");
 	PathCanonicalize(full_destination_path, full_base_directory_path);
 
 	int num_base_components = count_path_components(full_destination_path);
@@ -1184,7 +1166,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	// Copy Target = Base Destination Path + Url Converted To Path (if it exists)
 	if(url != NULL)
 	{
-		TCHAR url_path[MAX_PATH_CHARS] = TEXT("");
+		TCHAR url_path[MAX_PATH_CHARS] = T("");
 		bool build_target_success = convert_url_to_path(temporary_arena, url, url_path) && (PathAppend(full_destination_path, url_path) != FALSE);
 		if(!build_target_success)
 		{
@@ -1198,7 +1180,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	// Create every directory in the copy target, while resolving any file naming collisions.
 	// - If a directory with the same name already exists, nothing is done and the function continues.
 	// - If a file with the same name already exists, then the name of the directory will be changed (e.g. "Dir" -> "Dir~1").
-	TCHAR resolved_full_destination_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR resolved_full_destination_path[MAX_PATH_CHARS] = T("");
 	if(create_directories(full_destination_path, true, resolved_full_destination_path))
 	{
 		StringCchCopy(full_destination_path, MAX_PATH_CHARS, resolved_full_destination_path);
@@ -1209,7 +1191,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 		StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
 	}
 
-	TCHAR corrected_filename[MAX_PATH_CHARS] = TEXT("");
+	TCHAR corrected_filename[MAX_PATH_CHARS] = T("");
 	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
 	
 	correct_url_path_characters(corrected_filename);
@@ -1249,8 +1231,8 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	_ASSERT(!string_is_empty(full_destination_path));
 
 	u32 num_naming_collisions = 0;
-	TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
-	TCHAR full_unique_destination_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR unique_id[MAX_INT32_CHARS + 1] = T("~");
+	TCHAR full_unique_destination_path[MAX_PATH_CHARS] = T("");
 	StringCchCopy(full_unique_destination_path, MAX_PATH_CHARS, full_destination_path);
 
 	bool copy_success = copy_exporter_file(exporter, full_source_path, full_unique_destination_path);
@@ -1274,7 +1256,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 		if(naming_success)
 		{
 			TCHAR* file_extension_in_target = skip_to_file_extension(full_unique_destination_path, true);
-			*file_extension_in_target = TEXT('\0');
+			*file_extension_in_target = T('\0');
 		}
 
 		naming_success = naming_success && convert_u32_to_string(num_naming_collisions, unique_id + 1)
@@ -1339,17 +1321,20 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 // It's possible that this manipulation may fail (e.g. extracting the payload from a file), leading to a situation where we don't want to copy anything.
 //
 // - The 'url' may be NULL if the cached file has no URL information associated with it.
-// - The 'filename' may be NULL if 'url' or 'optional_file_info' were set and contain a non-empty string. Otherwise, this function assigns the cached
+// - The 'filename' may be NULL if 'url' or 'file_info' were set and contain a non-empty string. Otherwise, this function assigns the cached
 // file a unique name.
 //
 // - The 'short_location_on_cache' is always required.
 // - The 'full_location_on_cache' defaults to 'copy_source_path' if it's not set.
 //
-// 4. optional_file_info - An optional parameter that specifies additional information about the file that may be use to fill some CSV columns.
-// This value defaults to NULL.
+// - The 'file_info' specifies additional information about the file on disk that may be use to fill some CSV columns if their values are missing.
+// These include the file size, creation time, last access time, and last write time. If an exporter isn't using any Traversal_Object_Info structs,
+// then this should be set to NULL. If it is using them but you don't want to potentially replace the output filename with the file's real name on
+// disk, then you may also set it to NULL. For example, if both 'filename' and 'file_info' are NULL, and a name can't be determined from the URL,
+// then the exporter will just generate a unique one.
 // 
 // @Returns: Nothing.
-void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params, Traversal_Object_Info* optional_file_info)
+void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params)
 {
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
@@ -1359,6 +1344,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 
 	TCHAR* entry_request_origin = params->request_origin;
 	Http_Headers entry_headers = params->headers;
+	Traversal_Object_Info* entry_file_info = params->file_info;
 
 	#define IS_STRING_EMPTY(string) ( ((string) == NULL) || string_is_empty(string) )
 
@@ -1382,13 +1368,13 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		}
 	}
 	
-	if(IS_STRING_EMPTY(entry_filename) && optional_file_info != NULL)
+	if(IS_STRING_EMPTY(entry_filename) && entry_file_info != NULL)
 	{
-		entry_filename = optional_file_info->object_name;
+		entry_filename = entry_file_info->object_name;
 	}
 	
 	bool assigned_short_filename = false;
-	TCHAR short_filename[MAX_PATH_CHARS] = TEXT("");
+	TCHAR short_filename[MAX_PATH_CHARS] = T("");
 	if(IS_STRING_EMPTY(entry_filename))
 	{
 		assigned_short_filename = true;
@@ -1407,25 +1393,22 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	ssize_t file_group_index = -1;
 	ssize_t url_group_index = -1;
 
-	TCHAR file_size[MAX_INT64_CHARS] = TEXT("");
-	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
-	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR file_size[MAX_INT64_CHARS] = T("");
+	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
+	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
+	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	
 	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
-		bool use_value_from_file_info = (value == NULL && optional_file_info != NULL);
+		bool use_value_from_file_info = (value == NULL && entry_file_info != NULL);
 
 		switch(exporter->csv_column_types[i])
 		{
 			/*
 				@CustomGroups: Used to fill the custom group columns.
-				
-				@FileInfo: Uses the values from the 'optional_file_info' parameter if it exists, and if the column value in
-				question is not NULL.
-				
-				@ExporterParams: Uses the values from the 'params' parameter.
+				@FileInfo: Uses the values from the 'file_info' parameter if it exists, and if the column value in question is not NULL.
+				@ExporterParams: Uses the values from the 'params' parameter, except 'file_info'.
 			*/
 
 			// @FileInfo @ExporterParams
@@ -1460,7 +1443,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 					u64 file_size_value = 0;
 					if(use_value_from_file_info)
 					{
-						file_size_value = optional_file_info->object_size;
+						file_size_value = entry_file_info->object_size;
 					}
 					else
 					{
@@ -1477,7 +1460,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			{
 				if(use_value_from_file_info)
 				{
-					format_filetime_date_time(optional_file_info->creation_time, creation_time);
+					format_filetime_date_time(entry_file_info->creation_time, creation_time);
 					value = creation_time;
 				}
 			} break;
@@ -1487,7 +1470,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			{
 				if(use_value_from_file_info)
 				{
-					format_filetime_date_time(optional_file_info->last_write_time, last_write_time);
+					format_filetime_date_time(entry_file_info->last_write_time, last_write_time);
 					value = last_write_time;
 				}
 			} break;
@@ -1497,7 +1480,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			{
 				if(use_value_from_file_info)
 				{
-					format_filetime_date_time(optional_file_info->last_access_time, last_access_time);
+					format_filetime_date_time(entry_file_info->last_access_time, last_access_time);
 					value = last_access_time;
 				}
 			} break;
@@ -1569,7 +1552,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			case(CSV_MISSING_FILE):
 			{
 				_ASSERT(value == NULL);
-				value = (file_exists) ? (TEXT("No")) : (TEXT("Yes"));
+				value = (file_exists) ? (T("No")) : (T("Yes"));
 			} break;
 
 			// @ExporterParams
@@ -1615,7 +1598,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	{
 		entry_url = skip_url_scheme(entry_url);
 
-		const TCHAR* GENERIC_SCHEME = TEXT("http://");
+		const TCHAR* GENERIC_SCHEME = T("http://");
 		size_t new_url_size = string_size(GENERIC_SCHEME) + string_size(entry_request_origin) + string_size(entry_url);
 		TCHAR* new_url = push_arena(temporary_arena, new_url_size, TCHAR);
 
@@ -1626,7 +1609,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		}
 
 		StringCbCat(new_url, new_url_size, entry_request_origin);
-		StringCbCat(new_url, new_url_size, TEXT("/"));
+		StringCbCat(new_url, new_url_size, T("/"));
 		StringCbCat(new_url, new_url_size, entry_url);
 
 		entry_url = new_url;
@@ -1649,21 +1632,24 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		}
 	}
 
-	bool match_allows_for_exporting_entry = (!exporter->should_filter_by_groups)
-								|| ( exporter->should_filter_by_groups && (matched_group || exporter->should_ignore_filter_for_cache_type[exporter->current_cache_type]) );
+	bool match_allows_for_exporting_entry = true;
+	if(exporter->should_filter_by_groups)
+	{
+		match_allows_for_exporting_entry = (matched_group && entry_to_match.match_is_enabled_for_filtering) || exporter->should_ignore_filter_for_cache_type[exporter->current_cache_type];
+	}
 
-	TCHAR copy_destination_path[MAX_PATH_CHARS] = TEXT("");
-	TCHAR copy_error_code[MAX_INT32_CHARS] = TEXT("");
+	TCHAR copy_destination_path[MAX_PATH_CHARS] = T("");
+	TCHAR copy_error_code[MAX_INT32_CHARS] = T("");
 	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)
 	{
 		if(assigned_short_filename && entry_to_match.matched_default_file_extension != NULL)
 		{
-			const TCHAR* FILE_EXTENSION_SEPARATOR = TEXT(".");
+			const TCHAR* FILE_EXTENSION_SEPARATOR = T(".");
 			size_t new_filename_size = string_size(short_filename) + string_size(FILE_EXTENSION_SEPARATOR) + string_size(entry_to_match.matched_default_file_extension);
 			TCHAR* new_filename = push_arena(temporary_arena, new_filename_size, TCHAR);
 
 			StringCbCat(new_filename, new_filename_size, short_filename);
-			StringCbCat(new_filename, new_filename_size, TEXT("."));
+			StringCbCat(new_filename, new_filename_size, T("."));
 			StringCbCat(new_filename, new_filename_size, entry_to_match.matched_default_file_extension);
 
 			entry_filename = new_filename;
@@ -1706,7 +1692,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	}
 
 	clear_arena(temporary_arena);
-	exporter->warning_message[0] = TEXT('\0');
+	exporter->warning_message[0] = T('\0');
 }
 
 // Terminates a cache exporter by performing the following:
@@ -1745,7 +1731,7 @@ void terminate_cache_exporter(Exporter* exporter)
 // @Returns: True if the file was created successfully. Otherwise, false.
 bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename)
 {
-	*result_file_path = TEXT('\0');
+	*result_file_path = T('\0');
 	if(!exporter->was_temporary_exporter_directory_created) return false;
 	bool create_success = false;
 
@@ -1782,7 +1768,7 @@ bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file
 // @Returns: True if the file was created successfully. Otherwise, false.
 bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, HANDLE* result_file_handle)
 {
-	*result_file_path = TEXT('\0');
+	*result_file_path = T('\0');
 	*result_file_handle = INVALID_HANDLE_VALUE;
 
 	if(!exporter->was_temporary_exporter_directory_created) return false;
@@ -1863,71 +1849,11 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 }
 
 /*
-	The following defines the necessary functions used to load the external locations file. This file contains zero or more profiles
-	which specify the absolute paths of key Windows locations, allowing you to export the cache from files that came from another
-	computer.
+	The following defines the necessary functions used to load the external locations file. External locations files are text files
+	that define zero or more profiles, each one specifying a list of absolute paths of key Windows locations. This allows you to export
+	the cache from files that came from another computer.
 
-	Here's an example of an external locations file which defines three profiles: Windows 98, Windows XP, and Windows 8.1. If a line
-	starts with a ';' character, then it's considered a comment and is not processed.
-	
-	If a location specifies "<None>", then the path is assumed to be empty. This is used when the Windows version of the computer where
-	the files originated didn't have that type of location. This application will create multiple subdirectories in the main output
-	directory with each profile's name. Because of this, any reserved Windows directory name characters may not be used.
-
-	; For Windows 98:
-	BEGIN_PROFILE Default User
-
-		DRIVE				C:\My Old Drives\Windows 98
-
-		WINDOWS				C:\My Old Drives\Windows 98\WINDOWS
-		TEMPORARY			C:\My Old Drives\Windows 98\WINDOWS\TEMP
-		USER_PROFILE		<None>
-
-		APPDATA				C:\My Old Drives\Windows 98\WINDOWS\Application Data
-		LOCAL_APPDATA		<None>
-		LOCAL_LOW_APPDATA	<None>
-
-		INTERNET_CACHE		C:\My Old Drives\Windows 98\WINDOWS\Temporary Internet Files
-	
-	END
-
-	; For Windows XP:
-	BEGIN_PROFILE <Username>
-
-		DRIVE				C:\My Old Drives\Windows XP
-
-		WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
-		TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Temp
-		USER_PROFILE		C:\My Old Drives\Windows XP\Documents and Settings\<Username>
-
-		APPDATA				C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Application Data
-		LOCAL_APPDATA		C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Application Data
-		LOCAL_LOW_APPDATA	<None>
-
-		INTERNET_CACHE		C:\My Old Drives\Windows XP\Documents and Settings\<Username>\Local Settings\Temporary Internet Files
-	
-	END
-
-	; For Windows 8.1:
-	BEGIN_PROFILE <Username>
-
-		DRIVE				C:\My Old Drives\Windows 8.1
-
-		WINDOWS				C:\My Old Drives\Windows 8.1\Windows
-		TEMPORARY			C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local\Temp
-		USER_PROFILE		C:\My Old Drives\Windows 8.1\Users\<Username>
-
-		APPDATA				C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Roaming
-		LOCAL_APPDATA		C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local
-		LOCAL_LOW_APPDATA	C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\LocalLow
-
-		INTERNET_CACHE		C:\My Old Drives\Windows 8.1\Users\<Username>\AppData\Local\Microsoft\Windows\INetCache
-	
-	END
-
-	External locations files use UTF-8 as their character encoding, meaning you can use any Unicode character in the various paths.
-	In the Windows 98 and ME builds, you must only use ASCII characters. However, since this feature is meant to export the cache
-	from an older computer's files in a modern machine, this situation is extremely unlikely to come up.
+	To learn how these files are supposed to work, refer to the "About External Locations.txt" help file in "Source\ExternalLocations".
 */
 
 // Various keywords and delimiters for the external locations file syntax.
@@ -2221,8 +2147,8 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 		External_Locations* external_locations = exporter->external_locations;
 		_ASSERT(external_locations != NULL);
 
-		console_print("Exporting the cache from %d default external locations...", external_locations->num_profiles);
-		log_print(LOG_INFO, "All Locations: Exporting the cache from %d default external locations.", external_locations->num_profiles);
+		console_print("Exporting the cache from the default locations in %d profiles...", external_locations->num_profiles);
+		log_print(LOG_INFO, "All Locations: Exporting the cache from the default locations in %d profiles.", external_locations->num_profiles);
 		log_print_newline();
 
 		for(int i = 0; i < external_locations->num_profiles; ++i)
@@ -2231,7 +2157,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 			exporter->current_profile_name = profile.name;
 			console_print("- [%d of %d] Exporting from the profile '%s'...", i+1, external_locations->num_profiles, profile.name);
 			
-			#define STRING_OR_DEFAULT(str) (str != NULL) ? (str) : (TEXT(""))
+			#define STRING_OR_DEFAULT(str) (str != NULL) ? (str) : (T(""))
 
 			log_print(LOG_NONE, "------------------------------------------------------------");
 			log_print(LOG_INFO, "Exporting from the profile '%s' (%I32u).", profile.name, i);

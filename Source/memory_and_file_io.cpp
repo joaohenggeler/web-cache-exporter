@@ -48,7 +48,7 @@
 // Base addresses that are used by the create_arena() and memory_map_entire_file() functions
 // in the debug builds. These are incremented by a set amount if these functions are called
 // multiple times.
-#ifdef DEBUG
+#ifdef BUILD_DEBUG
 	#ifdef BUILD_9X
 		static void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = NULL;
 		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = NULL;
@@ -79,7 +79,7 @@
 // Otherwise, it returns false, available_memory is set to NULL, and both size fields are set to zero.
 bool create_arena(Arena* arena, size_t total_size)
 {
-	#ifdef DEBUG
+	#ifdef BUILD_DEBUG
 		arena->available_memory = VirtualAlloc(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, total_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 		DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = advance_bytes(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 	#else
@@ -92,7 +92,7 @@ bool create_arena(Arena* arena, size_t total_size)
 
 	arena->num_locks = 0;
 
-	#ifdef DEBUG
+	#ifdef BUILD_DEBUG
 		if(success)
 		{
 			FillMemory(arena->available_memory, arena->total_size, DEBUG_ARENA_DEALLOCATED_VALUE);
@@ -166,7 +166,7 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 		return NULL;
 	}
 
-	#ifdef DEBUG
+	#ifdef BUILD_DEBUG
 		ZeroMemory(aligned_address, aligned_push_size);
 	#endif
 
@@ -175,7 +175,7 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 
 	// Keep track of the maximum used size starting at a certain value. This gives us an idea of how
 	// much memory each cache type and Windows version uses before clearing the arena.
-	#ifdef DEBUG
+	#ifdef BUILD_DEBUG
 		const size_t MAX_USED_SIZE_INCREMENT = kilobytes_to_bytes(128);
 		static size_t max_used_size_marker = MAX_USED_SIZE_INCREMENT;
 		
@@ -230,14 +230,14 @@ TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy)
 // 1. arena - The Arena structure of interest.
 //
 // @Returns: The used capacity as a percentage. If the arena is uninitialized or destroyed, this function returns zero.
-float32 get_used_arena_capacity(Arena* arena)
+f32 get_used_arena_capacity(Arena* arena)
 {
 	if(arena->available_memory == NULL || arena->total_size == 0)
 	{
 		return 0.0f;
 	}
 
-	return ((float32) arena->used_size) / arena->total_size * 100;
+	return ((f32) arena->used_size) / arena->total_size * 100;
 }
 
 // Adds a new lock to the arena. A lock marks the currently used size and prevents clear_arena() from clearing any of
@@ -335,7 +335,7 @@ void clear_arena(Arena* arena)
 	}
 
 	arena->available_memory = retreat_bytes(arena->available_memory, num_bytes_to_clear);
-	#ifdef DEBUG
+	#ifdef BUILD_DEBUG
 		FillMemory(arena->available_memory, num_bytes_to_clear, DEBUG_ARENA_DEALLOCATED_VALUE);
 	#endif
 	arena->used_size -= num_bytes_to_clear;
@@ -357,7 +357,7 @@ bool destroy_arena(Arena* arena)
 
 	void* base_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	bool success = VirtualFree(base_memory, 0, MEM_RELEASE) != FALSE;
-	#ifdef DEBUG
+	#ifdef BUILD_DEBUG
 		DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = retreat_bytes(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 	#endif
 	
@@ -579,18 +579,18 @@ bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
 {
 	if(date_time.dwLowDateTime == 0 && date_time.dwHighDateTime == 0)
 	{
-		*formatted_string = TEXT('\0');
+		*formatted_string = T('\0');
 		return true;
 	}
 
 	SYSTEMTIME dt = {};
 	bool success = FileTimeToSystemTime(&date_time, &dt) != 0;
-	success = success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%hu-%02hu-%02hu %02hu:%02hu:%02hu"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
+	success = success && SUCCEEDED(StringCchPrintf(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, T("%hu-%02hu-%02hu %02hu:%02hu:%02hu"), dt.wYear, dt.wMonth, dt.wDay, dt.wHour, dt.wMinute, dt.wSecond));
 
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Format Filetime Date Time: Failed to format the FILETIME date time (high = %lu, low = %lu) with the error code %lu..", date_time.dwHighDateTime, date_time.dwLowDateTime, GetLastError());
-		*formatted_string = TEXT('\0');
+		*formatted_string = T('\0');
 	}
 
 	return success;
@@ -600,7 +600,7 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 {
 	if(date_time.date == 0 && date_time.time == 0)
 	{
-		*formatted_string = TEXT('\0');
+		*formatted_string = T('\0');
 		return true;
 	}
 
@@ -611,7 +611,7 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Format Dos Date Time: Failed to format the DOS date time (date = %I32u, time = %I32u) with the error code %lu..", date_time.date, date_time.time, GetLastError());
-		*formatted_string = TEXT('\0');
+		*formatted_string = T('\0');
 	}
 
 	return success;
@@ -621,18 +621,18 @@ bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string)
 {
 	if(date_time == 0)
 	{
-		*formatted_string = TEXT('\0');
+		*formatted_string = T('\0');
 		return true;
 	}
 
 	struct tm time = {};
 	bool success = (_gmtime64_s(&time, &date_time) == 0)
-				&& (_tcsftime(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, TEXT("%Y-%m-%d %H:%M:%S"), &time) > 0);
+				&& (_tcsftime(formatted_string, MAX_FORMATTED_DATE_TIME_CHARS, T("%Y-%m-%d %H:%M:%S"), &time) > 0);
 
 	if(!success)
 	{
 		log_print(LOG_ERROR, "Format Time64_t: Failed to format the time64_t date time (time = %I64u) with the error code %d.", date_time, errno);
-		*formatted_string = TEXT('\0');
+		*formatted_string = T('\0');
 	}
 
 	return success;
@@ -793,7 +793,7 @@ bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_
 // @Returns: Nothing.
 void string_to_uppercase(TCHAR* str)
 {
-	while(*str != TEXT('\0'))
+	while(*str != T('\0'))
 	{
 		*str = (TCHAR) _totupper(*str);
 		++str;
@@ -808,16 +808,16 @@ void string_to_uppercase(TCHAR* str)
 // @Returns: Nothing.
 void string_unescape(TCHAR* str)
 {
-	while(*str != TEXT('\0'))
+	while(*str != T('\0'))
 	{
-		if(*str == TEXT('\\'))
+		if(*str == T('\\'))
 		{
 			TCHAR* next_char = str + 1;
 
 			switch(*next_char)
 			{
-				case(TEXT('\\')):
-				case(TEXT('\"')):
+				case(T('\\')):
+				case(T('\"')):
 				{
 					MoveMemory(str, next_char, string_size(next_char));
 				} break;
@@ -871,25 +871,25 @@ static const size_t INT_FORMAT_RADIX = 10;
 bool convert_u32_to_string(u32 value, TCHAR* result_string)
 {
 	bool success = _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
-	if(!success) *result_string = TEXT('\0');
+	if(!success) *result_string = T('\0');
 	return success;
 }
 bool convert_s32_to_string(s32 value, TCHAR* result_string)
 {
 	bool success = _ltot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
-	if(!success) *result_string = TEXT('\0');
+	if(!success) *result_string = T('\0');
 	return success;
 }
 bool convert_u64_to_string(u64 value, TCHAR* result_string)
 {
 	bool success = _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
-	if(!success) *result_string = TEXT('\0');
+	if(!success) *result_string = T('\0');
 	return success;
 }
 bool convert_s64_to_string(s64 value, TCHAR* result_string)
 {
 	bool success = _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
-	if(!success) *result_string = TEXT('\0');
+	if(!success) *result_string = T('\0');
 	return success;
 }
 
@@ -920,17 +920,17 @@ static bool convert_hexadecimal_char_to_integer(TCHAR hex_char, u8* result_integ
 {
 	bool success = true;
 
-	if(TEXT('0') <= hex_char && hex_char <= TEXT('9'))
+	if(T('0') <= hex_char && hex_char <= T('9'))
 	{
-		*result_integer = (u8) (hex_char - TEXT('0'));
+		*result_integer = (u8) (hex_char - T('0'));
 	}
-	else if(TEXT('a') <= hex_char && hex_char <= TEXT('f'))
+	else if(T('a') <= hex_char && hex_char <= T('f'))
 	{
-		*result_integer = (u8) (hex_char - TEXT('a') + 0x0A);
+		*result_integer = (u8) (hex_char - T('a') + 0x0A);
 	}
-	else if(TEXT('A') <= hex_char && hex_char <= TEXT('F'))
+	else if(T('A') <= hex_char && hex_char <= T('F'))
 	{
-		*result_integer = (u8) (hex_char - TEXT('A') + 0x0A);
+		*result_integer = (u8) (hex_char - T('A') + 0x0A);
 	}
 	else
 	{
@@ -960,7 +960,7 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 	bool success = false;
 
 	TCHAR char_1 = *byte_string;
-	TCHAR char_2 = (char_1 != TEXT('\0')) ? (*(byte_string+1)) : (TEXT('\0'));
+	TCHAR char_2 = (char_1 != T('\0')) ? (*(byte_string+1)) : (T('\0'));
 	u8 integer_1 = 0;
 	u8 integer_2 = 0;
 
@@ -993,7 +993,7 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string)
 {
-	_ASSERT(code_page != CP_UTF16_LE && code_page != CP_UTF16_BE && code_page != CP_UTF32_LE && code_page != CP_UTF32_BE);
+	_ASSERT(code_page != CODE_PAGE_UTF_16_LE && code_page != CODE_PAGE_UTF_16_BE && code_page != CODE_PAGE_UTF_32_LE && code_page != CODE_PAGE_UTF_32_BE);
 
 	int num_chars_required_utf_16 = MultiByteToWideChar(code_page, 0, string, -1, NULL, 0);
 
@@ -1195,7 +1195,7 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 
 	TCHAR* url = push_string_to_arena(arena, original_url);
 	TCHAR* remaining_url = NULL;
-	TCHAR* scheme = _tcstok_s(url, TEXT(":"), &remaining_url);
+	TCHAR* scheme = _tcstok_s(url, T(":"), &remaining_url);
 
 	if(scheme == NULL || string_is_empty(scheme) || string_is_empty(remaining_url))
 	{
@@ -1206,14 +1206,14 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	url_parts->scheme = push_string_to_arena(arena, scheme);
 
 	// Check if the authority exists.
-	if(*remaining_url == TEXT('/') && *(remaining_url+1) == TEXT('/'))
+	if(*remaining_url == T('/') && *(remaining_url+1) == T('/'))
 	{
 		remaining_url += 2;
 
 		// If the authority is empty (e.g. "file:///C:\Path\File.ext")
-		if(*remaining_url == TEXT('/'))
+		if(*remaining_url == T('/'))
 		{
-			url_parts->host = push_string_to_arena(arena, TEXT(""));
+			url_parts->host = push_string_to_arena(arena, T(""));
 			remaining_url += 1;
 		}
 		else
@@ -1221,28 +1221,28 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 			// Split the authority from the path. If there's no forward slash or backslash separator (either
 			// a URL path or Windows directory separator), the remaining URL is the host.
 			// For example, "http://www.example.com" results in the host "www.example.com" and an empty path.
-			TCHAR* authority = _tcstok_s(NULL, TEXT("/\\"), &remaining_url);
+			TCHAR* authority = _tcstok_s(NULL, T("/\\"), &remaining_url);
 			if(authority != NULL)
 			{
 				TCHAR* remaining_authority = NULL;
 				
 				// Split the userinfo from the rest of the authority (host and port) if it exists.
 				// Otherwise, the userinfo would be set to the remaining authority when it didn't exist.
-				bool has_userinfo = _tcschr(authority, TEXT('@')) != NULL;
-				TCHAR* userinfo = (has_userinfo) ? (_tcstok_s(authority, TEXT("@"), &remaining_authority)) : (NULL);
+				bool has_userinfo = _tcschr(authority, T('@')) != NULL;
+				TCHAR* userinfo = (has_userinfo) ? (_tcstok_s(authority, T("@"), &remaining_authority)) : (NULL);
 
 				// If the userinfo exists, we'll split the remaining authority into the host and port.
 				// E.g. "userinfo@www.example.com:80" -> "www.example.com:80" -> "www.example.com" + "80"
 				// If it doesn't, we'll split starting at the beginning of the authority.
 				// E.g. "www.example.com:80" -> "www.example.com" + "80"
 				TCHAR* string_to_split = (has_userinfo) ? (NULL) : (authority);
-				TCHAR* host = _tcstok_s(string_to_split, TEXT(":"), &remaining_authority);
+				TCHAR* host = _tcstok_s(string_to_split, T(":"), &remaining_authority);
 				// If the remaining authority now points to the end of the string, then there's no port.
 				// Otherwise, whatever remains of the authority is the port. We can do this because of that
 				// initial split with the path separator.
 				TCHAR* port = (!string_is_empty(remaining_authority)) ? (remaining_authority) : (NULL);
 
-				if(host == NULL) host = TEXT("");
+				if(host == NULL) host = T("");
 				url_parts->host = push_string_to_arena(arena, host);
 
 				// Leave the userinfo and port set to NULL or copy their actual value if they exist.
@@ -1262,24 +1262,24 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 
 	// The path starts after the scheme or authority (if it exists) and ends at the query symbol or at the
 	// end of the string (if there's no query).
-	TCHAR* query_in_path = _tcschr(remaining_url, TEXT('?'));
-	TCHAR* fragment_in_path = _tcschr(remaining_url, TEXT('#'));
+	TCHAR* query_in_path = _tcschr(remaining_url, T('?'));
+	TCHAR* fragment_in_path = _tcschr(remaining_url, T('#'));
 	// Check if there's a fragment but no query symbol, or if both exist and the fragment appears before the query.
 	// For example, "http://www.example.com/path#top" or "http://www.example.com/path#top?".
 	bool does_fragment_appear_before_query = 	(fragment_in_path != NULL && query_in_path == NULL)
 											|| 	(fragment_in_path != NULL && query_in_path != NULL && fragment_in_path < query_in_path);
 
-	TCHAR* path = _tcstok_s(NULL, TEXT("?#"), &remaining_url);
+	TCHAR* path = _tcstok_s(NULL, T("?#"), &remaining_url);
 	// We'll allow empty paths because the cache's index/database file might store some of them like this.
 	// E.g. the resource "http://www.example.com/index.html" might have its URL stored as "http://www.example.com/"
 	// since the server would know to serve the index.html file for that request. URLs with no slash after the
 	// host (e.g. "http://www.example.com") are treated the same way (see the authority above).
-	if(path == NULL) path = TEXT("");
+	if(path == NULL) path = T("");
 	url_parts->path = push_string_to_arena(arena, path);
 
 	// Search for the resource's name starting at the end of the path.
-	TCHAR* last_forward_slash = _tcsrchr(path, TEXT('/'));
-	TCHAR* last_backslash = _tcsrchr(path, TEXT('\\'));
+	TCHAR* last_forward_slash = _tcsrchr(path, T('/'));
+	TCHAR* last_backslash = _tcsrchr(path, T('\\'));
 
 	// Use whichever separator appears last in the path. For example:
 	// - "http://www.example.com/path/file.ext" -> "path/file.ext" 		-> "file.ext"
@@ -1292,7 +1292,7 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	TCHAR* filename = (last_forward_slash > last_backslash) ? (last_forward_slash) : (last_backslash);
 	url_parts->filename = push_string_to_arena(arena, filename);
 
-	TCHAR* query = (does_fragment_appear_before_query) ? (NULL) : (_tcstok_s(NULL, TEXT("#"), &remaining_url));
+	TCHAR* query = (does_fragment_appear_before_query) ? (NULL) : (_tcstok_s(NULL, T("#"), &remaining_url));
 	TCHAR* fragment = (!string_is_empty(remaining_url)) ? (remaining_url) : (NULL);
 
 	// Leave the query and fragment set to NULL or copy their actual value if they exist.
@@ -1328,10 +1328,10 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 	char* utf_8_url = push_arena(arena, (string_length(url) + 1) * sizeof(char), char);
 	size_t utf_8_index = 0;
 
-	while(*url != TEXT('\0'))
+	while(*url != T('\0'))
 	{
 		// Decode percent-encoded characters.
-		if(*url == TEXT('%'))
+		if(*url == T('%'))
 		{
 			u8 decoded_char = 0;
 			if(convert_hexadecimal_string_to_byte(url + 1, &decoded_char))
@@ -1350,7 +1350,7 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 				break;
 			}
 		}
-		else if(*url == TEXT('+'))
+		else if(*url == T('+'))
 		{
 			utf_8_url[utf_8_index] = ' ';
 			++utf_8_index;
@@ -1405,13 +1405,13 @@ TCHAR* skip_url_scheme(TCHAR* url)
 {
 	if(url == NULL) return NULL;
 
-	while(*url != TEXT('\0'))
+	while(*url != T('\0'))
 	{
-		if(*url == TEXT(':'))
+		if(*url == T(':'))
 		{
 			++url;
 
-			if(*url == TEXT('/') && *(url+1) == TEXT('/'))
+			if(*url == T('/') && *(url+1) == T('/'))
 			{
 				url += 2;
 			}
@@ -1459,34 +1459,34 @@ void correct_url_path_characters(TCHAR* path)
 	bool is_first_path_segment = true;
 	TCHAR* last_char = NULL;
 
-	while(*path != TEXT('\0'))
+	while(*path != T('\0'))
 	{
 		last_char = path;
 
 		switch(*path)
 		{
-			case(TEXT('/')):
+			case(T('/')):
 			{
-				*path = TEXT('\\');
+				*path = T('\\');
 			} // Intentional fallthrough.
 
-			case(TEXT('\\')):
+			case(T('\\')):
 			{
 				is_first_path_segment = false;
 
 				// Remove double backslashes, leaving only one of them.
 				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
 				TCHAR* next_char = path + 1;
-				if( *next_char == TEXT('\\') || *next_char == TEXT('/') )
+				if( *next_char == T('\\') || *next_char == T('/') )
 				{
 					MoveMemory(path, next_char, string_size(next_char));
 					// Make sure to also replace the forward slash in the next character.
-					*path = TEXT('\\');
+					*path = T('\\');
 				}
 
 			} break;
 
-			case(TEXT(':')):
+			case(T(':')):
 			{
 				// Remove the colon from the drive letter in the first segment.
 				// Otherwise, replace it with an underscore like the rest of the reserved characters.
@@ -1498,27 +1498,27 @@ void correct_url_path_characters(TCHAR* path)
 				// In the first case, the drive letter colon is interpreted as the separator between the
 				// host and port.
 				TCHAR* next_char = path + 1;
-				if( is_first_path_segment && (*next_char == TEXT('\\') || *next_char == TEXT('/')) )
+				if( is_first_path_segment && (*next_char == T('\\') || *next_char == T('/')) )
 				{
 					MoveMemory(path, next_char, string_size(next_char));
 				}
 				else
 				{
-					*path = TEXT('_');
+					*path = T('_');
 				}
 
 			} break;
 
-			case(TEXT('<')):
-			case(TEXT('>')):
-			case(TEXT('\"')):
-			case(TEXT('|')):
-			case(TEXT('?')):
-			case(TEXT('*')):
+			case(T('<')):
+			case(T('>')):
+			case(T('\"')):
+			case(T('|')):
+			case(T('?')):
+			case(T('*')):
 			{
 				// Replace reserved characters with underscores.
 				// Otherwise, we'd run into ERROR_INVALID_NAME errors in copy_file_using_url_directory_structure().
-				*path = TEXT('_');
+				*path = T('_');
 			} break;
 
 			default:
@@ -1526,7 +1526,7 @@ void correct_url_path_characters(TCHAR* path)
 				// Replace characters whose integer representations are in the range from 1 through 31 with underscores.
 				if(1 <= *path && *path <= 31)
 				{
-					*path = TEXT('_');
+					*path = T('_');
 				}
 
 			} break;
@@ -1537,9 +1537,9 @@ void correct_url_path_characters(TCHAR* path)
 
 	// Replace a trailing period or space with an underscore.
 	// Otherwise, we'd run into problems when trying to delete these files or directories.
-	if(last_char != NULL && (*last_char == TEXT('.') || *last_char == TEXT(' ')) )
+	if(last_char != NULL && (*last_char == T('.') || *last_char == T(' ')) )
 	{
-		*last_char = TEXT('_');
+		*last_char = T('_');
 	}
 }
 
@@ -1559,7 +1559,7 @@ bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 	Url_Parts url_parts = {};
 	if(partition_url(arena, url, &url_parts))
 	{
-		result_path[0] = TEXT('\0');
+		result_path[0] = T('\0');
 
 		if(url_parts.host != NULL)
 		{
@@ -1571,8 +1571,8 @@ bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 
 		// Remove the resource's filename so it's not part of the final path.
 		// Because of the replacement above, we know that the path separator is a backslash.
-		TCHAR* last_separator = _tcsrchr(result_path, TEXT('\\'));
-		if(last_separator != NULL) *last_separator = TEXT('\0');
+		TCHAR* last_separator = _tcsrchr(result_path, T('\\'));
+		if(last_separator != NULL) *last_separator = T('\0');
 
 		truncate_path_components(result_path);
 		correct_reserved_path_components(result_path);
@@ -1679,6 +1679,19 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 	@NextSection
 */
 
+// Compares two filenames. This comparison is case insensitive as it assumes that the current file system is case insensitive.
+// This might not always be true (e.g. see the FILE_FLAG_POSIX_SEMANTICS flag in CreateFile()) but it works for our use case.
+//
+// @Parameters:
+// 1. filename_1 - The first filename.
+// 2. filename_2 - The second filename.
+//
+// @Returns: True if the filenames are equal. Otherwise, false.
+bool filenames_are_equal(const TCHAR* filename_1, const TCHAR* filename_2)
+{
+	return strings_are_equal(filename_1, filename_2, true);
+}
+
 // Skips to the file extension in a path. This function considers the substring after the last period character
 // in a filename to be the file extension. This is useful so we can define what we consider a file extension
 // instead of relying on the PathFindExtension() in the Shell API (we might change our own definition in the future).
@@ -1706,14 +1719,14 @@ TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period, bool op
 
 	if(path != NULL)
 	{
-		while(*path != TEXT('\0'))
+		while(*path != T('\0'))
 		{
-			if( *path == TEXT('.') && ( optional_include_period || *(path+1) != TEXT('\0') ) )
+			if( *path == T('.') && ( optional_include_period || *(path+1) != T('\0') ) )
 			{
 				file_extension = (optional_include_period) ? (path) : (path + 1);
 				if(optional_get_first_extension) break;
 			}
-			else if(*path == TEXT('\\'))
+			else if(*path == T('\\'))
 			{
 				file_extension = NULL;
 			}
@@ -1762,7 +1775,7 @@ TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components)
 	// Traverse the path backwards.
 	for(size_t i = num_chars; i-- > 0;)
 	{
-		if(path[i] == TEXT('\\'))
+		if(path[i] == T('\\'))
 		{
 			++current_num_components;
 			if(current_num_components == desired_num_components)
@@ -1791,9 +1804,9 @@ int count_path_components(const TCHAR* path)
 	{
 		++count;
 
-		while(*path != TEXT('\0'))
+		while(*path != T('\0'))
 		{
-			if(*path == TEXT('\\'))
+			if(*path == T('\\'))
 			{
 				++count;
 			}
@@ -1824,7 +1837,7 @@ TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 {
 	TCHAR* result = NULL;
 
-	String_Array<TCHAR>* split_path = split_string(arena, path, TEXT("\\"));
+	String_Array<TCHAR>* split_path = split_string(arena, path, T("\\"));
 
 	if(component_index < 0)
 	{
@@ -1839,28 +1852,6 @@ TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 
 	return result;
 }
-
-// @Remove
-/*bool path_append_if_missing(TCHAR* path, const TCHAR* path_to_add)
-{
-	bool success = true;
-	int num_components_to_add = count_path_components(path_to_add);
-	TCHAR* path_ending = skip_to_last_path_components(path, num_components_to_add);
-
-	if(!strings_are_equal(path_ending, path_to_add, true))
-	{
-		success = success && (PathAppend(path, path_to_add) != FALSE);
-	}
-
-	return success;
-}
-
-bool path_ends_with(const TCHAR* path, const TCHAR* suffix)
-{
-	int num_suffix_components = count_path_components(suffix);
-	TCHAR* suffix_in_path = skip_to_last_path_components(path, num_suffix_components);
-	return strings_are_equal(suffix_in_path, suffix, true);
-}*/
 
 // Retrieves the absolute version of a specified path. The path may be relative or absolute. This function has two overloads: 
 // - get_full_path_name(2 or 3), which copies the output to another buffer.
@@ -1886,7 +1877,7 @@ bool get_full_path_name(const TCHAR* path, TCHAR* result_full_path, u32 optional
 
 bool get_full_path_name(TCHAR* result_full_path)
 {
-	TCHAR full_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR full_path[MAX_PATH_CHARS] = T("");
 	bool success = get_full_path_name(result_full_path, full_path);
 	if(success) StringCchCopy(result_full_path, MAX_PATH_CHARS, full_path);
 	return success;
@@ -1941,14 +1932,14 @@ void truncate_path_components(TCHAR* path)
 
 	while(true, true)
 	{
-		bool is_end_of_string = (*path == TEXT('\0'));
+		bool is_end_of_string = (*path == T('\0'));
 
-		if( (*path == TEXT('\\') || is_end_of_string) && !is_first_char )
+		if( (*path == T('\\') || is_end_of_string) && !is_first_char )
 		{
 			TCHAR* component_end = path;
 
 			TCHAR previous_char = *component_end;
-			*component_end = TEXT('\0');
+			*component_end = T('\0');
 			size_t num_component_chars = string_length(component_begin);
 			*component_end = previous_char;
 
@@ -1981,7 +1972,7 @@ static int compare_reserved_names(const void* name_pointer, const void* reserved
 	// Temporarily remove the file extension.
 	TCHAR* file_extension = skip_to_file_extension(name, true, true);
 	TCHAR previous_char = *file_extension;
-	*file_extension = TEXT('\0');
+	*file_extension = T('\0');
 
 	int result = _tcsicmp(name, reserved_name);
 
@@ -2012,24 +2003,24 @@ void correct_reserved_path_components(TCHAR* path)
 {
 	const TCHAR* const SORTED_RESERVED_NAMES[] =
 	{
-		TEXT("AUX"),
-		TEXT("COM1"), TEXT("COM2"), TEXT("COM3"), TEXT("COM4"), TEXT("COM5"), TEXT("COM6"), TEXT("COM7"), TEXT("COM8"), TEXT("COM9"),
-		TEXT("CON"),
-		TEXT("LPT1"), TEXT("LPT2"), TEXT("LPT3"), TEXT("LPT4"), TEXT("LPT5"), TEXT("LPT6"), TEXT("LPT7"), TEXT("LPT8"), TEXT("LPT9"),
-		TEXT("NUL"),
-		TEXT("PRN")
+		T("AUX"),
+		T("COM1"), T("COM2"), T("COM3"), T("COM4"), T("COM5"), T("COM6"), T("COM7"), T("COM8"), T("COM9"),
+		T("CON"),
+		T("LPT1"), T("LPT2"), T("LPT3"), T("LPT4"), T("LPT5"), T("LPT6"), T("LPT7"), T("LPT8"), T("LPT9"),
+		T("NUL"),
+		T("PRN")
 	};
 	const size_t NUM_RESERVED_NAMES = _countof(SORTED_RESERVED_NAMES);
 
 	TCHAR* component_begin = path;
 	while(true, true)
 	{
-		bool is_end_of_string = (*path == TEXT('\0'));
+		bool is_end_of_string = (*path == T('\0'));
 
-		if((*path == TEXT('\\') || is_end_of_string))
+		if((*path == T('\\') || is_end_of_string))
 		{
 			TCHAR previous_char = *path;
-			*path = TEXT('\0');
+			*path = T('\0');
 
 			void* search_result = bsearch(	&component_begin, SORTED_RESERVED_NAMES,
 											NUM_RESERVED_NAMES, sizeof(TCHAR*),
@@ -2037,7 +2028,7 @@ void correct_reserved_path_components(TCHAR* path)
 			if(search_result != NULL)
 			{
 				log_print(LOG_WARNING, "Correct Reserved Path Components: Found a path component that uses a reserved name: '%s'.", component_begin);
-				*component_begin = TEXT('_');
+				*component_begin = T('_');
 			}
 
 			*path = previous_char;
@@ -2148,7 +2139,7 @@ bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path
 				&& (PathCanonicalizeA(path_to_compare_2, path_2) != FALSE)
 				&& (GetLongPathNameA(path_to_compare_1, path_to_compare_1, MAX_PATH_CHARS) != 0)
 				&& (GetLongPathNameA(path_to_compare_2, path_to_compare_2, MAX_PATH_CHARS) != 0)
-				&& strings_are_equal(path_to_compare_1, path_to_compare_2, true);
+				&& filenames_are_equal(path_to_compare_1, path_to_compare_2);
 	#else
 		HANDLE handle_1 = create_directory_handle(path_1, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
 		HANDLE handle_2 = create_directory_handle(path_2, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
@@ -2285,7 +2276,7 @@ void safe_unmap_view_of_file(void** base_address)
 	{
 		UnmapViewOfFile(*base_address);
 		*base_address = NULL;
-		#ifdef DEBUG
+		#ifdef BUILD_DEBUG
 			DEBUG_MEMORY_MAPPING_BASE_ADDRESS = retreat_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 		#endif
 	}
@@ -2334,7 +2325,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 		>>>> Traverse the files and directories that match the search query.
 	*/
 
-	TCHAR search_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR search_path[MAX_PATH_CHARS] = T("");
 	PathCombine(search_path, directory_path, search_query);
 
 	WIN32_FIND_DATA find_data = {};
@@ -2344,7 +2335,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 	while(found_object)
 	{
 		TCHAR* filename = find_data.cFileName;
-		if(!strings_are_equal(filename, TEXT(".")) && !strings_are_equal(filename, TEXT("..")))
+		if(!strings_are_equal(filename, T(".")) && !strings_are_equal(filename, T("..")))
 		{
 			bool is_directory = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 			bool should_process_object = 	( (traversal_flags & TRAVERSE_FILES) && !is_directory )
@@ -2352,7 +2343,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 
 			if(should_process_object)
 			{
-				TCHAR full_path[MAX_PATH_CHARS] = TEXT("");
+				TCHAR full_path[MAX_PATH_CHARS] = T("");
 				PathCombine(full_path, directory_path, filename);
 
 				Traversal_Object_Info info = {};
@@ -2393,12 +2384,12 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 		while(found_object)
 		{
 			TCHAR* filename = find_data.cFileName;
-			if(!strings_are_equal(filename, TEXT(".")) && !strings_are_equal(filename, TEXT("..")))
+			if(!strings_are_equal(filename, T(".")) && !strings_are_equal(filename, T("..")))
 			{
 				bool is_directory = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 				if(is_directory)
 				{
-					TCHAR subdirectory_path[MAX_PATH_CHARS] = TEXT("");
+					TCHAR subdirectory_path[MAX_PATH_CHARS] = T("");
 					PathCombine(subdirectory_path, directory_path, filename);
 
 					traverse_directory_objects(	subdirectory_path, search_query,
@@ -2520,14 +2511,14 @@ Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory
 // this function returns false.
 bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_naming_collisions, TCHAR* optional_result_path)
 {
-	if(optional_result_path != NULL) *optional_result_path = TEXT('\0');
+	if(optional_result_path != NULL) *optional_result_path = T('\0');
 
 	// Default string length limit for the ANSI version of CreateDirectory().
 	const size_t MAX_SHORT_FILENAME_CHARS = 12;
 	const size_t MAX_CREATE_DIRECTORY_PATH_CHARS = MAX_PATH_CHARS - MAX_SHORT_FILENAME_CHARS;
 	_STATIC_ASSERT(MAX_CREATE_DIRECTORY_PATH_CHARS <= MAX_PATH_CHARS);
 
-	TCHAR path[MAX_CREATE_DIRECTORY_PATH_CHARS] = TEXT("");
+	TCHAR path[MAX_CREATE_DIRECTORY_PATH_CHARS] = T("");
 
 	if(!get_full_path_name(path_to_create, path, MAX_CREATE_DIRECTORY_PATH_CHARS))
 	{
@@ -2539,22 +2530,22 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 	size_t num_path_chars = string_length(path) + 1;
 	for(size_t i = 0; i < num_path_chars; ++i)
 	{
-		if(path[i] == TEXT('\\') || path[i] == TEXT('\0'))
+		if(path[i] == T('\\') || path[i] == T('\0'))
 		{
 			// Make sure we create any intermediate directories by truncating the string at each path separator.
 			// We do it this way since CreateDirectory() fails if a single intermediate directory doesn't exist.
 			// If this separator is the null terminator, this corresponds to creating the last directory in the path.
-			bool last_directory = (path[i] == TEXT('\0'));
+			bool last_directory = (path[i] == T('\0'));
 			TCHAR previous_char = path[i];
-			path[i] = TEXT('\0');
+			path[i] = T('\0');
 			
 			bool create_success = CreateDirectory(path, NULL) != FALSE;
 			
 			if(optional_resolve_file_naming_collisions)
 			{
 				u32 num_naming_collisions = 0;
-				TCHAR unique_id[MAX_INT32_CHARS + 1] = TEXT("~");
-				TCHAR unique_path[MAX_CREATE_DIRECTORY_PATH_CHARS] = TEXT("");
+				TCHAR unique_id[MAX_INT32_CHARS + 1] = T("~");
+				TCHAR unique_path[MAX_CREATE_DIRECTORY_PATH_CHARS] = T("");
 
 				while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS && does_file_exist(path))
 				{
@@ -2588,7 +2579,7 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 						// Put back the rest of the path after the unique identifier we added to resolve the naming collision.
 						if(!last_directory)
 						{
-							StringCchPrintf(unique_path, MAX_CREATE_DIRECTORY_PATH_CHARS, TEXT("%s%c%s"), unique_path, previous_char, path + i + 1);
+							StringCchPrintf(unique_path, MAX_CREATE_DIRECTORY_PATH_CHARS, T("%s%c%s"), unique_path, previous_char, path + i + 1);
 						}
 						// Update the current path we're iterating over while taking into account the characters we inserted.
 						StringCchCopy(path, MAX_CREATE_DIRECTORY_PATH_CHARS, unique_path);
@@ -2628,7 +2619,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	}
 
 	// Ensure that we have the fully qualified path since its required by SHFileOperation().
-	TCHAR path_to_delete[MAX_PATH_CHARS + 1] = TEXT("");
+	TCHAR path_to_delete[MAX_PATH_CHARS + 1] = T("");
 	if(!get_full_path_name(directory_path, path_to_delete))
 	{
 		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' since its fully qualified path could not be determined with the error code %lu.", directory_path, GetLastError());
@@ -2638,7 +2629,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	// Ensure that the path has two null terminators since its required by SHFileOperation().
 	// Remember that MAX_PATH_CHARS already includes the first null terminator.
 	size_t num_path_chars = string_length(path_to_delete);
-	path_to_delete[num_path_chars + 1] = TEXT('\0');
+	path_to_delete[num_path_chars + 1] = T('\0');
 
 	SHFILEOPSTRUCT file_operation = {};
 	file_operation.wFunc = FO_DELETE;
@@ -2664,7 +2655,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 // @Returns: True if the directory was created successfully. Otherwise, false.
 bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_directory_path)
 {	
-	*result_directory_path = TEXT('\0');
+	*result_directory_path = T('\0');
 
 	bool create_success = false;
 	// We'll use this value to generate the directory's name since GetTempFileName() creates a file if we let it
@@ -2755,7 +2746,7 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 					// - MapViewOfFile / MapViewOfFileEx - Win32 API Reference.
 					DWORD desired_access = (optional_read_only) ? (FILE_MAP_READ) : (FILE_MAP_COPY);
 
-					#ifdef DEBUG
+					#ifdef BUILD_DEBUG
 						mapped_memory = MapViewOfFileEx(mapping_handle, desired_access, 0, 0, 0, DEBUG_MEMORY_MAPPING_BASE_ADDRESS);
 						DEBUG_MEMORY_MAPPING_BASE_ADDRESS = advance_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 					#else
@@ -3231,7 +3222,7 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 	size_t num_value_data_chars = actual_value_data_size / sizeof(TCHAR);
 	if(success)
 	{	
-		value_data[num_value_data_chars] = TEXT('\0');
+		value_data[num_value_data_chars] = T('\0');
 	}
 
 	SetLastError(error_code);
@@ -3274,7 +3265,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 			Language_Code_Page_Info* language_code_page_info = NULL;
 			UINT queried_info_size = 0;
 
-			if(VerQueryValue(info_block, TEXT("\\VarFileInfo\\Translation"), (LPVOID*) &language_code_page_info, &queried_info_size) != FALSE)
+			if(VerQueryValue(info_block, T("\\VarFileInfo\\Translation"), (LPVOID*) &language_code_page_info, &queried_info_size) != FALSE)
 			{
 				UINT num_languages_and_code_pages = queried_info_size / sizeof(Language_Code_Page_Info);
 				if(num_languages_and_code_pages > 0)
@@ -3289,7 +3280,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 					const char* info_type_string = FILE_INFO_TYPE_TO_STRING[info_type];
 
 					TCHAR* string_subblock = push_arena(arena, info_size, TCHAR);
-					StringCbPrintf(string_subblock, info_size, TEXT("\\StringFileInfo\\%04x%04x\\%hs"), language, code_page, info_type_string);
+					StringCbPrintf(string_subblock, info_size, T("\\StringFileInfo\\%04x%04x\\%hs"), language, code_page, info_type_string);
 
 					TCHAR* file_information = NULL;
 					UINT file_information_size = 0;
@@ -3298,7 +3289,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 					{
 						if(file_information_size > 0)
 						{
-							if(code_page != CP_UTF16_LE)
+							if(code_page != CODE_PAGE_UTF_16_LE)
 							{
 								log_print(LOG_INFO, "Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
 							}
@@ -3358,9 +3349,9 @@ bool create_log_file(const TCHAR* log_file_path)
 	}
 
 	// Create any missing intermediate directories. 
-	TCHAR full_log_directory_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR full_log_directory_path[MAX_PATH_CHARS] = T("");
 	get_full_path_name(log_file_path, full_log_directory_path);
-	PathAppend(full_log_directory_path, TEXT(".."));
+	PathAppend(full_log_directory_path, T(".."));
 	
 	create_directories(full_log_directory_path);
 
@@ -3386,7 +3377,7 @@ void close_log_file(void)
 // where string_format is an ANSI string (for convenience).
 //
 // Use log_print_newline() to add an empty line, and debug_log_print() to add a line of type LOG_DEBUG. This last function is only
-// called if the DEBUG macro is defined.
+// called if the BUILD_DEBUG macro is defined.
 //
 // @Parameters:
 // 1. log_type - The type of log line to write. This is used to add a small string identifier to the beginning of the line.
@@ -3408,7 +3399,7 @@ static const size_t MAX_CHARS_PER_LOG_WRITE = MAX_CHARS_PER_LOG_TYPE + MAX_CHARS
 
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 {
-	TCHAR log_buffer[MAX_CHARS_PER_LOG_WRITE] = TEXT("");
+	TCHAR log_buffer[MAX_CHARS_PER_LOG_WRITE] = T("");
 	
 	// Add the log type identifier string to the beginning of the line.
 	StringCchCopy(log_buffer, MAX_CHARS_PER_LOG_TYPE, LOG_TYPE_TO_STRING[log_type]);
@@ -3422,7 +3413,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 	va_end(arguments);
 
 	// Add the newline.
-	StringCchCat(log_buffer, MAX_CHARS_PER_LOG_WRITE, TEXT("\r\n"));
+	StringCchCat(log_buffer, MAX_CHARS_PER_LOG_WRITE, T("\r\n"));
 
 	// Convert the log line to UTF-8.
 	#ifdef BUILD_9X
@@ -3474,15 +3465,15 @@ static bool does_csv_string_require_escaping(const TCHAR* str, size_t* size_requ
 	bool needs_escaping = false;
 	size_t total_num_chars = 0;
 
-	while(*str != TEXT('\0'))
+	while(*str != T('\0'))
 	{
 		total_num_chars += 1;
 
-		if(*str == TEXT(',') || *str == TEXT('\n'))
+		if(*str == T(',') || *str == T('\n'))
 		{
 			needs_escaping = true;
 		}
-		else if(*str == TEXT('\"'))
+		else if(*str == T('\"'))
 		{
 			needs_escaping = true;
 			// Extra quotation mark.
@@ -3523,13 +3514,13 @@ static void escape_csv_string(TCHAR* str)
 	TCHAR* string_start = str;
 	bool needs_escaping = false;
 
-	while(*str != TEXT('\0'))
+	while(*str != T('\0'))
 	{
-		if(*str == TEXT(',') || *str == TEXT('\n'))
+		if(*str == T(',') || *str == T('\n'))
 		{
 			needs_escaping = true;
 		}
-		else if(*str == TEXT('\"'))
+		else if(*str == T('\"'))
 		{
 			needs_escaping = true;
 
@@ -3539,7 +3530,7 @@ static void escape_csv_string(TCHAR* str)
 			// E.g: ab"cd -> ab"ccd -> ab""cd
 			// Where next_char_1 and next_char_2 point to 'c' and 'd', respectively.
 			MoveMemory(next_char_2, next_char_1, string_size(next_char_1));
-			*next_char_1 = TEXT('\"');
+			*next_char_1 = T('\"');
 
 			// Skip this new quotation mark.
 			++str;
@@ -3555,9 +3546,9 @@ static void escape_csv_string(TCHAR* str)
 		size_t escaped_string_size = string_size(string_start);
 		size_t num_escaped_string_chars = escaped_string_size / sizeof(TCHAR);
 		MoveMemory(string_start + 1, string_start, escaped_string_size);
-		string_start[0] = TEXT('\"');
-		string_start[num_escaped_string_chars] = TEXT('\"');
-		string_start[num_escaped_string_chars + 1] = TEXT('\0');
+		string_start[0] = T('\"');
+		string_start[num_escaped_string_chars] = T('\"');
+		string_start[num_escaped_string_chars + 1] = T('\0');
 	}
 }
 
@@ -3572,9 +3563,9 @@ static void escape_csv_string(TCHAR* str)
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 {
 	// Create any missing intermediate directories. 
-	TCHAR full_csv_directory_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR full_csv_directory_path[MAX_PATH_CHARS] = T("");
 	get_full_path_name(csv_file_path, full_csv_directory_path);
-	PathAppend(full_csv_directory_path, TEXT(".."));
+	PathAppend(full_csv_directory_path, T(".."));
 	
 	create_directories(full_csv_directory_path);
 
@@ -3661,7 +3652,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		TCHAR* value = column_values[i].value;
 		// If there's no value, use an empty string never needs escaping. This string will still be copied.
-		if(value == NULL) value = TEXT("");
+		if(value == NULL) value = T("");
 
 		// Escape the value if it requires it.
 		size_t size_required_for_escaping = 0;
@@ -4336,7 +4327,7 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 	return copy_success;
 }
 
-#ifdef DEBUG
+#ifdef BUILD_DEBUG
 	
 	// A debug function that measures the time between two calls. The macros DEBUG_BEGIN_MEASURE_TIME() and DEBUG_END_MEASURE_TIME() should
 	// be used to start and stop the measurement.
@@ -4408,7 +4399,7 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the stopping time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
 			}
 			
-			float64 elapsed_time = (measurement->stop_counter.QuadPart - measurement->start_counter.QuadPart) / (float64) frequency.QuadPart;
+			f64 elapsed_time = (measurement->stop_counter.QuadPart - measurement->start_counter.QuadPart) / (f64) frequency.QuadPart;
 			debug_log_print("Debug Measure Time #%d [%hs]: Stopped time measurement at %.9f seconds.", current_measurement, measurement->identifier, elapsed_time);
 
 			measurement->identifier = NULL;

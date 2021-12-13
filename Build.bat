@@ -1,7 +1,7 @@
 @ECHO OFF
 
 REM This script is used to build the application on Windows using Visual Studio.
-REM It will define any useful macros (like the version string and the Windows 98 and ME build macro), and set the
+REM It defines any useful macros (like the version string and the Windows 98/ME build macro), and sets the
 REM correct compiler and linker options. Extra compiler options may be added via the command line.
 REM
 REM Usage: Build.bat [Optional Compiler Arguments]
@@ -12,22 +12,25 @@ REM - Build.bat /D EXPORT_EMPTY_FILES
 REM
 REM Macros that can be used in the debug builds:
 REM - EXPORT_EMPTY_FILES, which tells the application to create empty files instead of copying the real cached files.
-REM This is useful to test the program without having to wait for Windows to copy each file.
+REM This is useful for testing the program without having to wait for Windows to copy each file.
 
 SETLOCAL
 PUSHD "%~dp0"
 	
-	REM ---------------------------------------------------------------------------
-	REM Basic build parameters.
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ Basic Build Parameters
+	REM ------------------------------------------------------------
+
 	REM Any parameters where the value can be true or false are set to either "Yes" or "No". During development and when
 	REM packaging a new release, these are set to "Yes" and VCVARSALL_PATH is set to Visual Studio 2005 Professional:
-	REM "C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
+	REM - "C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
+	REM
 	REM Visual Studio 2019, for example, uses the following:
-	REM "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat"
+	REM - "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat"
 
 	REM The build mode.
 	REM - debug - turns off optimizations, enables run-time error checks, generates debug information, and defines
-	REM certain macros (like DEBUG).
+	REM certain macros (like BUILD_DEBUG).
 	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
 	REM versions in the same release directory.
 	SET "BUILD_MODE=debug"
@@ -35,7 +38,7 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
 
-	REM Set to "Yes" to build the Windows 98 and ME version.
+	REM Set to "Yes" to also build the Windows 98/ME version.
 	SET "WIN9X_BUILD=Yes"
 
 	REM Set to "Yes" to use certain compiler and linker options that were removed after Visual Studio 2005.
@@ -55,8 +58,9 @@ PUSHD "%~dp0"
 	REM modern Visual Studio versions.
 	SET "VCVARSALL_PATH=C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
 
-	REM ---------------------------------------------------------------------------
-	REM The parameters for the vcvarsall.bat batch file.
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ VCVARSALL.bat Parameters
+	REM ------------------------------------------------------------
 
 	REM Where to look for the source files.
 	SET "SOURCE_PATH=%~dp0Source"
@@ -86,46 +90,62 @@ PUSHD "%~dp0"
 	REM - C4100 - unused function parameter.
 	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /EHa- /nologo %THIRD_PARTY_INCLUDES%"
 	SET "COMPILER_OPTIONS_RELEASE_ONLY=/O2 /MT /GL"
-	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D DEBUG"
-	SET "COMPILER_OPTIONS_WIN_NT_ONLY="
-	SET "COMPILER_OPTIONS_WIN_9X_ONLY=/D BUILD_9X"
-	SET "COMPILER_OPTIONS_32_ONLY=/D BUILD_32_BIT"
-	SET "COMPILER_OPTIONS_64_ONLY="
+	SET "COMPILER_OPTIONS_DEBUG_ONLY=/Od /MTd /RTC1 /RTCc /Zi /Fm /FC /D BUILD_DEBUG"
 
+	REM The BUILD_BIG_ENDIAN option isn't currently used by any build target, but we'll mention it here if that changes
+	REM in the future. By default, we'll assume that we're targeting a little endian architecture.
+	SET "COMPILER_OPTIONS_9X_X86_32=/D BUILD_9X /D BUILD_32_BIT /D BUILD_TARGET=\"9x-x86-32\""
+	SET "COMPILER_OPTIONS_NT_X86_32=/D BUILD_32_BIT /D BUILD_TARGET=\"NT-x86-32\""
+	SET "COMPILER_OPTIONS_NT_X86_64=/D BUILD_TARGET=\"NT-x86-64\""
+	
 	REM Statically link with the required libraries. Note that we tell the linker not to use any default libraries.
 	SET "LIBRARIES=Kernel32.lib Advapi32.lib Shell32.lib Shlwapi.lib Version.lib"
 	SET "LIBRARIES_RELEASE_ONLY=LIBCMT.lib LIBCPMT.lib"
 	SET "LIBRARIES_DEBUG_ONLY=LIBCMTD.lib LIBCPMTD.lib"
-	SET "LIBRARIES_32_ONLY="
-	SET "LIBRARIES_64_ONLY="
-	SET "LIBRARIES_WIN_NT_ONLY="
-	SET "LIBRARIES_WIN_9X_ONLY="
 
 	REM Common linker options and any other ones that only apply to a specific build target or mode.
 	REM We used to statically link to ESENT.lib in the Windows 2000 to 10 (NT) builds.
 	SET "LINKER_OPTIONS=/link /WX /NODEFAULTLIB"
 	SET "LINKER_OPTIONS_RELEASE_ONLY=/LTCG /OPT:REF,ICF"
-	SET "LINKER_OPTIONS_DEBUG_ONLY=/DEBUG"
-	SET "LINKER_OPTIONS_WIN_NT_ONLY="
-	SET "LINKER_OPTIONS_WIN_9X_ONLY="
-	SET "LINKER_OPTIONS_32_ONLY="
-	SET "LINKER_OPTIONS_64_ONLY="
+	SET "LINKER_OPTIONS_DEBUG_ONLY=/DEBUG"	
 
+	SET "LINKER_OPTIONS_9X_ONLY=/OPT:WIN98"
+	SET "LINKER_OPTIONS_NT_ONLY=/OPT:NOWIN98"
+	
 	REM The names of the resulting executable files.
-	SET "EXE_FILENAME_32=WCE32.exe"
-	SET "EXE_FILENAME_64=WCE64.exe"
-	SET "EXE_FILENAME_9X_32=WCE9x32.exe"
-
+	SET "EXE_FILENAME_9X_X86_32=WCE9x32.exe"
+	SET "EXE_FILENAME_NT_X86_32=WCE32.exe"
+	SET "EXE_FILENAME_NT_X86_64=WCE64.exe"
+	
 	REM The paths and filenames to the uncompiled and compiled resource files.
 	SET "RESOURCE_FILE_PATH=%SOURCE_PATH%\Resources\resources.rc"
 	SET "COMPILED_RESOURCE_FILENAME=resources.res"
 
 	REM Resource compiler options that only apply to a specific build target.
-	SET "RESOURCE_OPTIONS_32_ONLY=/D BUILD_32_BIT"
-	SET "RESOURCE_OPTIONS_WIN_9X_ONLY=/D BUILD_9X"
+	SET "RESOURCE_OPTIONS_9X_X86_32=/D BUILD_9X /D BUILD_32_BIT"
+	SET "RESOURCE_OPTIONS_NT_X86_32=/D BUILD_32_BIT"
+	SET "RESOURCE_OPTIONS_NT_X86_64="
 	
-	REM ---------------------------------------------------------------------------
-	REM The locations of the output directories and other key files.
+
+	REM Modify or add options that depend on the Visual Studio version.
+	
+	IF "%USE_VS_2005_OPTIONS%" NEQ "Yes" (
+		ECHO [%~nx0] Using compiler and linker options for Visual Studio 2015 or later.
+		ECHO.
+
+		REM Remove the /OPT:WIN98 and /OPT:NOWIN98 options since they don't exist in modern Visual Studio versions.
+		SET "LINKER_OPTIONS_9X_ONLY=%LINKER_OPTIONS_9X_ONLY:/OPT:WIN98=%"
+		SET "LINKER_OPTIONS_NT_ONLY=%LINKER_OPTIONS_NT_ONLY:/OPT:NOWIN98=%"
+
+		REM Starting in Visual Studio 2015, the C Run-time Library was refactored into new binaries
+		SET "LIBRARIES_RELEASE_ONLY=%LIBRARIES_RELEASE_ONLY% LIBUCRT.lib LIBVCRUNTIME.lib"
+		SET "LIBRARIES_DEBUG_ONLY=%LIBRARIES_DEBUG_ONLY% LIBUCRTD.lib LIBVCRUNTIMED.lib"
+	)
+
+
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ File And Directory Locations
+	REM ------------------------------------------------------------
 
 	SET "MAIN_BUILD_PATH=%~dp0Builds"
 
@@ -152,24 +172,11 @@ PUSHD "%~dp0"
 	REM and license files above. These files must only use ASCII characters and use CRLF for newlines.
 	SET "RELEASE_README_PATH=%RELEASE_BUILD_PATH%\readme.txt"
 
-	REM ---------------------------------------------------------------------------
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ Compile The Program
+	REM ------------------------------------------------------------
 
 	CLS
-
-	REM Add any extra options that depend on the Visual Studio version.
-	IF "%USE_VS_2005_OPTIONS%" == "Yes" (
-		REM The /OPT:WIN98 and /OPT:NOWIN98 options don't exist in modern Visual Studio versions
-		REM since they dropped support for Windows 95, 98, and ME.
-		SET "LINKER_OPTIONS_WIN_NT_ONLY=%LINKER_OPTIONS_WIN_NT_ONLY% /OPT:NOWIN98"
-		SET "LINKER_OPTIONS_WIN_9X_ONLY=%LINKER_OPTIONS_WIN_9X_ONLY% /OPT:WIN98"
-	) ELSE (
-		ECHO [%~nx0] Using compiler and linker options for Visual Studio 2015 or later.
-		ECHO.
-
-		REM Starting in Visual Studio 2015, the C Run-time Library was refactored into new binaries
-		SET "LIBRARIES_RELEASE_ONLY=%LIBRARIES_RELEASE_ONLY% LIBUCRT.lib LIBVCRUNTIME.lib"
-		SET "LIBRARIES_DEBUG_ONLY=%LIBRARIES_DEBUG_ONLY% LIBUCRTD.lib LIBVCRUNTIMED.lib"
-	)
 
 	REM Get the build version from our file or default to an unknown one.
 	SET BUILD_VERSION=
@@ -247,12 +254,12 @@ PUSHD "%~dp0"
 		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMMAND_LINE_COMPILER_OPTIONS%"
 	)
 
-	REM ---------------------------------------------------------------------------
-	REM ------------------------- Windows NT 32-bit Build -------------------------
-	REM ---------------------------------------------------------------------------
-
 	REM Build each target by calling the vcvarsall.bat batch file with the correct architecture.
 	REM We'll stop the building process if a single target doesn't compile or link successfully.
+
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ Windows NT 32-bit Build
+	REM ------------------------------------------------------------
 
 	ECHO [%~nx0] Windows NT 32-bit %BUILD_MODE% build (v%BUILD_VERSION%)
 	ECHO.
@@ -276,13 +283,8 @@ PUSHD "%~dp0"
 			ROBOCOPY "%SOURCE_SCRIPTS_DIR%" ".\%SCRIPTS_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_NT_ONLY%"
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_32_ONLY%"
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% /Fe"%EXE_FILENAME_32%" /Fd"VC_%EXE_FILENAME_32%.pdb""
-			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_32_ONLY%"
-			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_WIN_NT_ONLY%"
-			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_WIN_NT_ONLY%"
-			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_32_ONLY%"
+			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_NT_X86_32% /Fe"%EXE_FILENAME_NT_X86_32%" /Fd"VC_%EXE_FILENAME_NT_X86_32%.pdb""
+			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_NT_ONLY%"
 
 			CALL "%VCVARSALL_PATH%" x86
 
@@ -292,10 +294,10 @@ PUSHD "%~dp0"
 			)
 
 			ECHO.
-			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_32%"...
+			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_NT_X86_32%"...
 
 			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_32%\%COMPILED_RESOURCE_FILENAME%"
-			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_32%\" %RESOURCE_OPTIONS_32_ONLY%"
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_NT_X86_32%\" %RESOURCE_OPTIONS_NT_X86_32%"
 			@ECHO ON
 			rc %RESOURCE_OPTIONS% "%RESOURCE_FILE_PATH%"
 			@ECHO OFF
@@ -303,7 +305,7 @@ PUSHD "%~dp0"
 			:SKIP_RESOURCES_32
 			
 			ECHO.
-			ECHO [%~nx0] Compiling "%EXE_FILENAME_32%"...
+			ECHO [%~nx0] Compiling "%EXE_FILENAME_NT_X86_32%"...
 
 			@ECHO ON
 			cl %COMPILER_OPTIONS% %SOURCE_CODE_FILES% "%COMPILED_RESOURCE_PATH%" %LIBRARIES% %LINKER_OPTIONS%
@@ -314,7 +316,7 @@ PUSHD "%~dp0"
 
 	IF ERRORLEVEL 1 (
 		ECHO.
-		ECHO [%~nx0] Error while building "%EXE_FILENAME_32%".
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_NT_X86_32%".
 		EXIT /B 1
 	)
 
@@ -330,9 +332,9 @@ PUSHD "%~dp0"
 	ECHO.
 	ECHO.
 
-	REM ---------------------------------------------------------------------------
-	REM ------------------------- Windows NT 64-bit Build -------------------------
-	REM ---------------------------------------------------------------------------
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ Windows NT 64-bit Build
+	REM ------------------------------------------------------------
 
 	ECHO [%~nx0] Windows NT 64-bit %BUILD_MODE% build (v%BUILD_VERSION%)
 	ECHO.
@@ -356,16 +358,11 @@ PUSHD "%~dp0"
 			ROBOCOPY "%SOURCE_SCRIPTS_DIR%" ".\%SCRIPTS_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_NT_ONLY%"
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_64_ONLY%"
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% /Fe"%EXE_FILENAME_64%" /Fd"VC_%EXE_FILENAME_64%.pdb""
-			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_64_ONLY%"
-			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_WIN_NT_ONLY%"
-			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_WIN_NT_ONLY%"
-			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_64_ONLY%"
+			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_NT_X86_64% /Fe"%EXE_FILENAME_NT_X86_64%" /Fd"VC_%EXE_FILENAME_NT_X86_64%.pdb""
+			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_NT_ONLY%"
 
 			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_64%\%COMPILED_RESOURCE_FILENAME%"
-			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" /D WCE_EXE_FILENAME=\"%EXE_FILENAME_64%\""
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" /D WCE_EXE_FILENAME=\"%EXE_FILENAME_NT_X86_64%\" %RESOURCE_OPTIONS_NT_X86_64%"
 			
 			CALL "%VCVARSALL_PATH%" x64
 
@@ -375,10 +372,10 @@ PUSHD "%~dp0"
 			)
 
 			ECHO.
-			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_64%"...
+			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_NT_X86_64%"...
 
 			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_64%\%COMPILED_RESOURCE_FILENAME%"
-			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_64%\""
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_NT_X86_64%\""
 			@ECHO ON
 			rc %RESOURCE_OPTIONS% "%RESOURCE_FILE_PATH%"
 			@ECHO OFF
@@ -386,7 +383,7 @@ PUSHD "%~dp0"
 			:SKIP_RESOURCES_64
 
 			ECHO.
-			ECHO [%~nx0] Compiling "%EXE_FILENAME_64%"...
+			ECHO [%~nx0] Compiling "%EXE_FILENAME_NT_X86_64%"...
 
 			@ECHO ON
 			cl %COMPILER_OPTIONS% %SOURCE_CODE_FILES% "%COMPILED_RESOURCE_PATH%" %LIBRARIES% %LINKER_OPTIONS%
@@ -397,7 +394,7 @@ PUSHD "%~dp0"
 
 	IF ERRORLEVEL 1 (
 		ECHO.
-		ECHO [%~nx0] Error while building "%EXE_FILENAME_64%".
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_NT_X86_64%".
 		EXIT /B 1
 	)
 
@@ -413,9 +410,9 @@ PUSHD "%~dp0"
 	ECHO.
 	ECHO.
 
-	REM ---------------------------------------------------------------------------
-	REM ------------------------- Windows 9x 32-bit Build -------------------------
-	REM ---------------------------------------------------------------------------
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ Windows 9x 32-bit Build
+	REM ------------------------------------------------------------
 
 	IF "%WIN9X_BUILD%" NEQ "Yes" (
 		GOTO SKIP_BUILD_9X
@@ -443,13 +440,8 @@ PUSHD "%~dp0"
 			ROBOCOPY "%SOURCE_SCRIPTS_DIR%" ".\%SCRIPTS_DIR%" /S /XF "*.md" >NUL
 			ECHO.
 
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_WIN_9X_ONLY%"
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_32_ONLY%"
-			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% /Fe"%EXE_FILENAME_9X_32%" /Fd"VC_%EXE_FILENAME_9X_32%.pdb""
-			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_32_ONLY%"
-			SET "LIBRARIES=%LIBRARIES% %LIBRARIES_WIN_9X_ONLY%"
-			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_WIN_9X_ONLY%"
-			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_32_ONLY%"
+			SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_9X_X86_32% /Fe"%EXE_FILENAME_9X_X86_32%" /Fd"VC_%EXE_FILENAME_9X_X86_32%.pdb""
+			SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_9X_ONLY%"
 			
 			CALL "%VCVARSALL_PATH%" x86
 
@@ -459,10 +451,10 @@ PUSHD "%~dp0"
 			)
 
 			ECHO.
-			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_9X_32%"...
+			ECHO [%~nx0] Compiling resources for "%EXE_FILENAME_9X_X86_32%"...
 
 			SET "COMPILED_RESOURCE_PATH=%BUILD_PATH_9X_32%\%COMPILED_RESOURCE_FILENAME%"
-			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_9X_32%\" %RESOURCE_OPTIONS_32_ONLY% %RESOURCE_OPTIONS_WIN_9X_ONLY%"
+			SET "RESOURCE_OPTIONS=/FO "%COMPILED_RESOURCE_PATH%" %RESOURCE_VERSION_OPTIONS% /D WCE_EXE_FILENAME=\"%EXE_FILENAME_9X_X86_32%\" %RESOURCE_OPTIONS_9X_X86_32%"
 			@ECHO ON
 			rc %RESOURCE_OPTIONS% "%RESOURCE_FILE_PATH%"
 			@ECHO OFF
@@ -470,7 +462,7 @@ PUSHD "%~dp0"
 			:SKIP_RESOURCES_9X_32
 
 			ECHO.
-			ECHO [%~nx0] Compiling "%EXE_FILENAME_9X_32%"...
+			ECHO [%~nx0] Compiling "%EXE_FILENAME_9X_X86_32%"...
 
 			@ECHO ON		
 			cl %COMPILER_OPTIONS% %SOURCE_CODE_FILES% "%COMPILED_RESOURCE_PATH%" %LIBRARIES% %LINKER_OPTIONS%
@@ -481,11 +473,9 @@ PUSHD "%~dp0"
 
 	IF ERRORLEVEL 1 (
 		ECHO.
-		ECHO [%~nx0] Error while building "%EXE_FILENAME_9X_32%".
+		ECHO [%~nx0] Error while building "%EXE_FILENAME_9X_X86_32%".
 		EXIT /B 1
 	)
-
-	:SKIP_BUILD_9X
 
 	IF "%BUILD_MODE%"=="release" (
 		ECHO.
@@ -493,7 +483,15 @@ PUSHD "%~dp0"
 
 		DEL /Q "%RELEASE_BUILD_PATH%\*.obj"
 		DEL /Q "%RELEASE_BUILD_PATH%\*.res"
+	)
 
+	:SKIP_BUILD_9X
+
+	REM ------------------------------------------------------------
+	REM ------------------------------------------------------------ Package All Builds
+	REM ------------------------------------------------------------
+
+	IF "%BUILD_MODE%"=="release" (
 		ECHO.
 		ECHO [%~nx0] Creating the release README file...
 	
@@ -505,7 +503,7 @@ PUSHD "%~dp0"
 	)
 
 	ECHO.
-	ECHO [%~nx0] The build process for version %BUILD_VERSION% completed successfully.
+	ECHO [%~nx0] The build process for %BUILD_MODE% version %BUILD_VERSION% completed successfully.
 	ECHO.
 
 	REM Compress the built executables and source code and create two archives.
@@ -529,7 +527,7 @@ PUSHD "%~dp0"
 	)
 
 	REM Add an identifier to the archive names if we passed any extra command line options to the compiler.
-	REM This will prevent sending someone a debug build that had the EXPORT_EMPTY_FILES macro defined.
+	REM This will prevent accidentally sending someone a debug build that had the EXPORT_EMPTY_FILES macro defined.
 	SET "EXTRA_ARGS_ID="
 	IF "%~1" NEQ "" (
 		SET "EXTRA_ARGS_ID=-extra-args"

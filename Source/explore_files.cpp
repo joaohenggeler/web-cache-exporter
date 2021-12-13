@@ -8,7 +8,7 @@
 	combined with group files, which allow you to potentially find the types of files based on their file signatures.
 */
 
-static const TCHAR* OUTPUT_NAME = TEXT("EXPLORE");
+static const TCHAR* OUTPUT_NAME = T("EXPLORE");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -43,10 +43,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 
 	Exporter_Params params = {};
 	params.copy_source_path = full_file_path;
-	params.url = NULL;
 	params.filename = filename;
+	params.file_info = callback_info;
 
-	export_cache_entry(exporter, csv_row, &params, callback_info);
+	export_cache_entry(exporter, csv_row, &params);
 
 	return true;
 }

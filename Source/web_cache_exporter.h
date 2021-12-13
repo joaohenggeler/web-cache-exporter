@@ -86,30 +86,28 @@
 #pragma warning(pop)
 
 #include <time.h> // For _gmtime64_s() and _tcsftime().
-
 #include <crtdbg.h> // For _ASSERT() and _STATIC_ASSERT().
 
+// A handy shorthand for the TEXT() macro. See the comment at the top of "web_cache_exporter.cpp" for more details.
+#define T(char_or_string) TEXT(char_or_string)
+
 // Information about the current build that is passed by the Build.bat batch file.
+#ifdef BUILD_TARGET
+	const char* const EXPORTER_BUILD_TARGET = BUILD_TARGET;
+#else
+	const char* const EXPORTER_BUILD_TARGET = "?";
+#endif
+
 #ifdef BUILD_VERSION
 	const char* const EXPORTER_BUILD_VERSION = BUILD_VERSION;
 #else
 	const char* const EXPORTER_BUILD_VERSION = "0.0.0";
 #endif
 
-#ifdef DEBUG
+#ifdef BUILD_DEBUG
 	const char* const EXPORTER_BUILD_MODE = "debug";
 #else
 	const char* const EXPORTER_BUILD_MODE = "release";
-#endif
-
-#ifdef BUILD_9X
-	const char* const EXPORTER_BUILD_TARGET = "9x-x86-32";
-#else
-	#ifdef BUILD_32_BIT
-		const char* const EXPORTER_BUILD_TARGET = "NT-x86-32";
-	#else
-		const char* const EXPORTER_BUILD_TARGET = "NT-x86-64";
-	#endif
 #endif
 
 // Prevent the use of the /J compiler option where the default 'char' type is changed from 'signed char' to 'unsigned char'.
@@ -130,8 +128,8 @@ typedef unsigned __int16 u16;
 typedef unsigned __int32 u32;
 typedef unsigned __int64 u64;
 
-typedef float float32;
-typedef double float64;
+typedef float f32;
+typedef double f64;
 
 typedef SSIZE_T ssize_t;
 
@@ -156,16 +154,16 @@ enum Cache_Type
 // An array that maps the previous values to full and short names.
 const TCHAR* const CACHE_TYPE_TO_FULL_NAME[NUM_CACHE_TYPES] =
 {
-	TEXT("Unknown"), TEXT("All"), TEXT("Explore"),
-	TEXT("Internet Explorer"), TEXT("Mozilla"),
-	TEXT("Flash Player"), TEXT("Shockwave Player"), TEXT("Java Plugin"), TEXT("Unity Web Player")
+	T("Unknown"), T("All"), T("Explore"),
+	T("Internet Explorer"), T("Mozilla"),
+	T("Flash Player"), T("Shockwave Player"), T("Java Plugin"), T("Unity Web Player")
 };
 
 const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[NUM_CACHE_TYPES] =
 {
-	TEXT("unknown"), TEXT("all"), TEXT("explore"),
-	TEXT("ie"), TEXT("mozilla"),
-	TEXT("flash"), TEXT("shockwave"), TEXT("java"), TEXT("unity")
+	T("unknown"), T("all"), T("explore"),
+	T("ie"), T("mozilla"),
+	T("flash"), T("shockwave"), T("java"), T("unity")
 };
 
 // Whether a given cache type belongs to a web plugin or not (i.e. a web browser).
@@ -220,10 +218,9 @@ struct Exporter
 	bool should_filter_by_groups;
 	bool should_show_full_paths;
 	bool should_group_by_request_origin;
-
 	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
-	bool should_load_specific_groups_files;
-	String_Array<TCHAR>* group_files_to_load;
+
+	String_Array<TCHAR>* group_files_for_filtering;
 
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
@@ -356,6 +353,8 @@ struct Exporter_Params
 
 	TCHAR* short_location_on_cache;
 	TCHAR* full_location_on_cache;
+
+	Traversal_Object_Info* file_info;
 };
 
 void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns);
@@ -363,14 +362,14 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
 
 void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_format, ...);
-#define add_exporter_warning_message(exporter, string_format, ...) tchar_add_exporter_warning_message(exporter, TEXT(string_format), __VA_ARGS__)
+#define add_exporter_warning_message(exporter, string_format, ...) tchar_add_exporter_warning_message(exporter, T(string_format), __VA_ARGS__)
 
-void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params, Traversal_Object_Info* optional_file_info = NULL);
+void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params);
 
 void terminate_cache_exporter(Exporter* exporter);
 
-#define _TEMPORARY_NAME_PREFIX TEXT("WCE")
-#define _TEMPORARY_NAME_SEARCH_QUERY _TEMPORARY_NAME_PREFIX TEXT("*")
+#define _TEMPORARY_NAME_PREFIX T("WCE")
+#define _TEMPORARY_NAME_SEARCH_QUERY _TEMPORARY_NAME_PREFIX T("*")
 const TCHAR* const TEMPORARY_NAME_PREFIX = _TEMPORARY_NAME_PREFIX;
 const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 #undef _TEMPORARY_NAME_PREFIX

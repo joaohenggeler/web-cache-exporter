@@ -7,6 +7,8 @@
 ; For Windows 98:
 BEGIN_PROFILE Default User
 
+	DRIVE				C:\My Old Drives\Windows 98
+
 	WINDOWS				C:\My Old Drives\Windows 98\WINDOWS
 	TEMPORARY			C:\My Old Drives\Windows 98\WINDOWS\TEMP
 	USER_PROFILE		<None>
@@ -22,6 +24,8 @@ END
 ; For Windows XP:
 BEGIN_PROFILE Username
 
+	DRIVE				C:\My Old Drives\Windows XP
+
 	WINDOWS				C:\My Old Drives\Windows XP\WINDOWS
 	TEMPORARY			C:\My Old Drives\Windows XP\Documents and Settings\Username\Local Settings\Temp
 	USER_PROFILE		C:\My Old Drives\Windows XP\Documents and Settings\Username
@@ -36,6 +40,8 @@ END
 
 ; For Windows 8.1:
 BEGIN_PROFILE Username
+
+	DRIVE				C:\My Old Drives\Windows 8.1
 
 	WINDOWS				C:\My Old Drives\Windows 8.1\Windows
 	TEMPORARY			C:\My Old Drives\Windows 8.1\Users\Username\AppData\Local\Temp

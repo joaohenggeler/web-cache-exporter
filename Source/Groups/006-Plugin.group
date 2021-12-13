@@ -29,10 +29,6 @@ END
 
 BEGIN_FILE_GROUP Alambik
 
-	BEGIN_FILE_SIGNATURES
-
-	END
-
 	BEGIN_MIME_TYPES
 		application/x-alambik-script
 	END

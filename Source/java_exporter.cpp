@@ -91,7 +91,7 @@
 	--> Used to decompiled some Java classes to get a better understanding of how the cache works.
 */
 
-static const TCHAR* OUTPUT_NAME = TEXT("JV");
+static const TCHAR* OUTPUT_NAME = T("JV");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -128,12 +128,12 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 			if(string_is_empty(java_appdata_path)) java_appdata_path = exporter->appdata_path;
 
 			// For Java 1.4 and later (distributed by Sun or Oracle).
-			PathCombine(exporter->cache_path, java_appdata_path, TEXT("Sun\\Java\\Deployment\\cache"));
+			PathCombine(exporter->cache_path, java_appdata_path, T("Sun\\Java\\Deployment\\cache"));
 		}
 
 		log_print(LOG_INFO, "Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
 		
-		traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
+		traverse_directory_objects(exporter->cache_path, T("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 		
 		if(exporter->is_exporting_from_default_locations)
 		{
@@ -141,19 +141,19 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 			if(string_is_empty(java_user_home_path)) java_user_home_path = exporter->windows_path;
 		
 			// For Java 1.4 and later (distributed by IBM).
-			PathCombine(exporter->cache_path, java_appdata_path, TEXT("IBM\\Java\\Deployment\\cache"));
+			PathCombine(exporter->cache_path, java_appdata_path, T("IBM\\Java\\Deployment\\cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
-			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
+			traverse_directory_objects(exporter->cache_path, T("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
 			// For Java 1.4.
-			PathCombine(exporter->cache_path, java_user_home_path, TEXT(".jpi_cache"));
+			PathCombine(exporter->cache_path, java_user_home_path, T(".jpi_cache"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
-			traverse_directory_objects(exporter->cache_path, TEXT("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
+			traverse_directory_objects(exporter->cache_path, T("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
 			// For Java 1.3.
-			PathCombine(exporter->cache_path, java_user_home_path, TEXT("java_plugin_AppletStore"));
+			PathCombine(exporter->cache_path, java_user_home_path, T("java_plugin_AppletStore"));
 			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
-			set_exporter_output_copy_subdirectory(exporter, TEXT("AppletStore"));
+			set_exporter_output_copy_subdirectory(exporter, T("AppletStore"));
 			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
 		}
 
@@ -169,11 +169,9 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 {
-	TCHAR* filename = callback_info->object_name;
 	TCHAR* full_file_path = callback_info->object_path;
-
 	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
-	TCHAR* cache_version = TEXT("AppletStore");
+	TCHAR* cache_version = T("AppletStore");
 
 	Csv_Entry csv_row[] =
 	{
@@ -191,11 +189,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 
 	Exporter_Params params = {};
 	params.copy_source_path = full_file_path;
-	params.url = NULL;
-	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
+	params.file_info = callback_info;
 
-	export_cache_entry(exporter, csv_row, &params, callback_info);
+	export_cache_entry(exporter, csv_row, &params);
 
 	return true;
 }
@@ -318,12 +315,12 @@ static TCHAR* get_cached_file_extension_from_java_file_type(s32 type)
 	switch(type)
 	{
 		case(JAVA_FILE_JAR):
-		case(JAVA_FILE_JARJAR): 	return TEXT(".zip"); // And not ".jar" or ".jarjar".
-		case(JAVA_FILE_CLASS): 		return TEXT(".class");
-		case(JAVA_FILE_GIF_IMAGE): 	return TEXT(".gif");
-		case(JAVA_FILE_JPEG_IMAGE): return TEXT(".jpg");
-		case(JAVA_FILE_AU_SOUND): 	return TEXT(".au");
-		case(JAVA_FILE_WAV_SOUND): 	return TEXT(".wav");
+		case(JAVA_FILE_JARJAR): 	return T(".zip"); // And not ".jar" or ".jarjar".
+		case(JAVA_FILE_CLASS): 		return T(".class");
+		case(JAVA_FILE_GIF_IMAGE): 	return T(".gif");
+		case(JAVA_FILE_JPEG_IMAGE): return T(".jpg");
+		case(JAVA_FILE_AU_SOUND): 	return T(".au");
+		case(JAVA_FILE_WAV_SOUND): 	return T(".wav");
 		default:					return NULL;
 	}
 }
@@ -341,7 +338,7 @@ static bool find_cached_filename_that_starts_with(Arena* arena, const TCHAR* dir
 {
 	*result_filename = NULL;
 
-	TCHAR search_query[MAX_PATH_CHARS] = TEXT("");
+	TCHAR search_query[MAX_PATH_CHARS] = T("");
 	StringCchCopy(search_query, MAX_PATH_CHARS, filename_prefix);
 	StringCchCat(search_query, MAX_PATH_CHARS, ALL_OBJECTS_SEARCH_QUERY);
 
@@ -353,7 +350,7 @@ static bool find_cached_filename_that_starts_with(Arena* arena, const TCHAR* dir
 		Traversal_Object_Info file_info = files->object_info[i];
 		TCHAR* filename = file_info.object_name;		
 
-		if(!string_ends_with(filename, TEXT(".idx")))
+		if(!string_ends_with(filename, T(".idx")))
 		{
 			was_found = true;
 			*result_filename = filename;
@@ -382,16 +379,16 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	TCHAR* directory_name = PathFindFileName(callback_info->directory_path);
 	
 	// For the ".jpi_cache" directory (version 1), where the directory structure follows ".jpi_cache\file\1.0\file.ext" instead.
-	TCHAR previous_directory_path[MAX_PATH_CHARS] = TEXT("");
-	PathCombine(previous_directory_path, callback_info->directory_path, TEXT(".."));
+	TCHAR previous_directory_path[MAX_PATH_CHARS] = T("");
+	PathCombine(previous_directory_path, callback_info->directory_path, T(".."));
 	TCHAR* previous_directory_name = PathFindFileName(previous_directory_path);
 
 	Java_Location_Type location_type = LOCATION_ALL;
-	if(strings_are_equal(directory_name, TEXT("file"), true) || strings_are_equal(previous_directory_name, TEXT("file"), true))
+	if(filenames_are_equal(directory_name, T("file")) || filenames_are_equal(previous_directory_name, T("file")))
 	{
 		location_type = LOCATION_FILES;
 	}
-	else if(strings_are_equal(directory_name, TEXT("jar"), true) || strings_are_equal(previous_directory_name, TEXT("jar"), true))
+	else if(filenames_are_equal(directory_name, T("jar")) || filenames_are_equal(previous_directory_name, T("jar")))
 	{
 		location_type = LOCATION_ARCHIVES;
 	}
@@ -413,10 +410,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 	
 	// @Format: The time information is stored in milliseconds while time_t is measured in seconds.
-	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	format_time64_t_date_time(index.last_modified_time / 1000, last_modified_time);
 
-	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	format_time64_t_date_time(index.expiry_time / 1000, expiry_time);
 
 	TCHAR* content_length = NULL;
@@ -441,14 +438,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	//
 	// Note that the version 1 cache directory may still exist in version 6. For example, if a user updated their Java version
 	// and their cache version was upgraded from one format to the other (e.g. Java 5 to Java 6).
-	TCHAR cached_filename[MAX_PATH_CHARS] = TEXT("");
+	TCHAR cached_filename[MAX_PATH_CHARS] = T("");
 	StringCchCopy(cached_filename, MAX_PATH_CHARS, index_filename);
 	{
 		// Remove the .idx file extension:
 		// - Version 1: "file.ext-ABCDEFGH-12345678.idx" -> "file.ext-ABCDEFGH-12345678" (not the actual filename though).
 		// - Version 6: "ABCDEFGH-12345678.idx" -> "ABCDEFGH-12345678".
 		TCHAR* idx_file_extension = skip_to_file_extension(cached_filename, true);
-		*idx_file_extension = TEXT('\0');
+		*idx_file_extension = T('\0');
 
 		// The above works for version 6, but for version 1 (the file or archive cache) we still need to determine
 		// the actual filename by appending the file extension. Otherwise, we won't be able to copy the file.
@@ -463,12 +460,12 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 				//
 				// This applies to the version 1 cache directories that still exist in version 6.
 				filename = push_string_to_arena(arena, cached_filename);
-				TCHAR* last_dash = _tcsrchr(filename, TEXT('-'));
+				TCHAR* last_dash = _tcsrchr(filename, T('-'));
 				if(last_dash != NULL)
 				{
-					*last_dash = TEXT('\0');
-					last_dash = _tcsrchr(filename, TEXT('-'));
-					if(last_dash != NULL) *last_dash = TEXT('\0');
+					*last_dash = T('\0');
+					last_dash = _tcsrchr(filename, T('-'));
+					if(last_dash != NULL) *last_dash = T('\0');
 				}
 			}
 
@@ -480,9 +477,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 			if(actual_file_extension == NULL)
 			{
 				actual_file_extension = skip_to_file_extension(filename, true);
-				if(actual_file_extension != NULL && string_starts_with(actual_file_extension, TEXT(".jar"), true))
+				if(actual_file_extension != NULL && string_starts_with(actual_file_extension, T(".jar"), true))
 				{
-					actual_file_extension = TEXT(".zip");
+					actual_file_extension = T(".zip");
 				}
 			}
 
@@ -506,10 +503,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 	
 	TCHAR* cache_version = NULL;
-	TCHAR cache_version_buffer[MAX_INT32_CHARS] = TEXT("");
+	TCHAR cache_version_buffer[MAX_INT32_CHARS] = T("");
 	if(location_type != LOCATION_ALL)
 	{
-		cache_version = TEXT("1");
+		cache_version = T("1");
 	}
 	else
 	{
@@ -517,7 +514,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		cache_version = cache_version_buffer;
 	}
 
-	TCHAR full_file_path[MAX_PATH_CHARS] = TEXT("");
+	TCHAR full_file_path[MAX_PATH_CHARS] = T("");
 	PathCombine(full_file_path, callback_info->directory_path, cached_filename);
 
 	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
@@ -540,6 +537,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	params.filename = filename;
 	params.headers = index.headers;
 	params.short_location_on_cache = short_location_on_cache;
+	params.file_info = callback_info;
 
 	export_cache_entry(exporter, csv_row, &params);
 
@@ -709,7 +707,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 		if(reached_end_of_file) break;\
 		\
 		CopyMemory(&variable, file, sizeof(variable));\
-		SWAP_BYTE_ORDER(variable);\
+		BIG_ENDIAN_TO_HOST(variable);\
 		\
 		file = advance_bytes(file, sizeof(variable));\
 		remaining_file_size -= sizeof(variable);\
@@ -760,35 +758,35 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 			{\
 				index->codebase_ip = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("<null>"), true))\
+			else if(strings_are_equal(key, T("<null>"), true))\
 			{\
 				index->headers.response = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("server"), true))\
+			else if(strings_are_equal(key, T("server"), true))\
 			{\
 				index->headers.server = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("cache-control"), true))\
+			else if(strings_are_equal(key, T("cache-control"), true))\
 			{\
 				index->headers.cache_control = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("pragma"), true))\
+			else if(strings_are_equal(key, T("pragma"), true))\
 			{\
 				index->headers.pragma = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("content-type"), true))\
+			else if(strings_are_equal(key, T("content-type"), true))\
 			{\
 				index->headers.content_type = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("content-length"), true))\
+			else if(strings_are_equal(key, T("content-length"), true))\
 			{\
 				index->headers.content_length = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("content-range"), true))\
+			else if(strings_are_equal(key, T("content-range"), true))\
 			{\
 				index->headers.content_range = value;\
 			}\
-			else if(strings_are_equal(key, TEXT("content-encoding"), true))\
+			else if(strings_are_equal(key, T("content-encoding"), true))\
 			{\
 				index->headers.content_encoding = value;\
 			}\
@@ -847,7 +845,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 
 		if(location_type == LOCATION_FILES)
 		{
-			READ_HEADERS(TEXT("plugin_resource_codebase_ip"));
+			READ_HEADERS(T("plugin_resource_codebase_ip"));
 		}
 		else if(location_type == LOCATION_ARCHIVES)
 		{
@@ -963,7 +961,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 				READ_STRING(index->url);
 				READ_STRING(index->namespace_id);
 
-				READ_HEADERS(TEXT("deploy_resource_codebase_ip"));
+				READ_HEADERS(T("deploy_resource_codebase_ip"));
 
 			} break;
 

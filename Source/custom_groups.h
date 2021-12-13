@@ -31,12 +31,12 @@ enum List_Type
 };
 
 // Two arrays that map the previous values to full names.
-const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {TEXT(""), TEXT("Invalid"), TEXT("File"), TEXT("URL")};
+const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {T(""), T("Invalid"), T("File"), T("URL")};
 const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
 {
-	TEXT(""), TEXT("Invalid"),
-	TEXT("File Signatures"), TEXT("MIME Types"), TEXT("File Extensions"),
-	TEXT("Domains")
+	T(""), T("Invalid"),
+	T("File Signatures"), T("MIME Types"), T("File Extensions"),
+	T("Domains")
 };
 
 // A structure that represents a file signature. Wildcards may be used to match any byte when comparing file signatures.
@@ -62,6 +62,7 @@ struct Group
 {
 	Group_Type type;
 	TCHAR* name;
+	bool enabled_for_filtering;
 
 	union
 	{
@@ -102,17 +103,21 @@ struct Custom_Groups
 // See: match_cache_entry_to_groups().
 struct Matchable_Cache_Entry
 {
+	// Input
 	TCHAR* full_file_path;
 	TCHAR* mime_type_to_match;
 	TCHAR* file_extension_to_match;
 	TCHAR* url_to_match;
-
+	
 	bool should_match_file_group;
 	bool should_match_url_group;
 
+	// Output
 	TCHAR* matched_file_group_name;
 	TCHAR* matched_url_group_name;
 	const TCHAR* matched_default_file_extension;
+	
+	bool match_is_enabled_for_filtering;
 };
 
 size_t get_total_group_files_size(Exporter* exporter, int* num_groups);

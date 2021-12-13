@@ -31,7 +31,7 @@
 	--> https://github.com/DerPopo/UABE
 */
 
-static const TCHAR* OUTPUT_NAME = TEXT("UN");
+static const TCHAR* OUTPUT_NAME = T("UN");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -64,7 +64,7 @@ void export_default_or_specific_unity_cache(Exporter* exporter)
 			if(string_is_empty(unity_appdata_path)) unity_appdata_path = exporter->local_appdata_path;
 			// This will be an empty string in Windows 98 and ME.
 
-			PathCombine(exporter->cache_path, unity_appdata_path, TEXT("Unity\\WebPlayer\\Cache"));
+			PathCombine(exporter->cache_path, unity_appdata_path, T("Unity\\WebPlayer\\Cache"));
 		}
 
 		log_print(LOG_INFO, "Unity Web Player: Exporting the cache from '%s'.", exporter->cache_path);
@@ -89,7 +89,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 	TCHAR* filename = callback_info->object_name;
 
 	// Skip the metadata and lock files.
-	if(strings_are_equal(filename, TEXT("__info"), true) || strings_are_equal(filename, TEXT("__lock"), true))
+	if(filenames_are_equal(filename, T("__info")) || filenames_are_equal(filename, T("__lock")))
 	{
 		return true;
 	}
@@ -97,15 +97,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 	TCHAR* full_file_path = callback_info->object_path;
 	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
 	{
-		TCHAR copy_subdirectory[MAX_PATH_CHARS] = TEXT("");
-		PathCombine(copy_subdirectory, short_location_on_cache, TEXT(".."));
+		TCHAR copy_subdirectory[MAX_PATH_CHARS] = T("");
+		PathCombine(copy_subdirectory, short_location_on_cache, T(".."));
 		set_exporter_output_copy_subdirectory(exporter, copy_subdirectory);
 	}
 
-	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = TEXT("");
+	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	{
-		TCHAR metadata_file_path[MAX_PATH_CHARS] = TEXT("");
-		PathCombine(metadata_file_path, callback_info->directory_path, TEXT("__info"));
+		TCHAR metadata_file_path[MAX_PATH_CHARS] = T("");
+		PathCombine(metadata_file_path, callback_info->directory_path, T("__info"));
 
 		u64 metadata_file_size = 0;
 		char* metadata_file = (char*) read_entire_file(arena, metadata_file_path, &metadata_file_size, true);
@@ -161,11 +161,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 
 	Exporter_Params params = {};
 	params.copy_source_path = full_file_path;
-	params.url = NULL;
 	params.filename = filename;
 	params.short_location_on_cache = short_location_on_cache;
+	params.file_info = callback_info;
 
-	export_cache_entry(exporter, csv_row, &params, callback_info);
+	export_cache_entry(exporter, csv_row, &params);
 
 	return true;
 }

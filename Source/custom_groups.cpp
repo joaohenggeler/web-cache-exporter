@@ -2,90 +2,14 @@
 #include "custom_groups.h"
 
 /*
-	This file defines the necessary functions used to load groups files, and match their contents to cache entries. Each group file
-	contains zero or more groups which label cache entries based on their file types and URLs. Only files which have a .group extension
-	are loaded. The following comparisons are done for each cache entry, for each group, in the following order. All string comparisons
-	are case insensitive.
+	This file defines the necessary functions used to load groups files, and match their contents to cache entries. Groups files are
+	text files that define zero or more groups, each one specifying a list of attributes to match to files found on a web browser or
+	plugin's cache.
 
-	For file groups:
-	1. Check if the file's contents begin with any of the group's file signatures.
-	2. Check if the MIME type in the cached file's "Content-Type" HTTP header begins with one of the group's MIME types.
-	3. Check if the file's extension matches one of the group's file extensions.
-
-	For example:
-	1. If a group specifies the file signature "3C 68 74 6D 6C" it will match any file that exists and whose contents begin with "<html".
-	A special identifier "__" can be used to match any byte. If the bytes "3C 68 __ 6D __" are specified, it will match "<html", "<hxmy",
-	"<hamb", etc. If the file's size is smaller than the file signature, it will never match it.
-	2. If a group specifies the MIME type "text/java", it will match "text/javascript", "TEXT/JAVASCRIPT", and "text/javascript; charset=UTF-8".
-	3. If a group specifies the file extension "htm", it will match .htm and .HTM files, but not .html.
-
-	File groups may also optionally specify a default file extension that is added to the end of any cached file without a name (i.e. a
-	file with a generic name assigned by the application). If a default file extension is not specified, but the group lists exactly one
-	file extension, then that one will be used. Default file extensions have precedence over lists with a single element.
-
-	For URL groups:
-	1. Check if the cached file's original URL matches the group's URL. The entry's URL is separated into a host and path, and the check
-	is performed by comparing the end of the host and the beginning of the path to the group's URL.
-
-	For example:
-	1a. If a group specifies "example.com", it will match "http://www.example.com/index.html", "mms://cdn.example.com:80/path/video.mp4",
-	and "https://download.example.com/path/updates/file.php?version=123&platform=ABC#top". This check allows you to match subdomains.
-	1b. Using the same example, if a group specifies "example.com/path", it will match the last two URLs. If a group instead specifies
-	"example.com/path/updates", it will only match the last one.
-	1c. If a group specifies "example.*", it will match any top or second level domain, like "example.com", "example.net", "example.org",
-	"example.co.uk", etc.
-
-	Here's an example of a group file which defines one file group (called Flash) and one URL group (called Cartoon Network). If a line
-	starts with a ';' character, then it's considered a comment and is not processed.
-
-	; This is a comment.
-	BEGIN_FILE_GROUP Flash
-
-		BEGIN_FILE_SIGNATURES
-			; "FWS" (uncompressed)
-			46 57 53
-			; "CWS" (ZLIB compressed)
-			43 57 53
-			; "ZWS" (LZMA compressed)
-			5A 57 53
-		END
-
-		BEGIN_MIME_TYPES
-			application/x-shockwave-flash
-			application/vnd.adobe.flash-movie
-			application/futuresplash
-
-			application/x-swz
-		END
-
-		BEGIN_FILE_EXTENSIONS
-			swf spl
-			fla
-			swz
-		END
-
-		DEFAULT_FILE_EXTENSION swf
-
-	END
-
-	BEGIN_URL_GROUP Cartoon Network
-
-		BEGIN_DOMAINS
-			cartoonnetwork.com
-			turner.com/toon
-			cartoonnetworkhq.*
-		END
-
-	END
-
-	Groups files use UTF-8 as their character encoding, meaning you can use any Unicode character in the various lists. In the
-	Windows 98 and ME builds these values are converted into ANSI strings, meaning only a subset of Unicode characters may be
-	used. Because of this, any offical group files that are bundled with this tool will always use ASCII characters to maintain
-	compatibility with every Windows version. If you're making your own group files, and are only running this application on
-	Windows 2000 or later, you can use any Unicode characters.
+	To learn how these files are supposed to work, refer to the "About Groups.txt" help file in "Source\Groups".
 */
 
-static const TCHAR* GROUP_FILES_SEARCH_QUERY = TEXT("*.group");
+static const TCHAR* GROUP_FILES_SEARCH_QUERY = T("*.group");
 
 // Various keywords and delimiters for the group file syntax.
 static const char COMMENT = ';';
@@ -96,52 +20,15 @@ static const char* BEGIN_URL_GROUP = "BEGIN_URL_GROUP";
 static const char* END_GROUP = "END";
 
 static const char* BEGIN_FILE_SIGNATURES = "BEGIN_FILE_SIGNATURES";
-static const TCHAR* BYTE_DELIMITERS = TEXT(" ");
+static const TCHAR* BYTE_DELIMITERS = T(" ");
 static const char* BEGIN_MIME_TYPES = "BEGIN_MIME_TYPES";
 static const char* BEGIN_FILE_EXTENSIONS = "BEGIN_FILE_EXTENSIONS";
 static const char* DEFAULT_FILE_EXTENSION = "DEFAULT_FILE_EXTENSION";
 static const char* BEGIN_DOMAINS = "BEGIN_DOMAINS";
-static const TCHAR* ANY_TOP_OR_SECOND_LEVEL_DOMAIN = TEXT(".*");
-static const TCHAR* URL_PATH_DELIMITERS = TEXT("/");
+static const TCHAR* ANY_TOP_OR_SECOND_LEVEL_DOMAIN = T(".*");
+static const TCHAR* URL_PATH_DELIMITERS = T("/");
 
 static const int MAX_FILE_SIGNATURE_BUFFER_SIZE = (int) kilobytes_to_bytes(1);
-
-// Determines if a given group file should be loaded given its filename and the exporter's command line arguments.
-//
-// @Parameters:
-// 1. exporter - The Exporter structure which contains information on how the group files should be loaded.
-// 2. filename - The current name of the group file on disk that should be checked. This filename may contain a .group extension,
-// though this will be ignored when performing comparisons.
-//
-// @Returns: True if this filename is allowed to be loaded. Otherwise, false. This function always succeeds if the
-// '-load-group-files' command line option is not used.
-static bool should_load_group_with_filename(Exporter* exporter, TCHAR* filename)
-{
-	if(!exporter->should_load_specific_groups_files) return true;
-
-	String_Array<TCHAR>* group_files_to_load = exporter->group_files_to_load;
-
-	// Temporarily remove the .group file extension.
-	TCHAR* file_extension = skip_to_file_extension(filename, true);
-	TCHAR previous_char = *file_extension;
-	*file_extension = TEXT('\0');
-		
-	bool success = false;
-
-	for(int i = 0; i < group_files_to_load->num_strings; ++i)
-	{
-		TCHAR* filename_to_load = group_files_to_load->strings[i];
-		if(strings_are_equal(filename, filename_to_load, true))
-		{
-			success = true;
-			break;
-		}
-	}
-
-	*file_extension = previous_char;
-
-	return success;
-}
 
 // Finds each group file on disk and retrieves the number of groups and how many bytes are (roughly) required to store them.
 //
@@ -163,13 +50,7 @@ size_t get_total_group_files_size(Exporter* exporter, int* result_num_groups)
 	for(int i = 0; i < group_files->num_objects; ++i)
 	{
 		Traversal_Object_Info file_info = group_files->object_info[i];
-		TCHAR* filename = file_info.object_name;
 		TCHAR* file_path = file_info.object_path;
-
-		if(!should_load_group_with_filename(exporter, filename))
-		{
-			continue;
-		}
 
 		lock_arena(temporary_arena);
 
@@ -276,7 +157,8 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 //
 // @Returns: Nothing.
 void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* secondary_temporary_arena,
-					 const TCHAR* file_path, Group* group_array, int* num_processed_groups, int* max_num_file_signature_bytes)
+					 const TCHAR* file_path, Group* group_array, bool enabled_for_filtering,
+					 int* num_processed_groups, int* max_num_file_signature_bytes)
 {
 	lock_arena(temporary_arena);
 
@@ -372,7 +254,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						{
 							TCHAR* byte_string = split_bytes->strings[k];
 
-							if(strings_are_equal(byte_string, TEXT("__")))
+							if(strings_are_equal(byte_string, T("__")))
 							{
 								is_wildcard[k] = true;
 							}
@@ -447,8 +329,8 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 						if(string_ends_with(host, ANY_TOP_OR_SECOND_LEVEL_DOMAIN))
 						{
 							domain->match_any_top_or_second_level_domain = true;
-							TCHAR* last_period = _tcsrchr(host, TEXT('.'));
-							if(last_period != NULL) *last_period = TEXT('\0');
+							TCHAR* last_period = _tcsrchr(host, T('.'));
+							if(last_period != NULL) *last_period = T('\0');
 						}
 						else
 						{
@@ -527,6 +409,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 
 							group->type = current_group_type;
 							group->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, group_name);
+							group->enabled_for_filtering = enabled_for_filtering;
 						}
 						else
 						{
@@ -679,6 +562,43 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 	unlock_arena(temporary_arena);
 }
 
+// Determines if the groups present in a given group file should be enabled for filtering.
+//
+// @Parameters:
+// 1. exporter - The Exporter structure which contains information on how the group files should be loaded.
+// 2. filename - The current name of the group file on disk that should be checked. This filename may contain a .group extension,
+// though this will be ignored when performing comparisons.
+//
+// @Returns: True if the groups in this file should be enabled for filtering. Otherwise, false. This function always returns false
+// if the '-filter-by-groups' command line option is not used.
+static bool should_groups_in_file_be_enabled_for_filtering(Exporter* exporter, TCHAR* filename)
+{
+	if(!exporter->should_filter_by_groups) return false;
+
+	String_Array<TCHAR>* group_files_for_filtering = exporter->group_files_for_filtering;
+
+	// Temporarily remove the .group file extension.
+	TCHAR* file_extension = skip_to_file_extension(filename, true);
+	TCHAR previous_char = *file_extension;
+	*file_extension = T('\0');
+		
+	bool enabled = false;
+
+	for(int i = 0; i < group_files_for_filtering->num_strings; ++i)
+	{
+		TCHAR* filename_for_filtering = group_files_for_filtering->strings[i];
+		if(filenames_are_equal(filename, filename_for_filtering))
+		{
+			enabled = true;
+			break;
+		}
+	}
+
+	*file_extension = previous_char;
+
+	return enabled;
+}
+
 // Called by qsort() to sort group file's names alphabetically.
 static int compare_filenames(const void* filename_pointer_1, const void* filename_pointer_2)
 {
@@ -718,12 +638,6 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 	{
 		Traversal_Object_Info file_info = group_files->object_info[i];
 		TCHAR* filename = file_info.object_name;
-
-		if(!should_load_group_with_filename(exporter, filename))
-		{
-			continue;
-		}
-
 		size_t filename_size = string_size(filename);
 		push_and_copy_to_arena(temporary_arena, filename_size, u8, filename, filename_size);
 		++num_group_files;
@@ -753,11 +667,13 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 	
 	for(int i = 0; i < num_group_files; ++i)
 	{
-		TCHAR group_file_path[MAX_PATH_CHARS] = TEXT("");
-		PathCombine(group_file_path, exporter->group_files_path, group_filenames_array[i]);
+		TCHAR* group_filename = group_filenames_array[i];
+		TCHAR group_file_path[MAX_PATH_CHARS] = T("");
+		PathCombine(group_file_path, exporter->group_files_path, group_filename);
+		bool enabled_for_filtering = should_groups_in_file_be_enabled_for_filtering(exporter, group_filename);
 
 		load_group_file(permanent_arena, temporary_arena, &(exporter->secondary_temporary_arena),
-						group_file_path, custom_groups->groups,
+						group_file_path, custom_groups->groups, enabled_for_filtering,
 						&num_processed_groups, &max_num_file_signature_bytes);
 	}
 
@@ -827,7 +743,7 @@ static bool url_host_ends_with(const TCHAR* host, const TCHAR* suffix)
 	if(strings_are_equal(host, suffix, true)) return true;
 
 	const TCHAR* suffix_in_host = host + host_length - suffix_length;
-	bool host_has_period_before_suffix = (suffix_length + 1 <= host_length) && ( *(suffix_in_host - 1) == TEXT('.') );
+	bool host_has_period_before_suffix = (suffix_length + 1 <= host_length) && ( *(suffix_in_host - 1) == T('.') );
 
 	return host_has_period_before_suffix && strings_are_equal(suffix_in_host, suffix, true);
 }
@@ -855,11 +771,11 @@ static bool url_host_and_path_match_domain(TCHAR* host, TCHAR* path, Domain* dom
 	// We'll do this by first removing the current host's top level domain before doing the first comparison.
 	if(domain->match_any_top_or_second_level_domain && host != NULL)
 	{
-		last_period = _tcsrchr(host, TEXT('.'));
+		last_period = _tcsrchr(host, T('.'));
 		if(last_period != NULL)
 		{
-			*last_period = TEXT('\0');
-			second_to_last_period = _tcsrchr(host, TEXT('.'));
+			*last_period = T('\0');
+			second_to_last_period = _tcsrchr(host, T('.'));
 		}
 	}
 
@@ -868,17 +784,17 @@ static bool url_host_and_path_match_domain(TCHAR* host, TCHAR* path, Domain* dom
 	// Put any removed top level domains back.
 	if(last_period != NULL)
 	{
-		*last_period = TEXT('.');
+		*last_period = T('.');
 	}
 
 	// And by then removing the current host's second level domain before doing a second comparison.
 	// We only need to do this if there wasn't a previous match.
 	if(!urls_match && second_to_last_period != NULL)
 	{
-		*second_to_last_period = TEXT('\0');
+		*second_to_last_period = T('\0');
 		urls_match = (host != NULL) && url_host_ends_with(host, domain->host);
 		// Put any removed second level domains back.
-		*second_to_last_period = TEXT('.');
+		*second_to_last_period = T('.');
 	}
 
 	// If there is also a path to compare, it must match the current URL's path. Otherwise, the whole match fails.
@@ -966,7 +882,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 				for(int j = 0; j < group->file_info.num_file_extensions; ++j)
 				{
 					TCHAR* file_extension_in_group = group->file_info.file_extensions[j];
-					if(strings_are_equal(file_extension_to_match, file_extension_in_group, true))
+					if(filenames_are_equal(file_extension_to_match, file_extension_in_group))
 					{
 						file_group = group;
 					}
@@ -1015,6 +931,8 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			entry_to_match->matched_default_file_extension = file_group->file_info.file_extensions[0];
 		}
 	}
+
+	entry_to_match->match_is_enabled_for_filtering = (file_group != NULL && file_group->enabled_for_filtering) || (url_group != NULL && url_group->enabled_for_filtering);
 
 	// If we matched at least one group.
 	return (file_group != NULL) || (url_group != NULL);

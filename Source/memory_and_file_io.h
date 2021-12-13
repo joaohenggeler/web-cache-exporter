@@ -35,7 +35,7 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 #define push_arena(arena, push_size, Type) ((Type*) aligned_push_arena(arena, push_size, __alignof(Type)))
 #define push_and_copy_to_arena(arena, push_size, Type, data, data_size) ((Type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(Type), data, data_size))
 TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy);
-float32 get_used_arena_capacity(Arena* arena);
+f32 get_used_arena_capacity(Arena* arena);
 void lock_arena(Arena* arena);
 void unlock_arena(Arena* arena);
 void clear_arena(Arena* arena);
@@ -80,10 +80,14 @@ u32 swap_byte_order(u32 value);
 s32 swap_byte_order(s32 value);
 u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
-#define SWAP_BYTE_ORDER(variable) variable = swap_byte_order(variable)
 
-// @Future: Maybe it would be clearer if we had two macros, like LITTLE_ENDIAN_TO_HOST() and BIG_ENDIAN_TO_HOST(), that
-// would convert from one endianness to the host one.
+#ifdef BUILD_BIG_ENDIAN
+	#define BIG_ENDIAN_TO_HOST(variable)
+	#define LITTLE_ENDIAN_TO_HOST(variable) variable = swap_byte_order(variable)
+#else
+	#define BIG_ENDIAN_TO_HOST(variable) variable = swap_byte_order(variable)
+	#define LITTLE_ENDIAN_TO_HOST(variable)
+#endif
 
 bool memory_is_equal(const void* buffer_1, const void* buffer_2, size_t size_to_compare);
 
@@ -160,10 +164,10 @@ bool convert_hexadecimal_string_to_byte(const TCHAR* byte_string, u8* result_byt
 // in the Win32 API, and also convert_code_page_string_to_tchar().
 enum Code_Page
 {
-	CP_UTF16_LE = 1200,
-	CP_UTF16_BE = 1201,
-	CP_UTF32_LE = 12000,
-	CP_UTF32_BE = 12001,
+	CODE_PAGE_UTF_16_LE = 1200,
+	CODE_PAGE_UTF_16_BE = 1201,
+	CODE_PAGE_UTF_32_LE = 12000,
+	CODE_PAGE_UTF_32_BE = 12001,
 };
 
 TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, u32 code_page, const char* string);
@@ -235,6 +239,7 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(TCHAR);
 
+bool filenames_are_equal(const TCHAR* filename_1, const TCHAR* filename_2);
 TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
 TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components);
 int count_path_components(const TCHAR* path);
@@ -296,7 +301,7 @@ struct Traversal_Object_Info
 	void* user_data; // Only used for callbacks. Unused for the array elements in Traversal_Result.
 };
 
-const TCHAR* const ALL_OBJECTS_SEARCH_QUERY = TEXT("*");
+const TCHAR* const ALL_OBJECTS_SEARCH_QUERY = T("*");
 
 #define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(Traversal_Object_Info* callback_info)
 typedef TRAVERSE_DIRECTORY_CALLBACK(Traverse_Directory_Callback);
@@ -346,7 +351,7 @@ bool empty_file(HANDLE file_handle);
 TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
-#define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, TEXT(key_name), TEXT(value_name), value_data, value_data_size)
+#define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, T(key_name), T(value_name), value_data, value_data_size)
 
 // The types of property strings stored in an executable or DLL file's information.
 // See: get_file_info().
@@ -393,14 +398,14 @@ enum Log_Type
 };
 
 // An array that maps the previous values to TCHAR strings. These strings will appear at the beginning of every log line.
-const TCHAR* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {TEXT(""), TEXT("[INFO] "), TEXT("[WARNING] "), TEXT("[ERROR] "), TEXT("[DEBUG] ")};
+const TCHAR* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {T(""), T("[INFO] "), T("[WARNING] "), T("[ERROR] "), T("[BUILD_DEBUG] ")};
 
 bool create_log_file(const TCHAR* log_file_path);
 void close_log_file(void);
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
-#define log_print(log_type, string_format, ...) tchar_log_print(log_type, TEXT(string_format), __VA_ARGS__)
+#define log_print(log_type, string_format, ...) tchar_log_print(log_type, T(string_format), __VA_ARGS__)
 #define log_print_newline() log_print(LOG_NONE, "")
-#ifdef DEBUG
+#ifdef BUILD_DEBUG
 	#define debug_log_print(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
 #else
 	#define debug_log_print(...)
@@ -412,7 +417,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 // 1. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
 // strings (narrow ANSI or wide UTF-16 depending on the build target).
 // 2. ... - Zero or more arguments to be inserted in the format string.
-#define console_print(string_format, ...) _tprintf(TEXT(string_format) TEXT("\n\n"), __VA_ARGS__)
+#define console_print(string_format, ...) _tprintf(T(string_format) T("\n\n"), __VA_ARGS__)
 
 /*
 	Format Specifiers For Printf Functions:
@@ -609,7 +614,7 @@ enum Custom_Error_Code
 bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path);
 
 // For measuring times in the debug builds. Only DEBUG_BEGIN_MEASURE_TIME() and DEBUG_END_MEASURE_TIME() should be used directly.
-#ifdef DEBUG
+#ifdef BUILD_DEBUG
 	void debug_measure_time(bool is_start, const char* identifier);
 	#define DEBUG_BEGIN_MEASURE_TIME(identifier) debug_measure_time(true, identifier)
 	#define DEBUG_END_MEASURE_TIME() debug_measure_time(false, NULL)

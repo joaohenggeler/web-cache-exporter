@@ -93,6 +93,10 @@ size_t get_total_group_files_size(Exporter* exporter, int* result_num_groups)
 				}
 			}
 		}
+		else
+		{
+			log_error("Load Group File: Failed to read the group file.");
+		}
 
 		clear_arena(temporary_arena);
 		unlock_arena(temporary_arena);
@@ -156,21 +160,21 @@ static void copy_string_from_list_to_group(	Arena* permanent_arena, Arena* tempo
 // enough to load each processed file signature.
 //
 // @Returns: Nothing.
-void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* secondary_temporary_arena,
-					 const TCHAR* file_path, Group* group_array, bool enabled_for_filtering,
-					 int* num_processed_groups, int* max_num_file_signature_bytes)
+static void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* secondary_temporary_arena,
+							const TCHAR* file_path, Group* group_array, bool enabled_for_filtering,
+							int* num_processed_groups, int* max_num_file_signature_bytes)
 {
 	lock_arena(temporary_arena);
 
 	TCHAR* group_filename = PathFindFileName(file_path);
-	log_print(LOG_INFO, "Load Group File: Loading the group file '%s'.", group_filename);
+	log_info("Load Group File: Loading the group file '%s'.", group_filename);
 
 	u64 file_size = 0;
 	char* file = (char*) read_entire_file(temporary_arena, file_path, &file_size, true);
 	
 	if(file == NULL)
 	{
-		log_print(LOG_ERROR, "Load Group File: Failed to load the group file '%s'.", group_filename);
+		log_error("Load Group File: Failed to read the group file '%s'.", group_filename);
 		clear_arena(temporary_arena);
 		unlock_arena(temporary_arena);
 		return;
@@ -236,7 +240,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 
 						if(num_bytes > MAX_FILE_SIGNATURE_BUFFER_SIZE)
 						{
-							log_print(LOG_WARNING, "Load Group File: The file signature number %d in the group '%s' has %d bytes when the maximum is %d. These extra bytes will be ignored.", j+1, group->name, num_bytes, MAX_FILE_SIGNATURE_BUFFER_SIZE);
+							log_warning("Load Group File: The file signature number %d in the group '%s' has %d bytes when the maximum is %d. These extra bytes will be ignored.", j+1, group->name, num_bytes, MAX_FILE_SIGNATURE_BUFFER_SIZE);
 							num_bytes = MAX_FILE_SIGNATURE_BUFFER_SIZE;
 						}
 
@@ -264,7 +268,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							}
 							else
 							{
-								log_print(LOG_ERROR, "Load Group File: The string '%s' cannot be converted into a byte. The file signature number %d in the group '%s' will be skipped.", byte_string, j+1, group->name);
+								log_error("Load Group File: The string '%s' cannot be converted into a byte. The file signature number %d in the group '%s' will be skipped.", byte_string, j+1, group->name);
 								num_bytes = 0;
 								bytes = NULL;
 								is_wildcard = NULL;
@@ -416,12 +420,12 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							// Set it to a type different than GROUP_NONE so we can handle it properly when we reach the END keyword.
 							// Nothing else will be done for this invalid group.
 							current_group_type = GROUP_INVALID;
-							log_print(LOG_ERROR, "Load Group Files: Skipping invalid group of type '%hs' and name '%hs'.", group_type, group_name);
+							log_error("Load Group Files: Skipping invalid group of type '%hs' and name '%hs'.", group_type, group_name);
 						}
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Load Group Files: Found %d tokens while looking for a new group when two were expected.", split_tokens->num_strings);
+						log_error("Load Group Files: Found %d tokens while looking for a new group when two were expected.", split_tokens->num_strings);
 					}
 				} break;
 
@@ -465,12 +469,12 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 								}
 								else
 								{
-									log_print(LOG_ERROR, "Load Group Files: Found %d tokens while looking for a default file extension when two were expected.", split_tokens->num_strings);
+									log_error("Load Group Files: Found %d tokens while looking for a default file extension when two were expected.", split_tokens->num_strings);
 								}
 							}
 							else
 							{
-								log_print(LOG_ERROR, "Load Group File: Unknown group file list type '%hs'.", first_token);
+								log_error("Load Group File: Unknown group file list type '%hs'.", first_token);
 							}
 						} break;
 
@@ -521,7 +525,7 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 							}
 							else
 							{
-								log_print(LOG_ERROR, "Load Group File: Unknown group URL list type '%hs'.", line);
+								log_error("Load Group File: Unknown group URL list type '%hs'.", line);
 							}
 						} break;
 
@@ -550,12 +554,12 @@ void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Arena* seco
 
 	if(current_list_type != LIST_NONE)
 	{
-		log_print(LOG_WARNING, "Load Group File: Found unterminated list of type '%s' in the group file '%s'.", LIST_TYPE_TO_STRING[current_list_type], group_filename);
+		log_warning("Load Group File: Found unterminated list of type '%s' in the group file '%s'.", LIST_TYPE_TO_STRING[current_list_type], group_filename);
 	}
 
 	if(current_group_type != GROUP_NONE)
 	{
-		log_print(LOG_WARNING, "Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
+		log_warning("Load Group File: Found unterminated group of type '%s' in the group file '%s'.", GROUP_TYPE_TO_STRING[current_group_type], group_filename);
 	}
 
 	clear_arena(temporary_arena);
@@ -621,7 +625,7 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 {
 	if(num_groups == 0)
 	{
-		log_print(LOG_WARNING, "Load All Group Files: Attempted to load zero groups. No groups will be loaded.");
+		log_warning("Load All Group Files: Attempted to load zero groups. No groups will be loaded.");
 		return;
 	}
 
@@ -645,7 +649,7 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 
 	if(num_group_files == 0)
 	{
-		log_print(LOG_ERROR, "Load All Group Files: Expected to load %d groups from at least one file on disk, but no files were found. No groups will be loaded.", num_groups);
+		log_error("Load All Group Files: Expected to load %d groups from at least one file on disk, but no files were found. No groups will be loaded.", num_groups);
 		return;
 	}
 
@@ -680,10 +684,10 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 	custom_groups->num_groups = num_processed_groups;
 	if(num_processed_groups != num_groups)
 	{
-		log_print(LOG_ERROR, "Load All Group Files: Loaded %d groups when %d were expected.", num_processed_groups, num_groups);
+		log_error("Load All Group Files: Loaded %d groups when %d were expected.", num_processed_groups, num_groups);
 	}
 
-	log_print(LOG_INFO, "Load All Group Files: Allocating %d bytes for the file signature buffer.", max_num_file_signature_bytes);
+	log_info("Load All Group Files: Allocating %d bytes for the file signature buffer.", max_num_file_signature_bytes);
 	custom_groups->file_signature_buffer = push_arena(permanent_arena, max_num_file_signature_bytes, u8);
 	custom_groups->file_signature_buffer_size = max_num_file_signature_bytes;
 
@@ -800,7 +804,7 @@ static bool url_host_and_path_match_domain(TCHAR* host, TCHAR* path, Domain* dom
 	// If there is also a path to compare, it must match the current URL's path. Otherwise, the whole match fails.
 	if(domain->path != NULL)
 	{
-		urls_match = urls_match && string_starts_with(path, domain->path, true);
+		urls_match = urls_match && string_begins_with(path, domain->path, true);
 	}
 
 	return urls_match;
@@ -809,14 +813,16 @@ static bool url_host_and_path_match_domain(TCHAR* host, TCHAR* path, Domain* dom
 // Attempts to match a cached file to any previously loaded groups.
 //
 // @Parameters:
-// 1. temporary_arena - The Arena structure where any intermediary strings are stored.
-// 2. custom_groups - The group data previously loaded from files on disk.
-// 3. entry_to_match - The Matchable_Cache_Entry structure that takes any parameters that should be matched to the groups.
+// 1. exporter - The Exporter structure which contains information on the previously group files.
+// 2. entry_to_match - The Matchable_Cache_Entry structure that takes any parameters that should be matched to the groups.
 // The matched file and/or URL group names are returned in this same structure.
 //
 // @Returns: True if the cached file matched at least one group. Otherwise, false.
-bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_groups, Matchable_Cache_Entry* entry_to_match)
+bool match_cache_entry_to_groups(Exporter* exporter, Matchable_Cache_Entry* entry_to_match)
 {
+	Arena* temporary_arena = &(exporter->temporary_arena);
+	Custom_Groups* custom_groups = exporter->custom_groups;
+
 	// If no groups were loaded.
 	if(custom_groups == NULL) return false;
 
@@ -833,10 +839,11 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 	// Read the cached file's signature, taking into account empty files and file's smaller than the signature buffer (reading
 	// less bytes than the ones requested).
 	u32 file_signature_size = 0;
-	bool read_file_signature_successfully = read_first_file_bytes(	full_file_path,
-																	custom_groups->file_signature_buffer,
-																	custom_groups->file_signature_buffer_size,
-																	true, &file_signature_size) && file_signature_size > 0;
+	bool read_file_signature_successfully = does_file_exist(full_file_path)
+										&& read_first_file_bytes(full_file_path,
+																 custom_groups->file_signature_buffer,
+																 custom_groups->file_signature_buffer_size,
+																 true, &file_signature_size) && file_signature_size > 0;
 
 	Url_Parts url_parts_to_match = {};
 	bool partioned_url_successfully = should_match_url_group
@@ -869,7 +876,7 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 				for(int j = 0; j < group->file_info.num_mime_types; ++j)
 				{
 					TCHAR* mime_type_in_group = group->file_info.mime_types[j];
-					if(string_starts_with(mime_type_to_match, mime_type_in_group, true))
+					if(string_begins_with(mime_type_to_match, mime_type_in_group, true))
 					{
 						file_group = group;
 					}
@@ -906,10 +913,8 @@ bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_g
 			}
 		}
 
-		// If we matched the groups we wanted, we don't need to continue checking.
-		// We either don't want to match a given group type (meaning we can exit if we got the other),
-		// or we do want to match it (meaning we need to check if we got it).
-		if( (!should_match_file_group || file_group != NULL) && (!should_match_url_group || url_group != NULL) )
+		bool matched_all_requested_group_types = (!should_match_file_group || file_group != NULL) && (!should_match_url_group || url_group != NULL);
+		if(matched_all_requested_group_types)
 		{
 			break;
 		}

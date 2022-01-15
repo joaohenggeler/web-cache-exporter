@@ -31,13 +31,16 @@ enum List_Type
 };
 
 // Two arrays that map the previous values to full names.
-const TCHAR* const GROUP_TYPE_TO_STRING[NUM_GROUP_TYPES] = {T(""), T("Invalid"), T("File"), T("URL")};
-const TCHAR* const LIST_TYPE_TO_STRING[NUM_LIST_TYPES] =
+const TCHAR* const GROUP_TYPE_TO_STRING[] = {T(""), T("Invalid"), T("File"), T("URL")};
+const TCHAR* const LIST_TYPE_TO_STRING[] =
 {
 	T(""), T("Invalid"),
 	T("File Signatures"), T("MIME Types"), T("File Extensions"),
 	T("Domains")
 };
+
+_STATIC_ASSERT(_countof(GROUP_TYPE_TO_STRING) == NUM_GROUP_TYPES);
+_STATIC_ASSERT(_countof(LIST_TYPE_TO_STRING) == NUM_LIST_TYPES);
 
 // A structure that represents a file signature. Wildcards may be used to match any byte when comparing file signatures.
 struct File_Signature
@@ -104,6 +107,7 @@ struct Custom_Groups
 struct Matchable_Cache_Entry
 {
 	// Input
+	
 	TCHAR* full_file_path;
 	TCHAR* mime_type_to_match;
 	TCHAR* file_extension_to_match;
@@ -113,6 +117,7 @@ struct Matchable_Cache_Entry
 	bool should_match_url_group;
 
 	// Output
+
 	TCHAR* matched_file_group_name;
 	TCHAR* matched_url_group_name;
 	const TCHAR* matched_default_file_extension;
@@ -122,6 +127,6 @@ struct Matchable_Cache_Entry
 
 size_t get_total_group_files_size(Exporter* exporter, int* num_groups);
 void load_all_group_files(Exporter* exporter, int num_groups);
-bool match_cache_entry_to_groups(Arena* temporary_arena, Custom_Groups* custom_groups, Matchable_Cache_Entry* entry_to_match);
+bool match_cache_entry_to_groups(Exporter* exporter, Matchable_Cache_Entry* entry_to_match);
 
 #endif

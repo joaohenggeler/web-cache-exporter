@@ -13,10 +13,18 @@ WCE64
 # Third party source files that shouldn't be distributed.
 Source/ThirdParty/ESENT/esent.h
 
-# Java Plugin index and class files for testing.
+# The build directory for third-party libraries.
+Source/ThirdParty/StaticLibraries
+
+# Java Plugin index and class files used for testing.
 Source/Other/JavaPlugin/*
 !Source/Other/JavaPlugin/*.bat
 !Source/Other/JavaPlugin/*.java
+
+# Compressed files used for testing.
+Source/Other/Compression/*
+!Source/Other/Compression/*.py
+!Source/Other/Compression/requirements.txt
 
 # The 7-Zip executable used by the Build.bat to package the releases.
 _7za920

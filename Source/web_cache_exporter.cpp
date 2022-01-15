@@ -50,17 +50,34 @@
 	@Author: João Henggeler
 
 	@TODO:
-	- Decompress cached files depending on the Content-Encoding header.
+	- Add support for LZW decompression.
+	- Handle the missing Shockwave Player location (DswMedia).
+	- Refactor partition_url() to not use _tcstok_s().
 
 	@Future:
-	- Investigate the Chromium (Google Chrome, Microsoft Edge, Brave, Opera, Vivaldi, etc) cache format.
+
+	High Priority:
 	- Investigate the Netscape Navigator (6.0 and older) cache format.
+	- Investigate the Chromium (Google Chrome, Microsoft Edge, Brave, Opera, Vivaldi, etc) cache format.
 	- Investigate the Opera (14 or older) cache format.
-	- Investigate the Safari cache format.
+	
+	Medium Priority:
+	- Investigate the Java Web Start cache directory.
+	- Investigate the custom Java cache locations specified in the Java deployment properties.
+	- Parse the JET Blue / ESE database format ourselves instead of relying on the dynamically loaded functions from ESENT.dll.
+	Future Windows API changes could change/break the Internet Explorer cache exporter. Moreover, this should make it easier to
+	lower the complexity of the code while also removing a dependency. See: https://github.com/microsoft/Extensible-Storage-Engine
+	- Make a simple local Python HTTP server to retrieve sample cache formats.
+
+	Low Priority:
+	- Investigate the Flash cache directory for the plugin that was bundled with Chromium before Flash's EOL.
+	- Investigate the Safari (Windows) cache format.
 	- Investigate the Internet Explorer 3 cache format.
 	- Investigate the Internet Explorer Mac (WAF) cache format.
-	- Parse the JET Blue / ESE database format ourselves instead of relying on ESENT.dll. This should make it easier to lower the
-	complexity of the IE exporter while also removing a dependency. See: https://github.com/microsoft/Extensible-Storage-Engine
+	- Investigate the NCSA Mosaic cache format.
+	- Investigate the Black Sun / Blaxxun / BS Contact plugin cache format.
+	- Investigate the Pulse Player plugin cache format.
+	- Investigate the Atomic3D plugin cache format.
 */
 
 /*
@@ -104,7 +121,7 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"########## [2] OPTIONAL ARGUMENTS: Put them before the export option.\n"
 												"\n"
-												"-csv-only (-co)    only creates CSV files (don't export cached files).\n"
+												"-csvs-only (-co)    only creates CSV files (don't export cached files).\n"
 												"\n"
 												"-files-only (-fo)    only exports cached files (don't create CSV files).\n"
 												"\n"
@@ -112,7 +129,7 @@ static const char* COMMAND_LINE_HELP_MESSAGE = 	"Usage: WCE.exe [Optional Argume
 												"\n"
 												"########## [2] EXAMPLES:\n"
 												"\n"
-												"WCE.exe -csv-only -export-flash\n"
+												"WCE.exe -csvs-only -export-flash\n"
 												"WCE.exe -overwrite -files-only -export-shockwave"
 												;
 
@@ -155,7 +172,9 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 	
 	// Set any options that shouldn't be zero, false, or empty strings by default.
 	exporter->should_copy_files = true;
-	exporter->should_create_csv = true;
+	exporter->should_create_csvs = true;
+	exporter->should_decompress_files = true;
+	exporter->should_delete_previous_temporary_directories = true;
 
 	#define IS_OPTION(long_option, short_option) (strings_are_equal(option, T(long_option)) || strings_are_equal(option, T(short_option)))
 
@@ -164,13 +183,17 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 	{
 		TCHAR* option = arguments[i];
 
-		if(IS_OPTION("-csv-only", "-co"))
+		if(IS_OPTION("-version", "-v") || IS_OPTION("-no-log", "-nl") || IS_OPTION("-quiet", "-q"))
+		{
+			// Already handled right when the application started.
+		}
+		else if(IS_OPTION("-csvs-only", "-co"))
 		{
 			exporter->should_copy_files = false;
 		}
 		else if(IS_OPTION("-files-only", "-fo"))
 		{
-			exporter->should_create_csv = false;
+			exporter->should_create_csvs = false;
 		}
 		else if(IS_OPTION("-overwrite", "-o"))
 		{
@@ -183,6 +206,14 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		else if(IS_OPTION("-group-by-origin", "-gbo"))
 		{
 			exporter->should_group_by_request_origin = true;
+		}
+		else if(IS_OPTION("-no-decompress", "-nd"))
+		{
+			exporter->should_decompress_files = false;
+		}
+		else if(IS_OPTION("-no-delete-old-temp", "-ndot"))
+		{
+			exporter->should_delete_previous_temporary_directories = false;
 		}
 		else if(IS_OPTION("-filter-by-groups", "-fbg"))
 		{
@@ -210,7 +241,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 					{
 						if(strings_are_equal(name, T("plugins")))
 						{
-							log_print(LOG_INFO, "Argument Parsing: Ignoring filter for any plugin cache types.");
+							log_info("Argument Parsing: Ignoring filter for any plugin cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
 							{
 								if(IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
@@ -218,7 +249,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 						}
 						else if(strings_are_equal(name, T("browsers")))
 						{
-							log_print(LOG_INFO, "Argument Parsing: Ignoring filter for any browser cache types.");
+							log_info("Argument Parsing: Ignoring filter for any browser cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
 							{
 								if(!IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
@@ -228,12 +259,12 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 						{
 							success = false;
 							console_print("Unknown cache type '%s' in the -ignore-filter-for option.", name);
-							log_print(LOG_ERROR, "Argument Parsing: Unknown cache type '%s' in the -ignore-filter-for option.", name);
+							log_error("Argument Parsing: Unknown cache type '%s' in the -ignore-filter-for option.", name);
 						}
 					}
 					else
 					{
-						log_print(LOG_INFO, "Argument Parsing: Ignoring filter for the cache type '%s'.", name);
+						log_info("Argument Parsing: Ignoring filter for the cache type '%s'.", name);
 						exporter->should_ignore_filter_for_cache_type[type] = true;
 					}
 				}
@@ -262,7 +293,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			{
 				success = false;
 				console_print("The -explore-files option requires a non-empty path.");
-				log_print(LOG_ERROR, "Argument Parsing: The -explore-files option was given a non-empty path.");
+				log_error("Argument Parsing: The -explore-files option was given a non-empty path.");
 			}
 
 			if(i+2 < num_arguments && !string_is_empty(arguments[i+2]))
@@ -301,7 +332,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			seen_export_option = true;
 			break;
 		}
-		else if(string_starts_with(option, T("-e")))
+		else if(string_begins_with(option, T("-e")))
 		{
 			if(IS_OPTION("-export-internet-explorer", "-eie"))
 			{
@@ -330,7 +361,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			else
 			{
 				console_print("Unknown export option '%s'.", option);
-				log_print(LOG_ERROR, "Argument Parsing: Unknown export option '%s'.", option);
+				log_error("Argument Parsing: Unknown export option '%s'.", option);
 				exporter->command_line_cache_type = CACHE_UNKNOWN;
 				success = false;
 			}
@@ -358,7 +389,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		else
 		{
 			console_print("Unknown command line option '%s'.", option);
-			log_print(LOG_ERROR, "Argument Parsing: Unknown command line option '%s'", option);
+			log_error("Argument Parsing: Unknown command line option '%s'", option);
 			success = false;
 			break;
 		}
@@ -369,41 +400,53 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 	if(!seen_export_option)
 	{
 		console_print("Missing the export option.");
-		log_print(LOG_ERROR, "Argument Parsing: The main -export option was not found.");
+		log_error("Argument Parsing: The main -export option was not found.");
 		success = false;
 	}
 
-	if(!exporter->should_copy_files && !exporter->should_create_csv)
+	if(!exporter->should_copy_files && !exporter->should_create_csvs)
 	{
-		console_print("The options -csv-only and -files-only can't be used at the same time.");
-		log_print(LOG_ERROR, "Argument Parsing: The options '-csv-only' and '-files-only' were used at the same time.");
+		console_print("The options -csvs-only and -files-only can't be used at the same time.");
+		log_error("Argument Parsing: The options '-csvs-only' and '-files-only' were used at the same time.");
 		success = false;
 	}
 
 	// These empty string checks may seem overkill but remember that an empty path is used to specify the default
 	// locations for the export command line options. This means that we want to warn the user about this behavior.
 
+	_ASSERT( 	(exporter->should_load_external_locations && exporter->command_line_cache_type == CACHE_ALL)
+			||  (!exporter->should_load_external_locations && exporter->command_line_cache_type != CACHE_ALL) );
+
 	if(exporter->should_load_external_locations)
 	{
 		if(string_is_empty(exporter->external_locations_file_path))
 		{
 			console_print("The second argument in the -find-and-export-all option requires a non-empty path.");
-			log_print(LOG_ERROR, "Argument Parsing: The -find-and-export-all option was used with the external locations argument but the supplied path was empty.");
+			log_error("Argument Parsing: The -find-and-export-all option was used with the external locations argument but the supplied path was empty.");
 			success = false;
 		}
 		else if(!does_file_exist(exporter->external_locations_file_path))
 		{
 			console_print("The external locations file in the -find-and-export-all option doesn't exist.");
-			log_print(LOG_ERROR, "Argument Parsing: The -find-and-export-all option supplied an external locations file path that doesn't exist: '%s'.", exporter->external_locations_file_path);
+			log_error("Argument Parsing: The -find-and-export-all option supplied an external locations file path that doesn't exist: '%s'.", exporter->external_locations_file_path);
 			success = false;
 		}
 	}
 
-	if(exporter->should_use_ie_hint && string_is_empty(exporter->ie_hint_path))
+	if(exporter->should_use_ie_hint)
 	{
-		console_print("The -hint-ie option requires a non-empty path as its argument.");
-		log_print(LOG_ERROR, "Argument Parsing: The -hint-ie option was used but the supplied path was empty.");
-		success = false;
+		if(exporter->command_line_cache_type != CACHE_INTERNET_EXPLORER)
+		{
+			console_print("The -hint-ie option can only be used when exporting the Internet Explorer cache.");
+			log_error("Argument Parsing: The -hint-ie option was used with the unsupported cache type %d.", exporter->command_line_cache_type);
+			success = false;
+		}
+		else if(string_is_empty(exporter->ie_hint_path))
+		{
+			console_print("The -hint-ie option requires a non-empty path as its argument.");
+			log_error("Argument Parsing: The -hint-ie option was used but the supplied path was empty.");
+			success = false;
+		}
 	}
 
 	return success;
@@ -425,7 +468,8 @@ static size_t get_temporary_exporter_memory_size_for_os_version(Exporter* export
 	// Windows 98 (4.10)
 	if(os_version.dwMajorVersion <= 4 && os_version.dwMinorVersion <= 10)
 	{
-		size_for_os_version = kilobytes_to_bytes(512); // x1 for char
+		size_for_os_version = kilobytes_to_bytes(512 + 256); // x1 for char
+		
 	}
 	// Windows 2000 (5.0) and ME (4.90)
 	else if( 	(os_version.dwMajorVersion <= 5 && os_version.dwMinorVersion <= 0)
@@ -451,11 +495,11 @@ static size_t get_temporary_exporter_memory_size_for_os_version(Exporter* export
 	else
 	{
 		size_for_os_version = megabytes_to_bytes(4); // x1 or x2 for TCHAR
-		log_print(LOG_WARNING, "Get Startup Memory Size: Using %Iu bytes for the unhandled Windows version %lu.%lu.",
+		log_warning("Get Temporary Exporter Memory Size For Os Version: Using %Iu bytes for the unhandled Windows version %lu.%lu.",
 								size_for_os_version, os_version.dwMajorVersion, os_version.dwMinorVersion);
 	}
 
-	return size_for_os_version * sizeof(TCHAR);
+	return size_for_os_version * sizeof(TCHAR);;
 }
 
 // Performs any clean up operations before this application terminates. This includes deleting the exporter's temporary directory,
@@ -472,7 +516,7 @@ static void clean_up_exporter(Exporter* exporter)
 		if(!delete_directory_and_contents(exporter->exporter_temporary_path))
 		{
 			console_print("Warning: Failed to delete the temporary exporter directory located in '%s'.\nYou may want to delete this directory yourself.", exporter->exporter_temporary_path);
-			log_print(LOG_ERROR, "Clean Up: Failed to delete the temporary exporter directory in '%s'.", exporter->exporter_temporary_path);
+			log_error("Clean Up: Failed to delete the temporary exporter directory in '%s'.", exporter->exporter_temporary_path);
 		}
 	}
 
@@ -495,10 +539,10 @@ static void clean_up_exporter(Exporter* exporter)
 /*
 	The Web Cache Exporter's entry point. Order of operations:
 	
-	>>>> 1. Create the log file.
-	>>>> 2. Find the current Windows version, Internet Explorer version, and ANSI code page.
-	>>>> 3. Create the temporary memory arena based on the current Windows version. On error, terminate.
-	>>>> 4. Check if any command line options were passed. If not, terminate.
+	>>>> 1. Check if any command line options were passed. If not, terminate.
+	>>>> 2. Create the log file.
+	>>>> 3. Find the current Windows version, Internet Explorer version, and ANSI code page.
+	>>>> 4. Create the temporary memory arena based on the current Windows version. On error, terminate.
 	>>>> 5. Parse the command line options. If an option is incorrect, terminate.
 	>>>> 6. Find the current executable's directory path.
 	>>>> 7. Find how much memory is roughly required to store the information in the group and external
@@ -518,19 +562,65 @@ static size_t get_total_external_locations_size(Exporter* exporter, int* result_
 static void load_external_locations(Exporter* exporter, int num_profiles);
 static void export_all_default_or_specific_cache_locations(Exporter* exporter);
 
-int _tmain(int argc, TCHAR* argv[])
-{
-	console_print("Web Cache Exporter v%hs", EXPORTER_BUILD_VERSION);
+// Used to control if the logging and console print functions should be called when using the log_print()
+// and console_print() macros.
+bool GLOBAL_LOG_ENABLED = true;
+bool GLOBAL_CONSOLE_ENABLED = true;
 
+int _tmain(int num_arguments, TCHAR* arguments[])
+{
 	Exporter exporter = {};
 
-	if(!create_log_file(LOG_FILE_NAME))
+	if(num_arguments <= 1)
 	{
-		console_print("Error: Failed to create the log file.");
+		console_print("%hs", COMMAND_LINE_HELP_MESSAGE);
+		return 1;
 	}
 
-	log_print(LOG_INFO, "Startup: Running the Web Cache Exporter %hs version %hs in %hs mode.",
-							EXPORTER_BUILD_TARGET, EXPORTER_BUILD_VERSION, EXPORTER_BUILD_MODE);
+	#define IS_OPTION(long_option, short_option) (strings_are_equal(option, T(long_option)) || strings_are_equal(option, T(short_option)))
+
+	// Skip the first argument which contains the executable's name.
+	for(int i = 1; i < num_arguments; ++i)
+	{
+		TCHAR* option = arguments[i];
+
+		if(IS_OPTION("-version", "-v"))
+		{
+			GLOBAL_CONSOLE_ENABLED = true;
+			console_print("Web Cache Exporter version %hs compiled with Visual Studio %d in %hs mode for %hs.", EXPORTER_BUILD_VERSION, _MSC_VER, EXPORTER_BUILD_MODE, EXPORTER_BUILD_TARGET);
+			return 0;
+		}
+		else if(IS_OPTION("-no-log", "-nl"))
+		{
+			GLOBAL_LOG_ENABLED = false;
+		}
+		else if(IS_OPTION("-quiet", "-q"))
+		{
+			GLOBAL_CONSOLE_ENABLED = false;
+		}
+		// Don't check for these arguments past the main export options. This is a little silly since we're repeating
+		// these options here and in parse_exporter_arguments(), but it works for now.
+		else if(IS_OPTION("-explore-files", "-ef")
+				|| IS_OPTION("-find-and-export-all", "-faea")
+				|| string_begins_with(option, T("-export"))
+				|| (string_begins_with(option, T("-e")) && string_length(option) <= 4))
+		{
+			break;
+		}
+	}
+
+	#undef IS_OPTION
+
+	console_print("Web Cache Exporter v%hs", EXPORTER_BUILD_VERSION);
+
+	#if defined(BUILD_DEBUG) && defined(EXPORT_EMPTY_FILES)
+		console_print("Debug: Exporting empty files!");
+	#endif
+
+	create_log_file(LOG_FILE_NAME);
+
+	log_info("Startup: Running the Web Cache Exporter version %hs compiled with Visual Studio %d in %hs mode for %hs.",
+			 EXPORTER_BUILD_VERSION, _MSC_VER, EXPORTER_BUILD_MODE, EXPORTER_BUILD_TARGET);
 
 	exporter.os_version.dwOSVersionInfoSize = sizeof(exporter.os_version);
 
@@ -542,14 +632,14 @@ int _tmain(int argc, TCHAR* argv[])
 	if(GetVersionEx(&exporter.os_version))
 	#pragma warning(pop)
 	{
-		log_print(LOG_INFO, "Startup: Running Windows version %lu.%lu '%s' build %lu in platform %lu.",
+		log_info("Startup: Running Windows version %lu.%lu '%s' build %lu in platform %lu.",
 								exporter.os_version.dwMajorVersion, exporter.os_version.dwMinorVersion,
 								exporter.os_version.szCSDVersion, exporter.os_version.dwBuildNumber,
 								exporter.os_version.dwPlatformId);
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the current Windows version with the error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the current Windows version with the error code %lu.", GetLastError());
 		exporter.os_version.dwMajorVersion = ULONG_MAX;
 		exporter.os_version.dwMinorVersion = ULONG_MAX;
 	}
@@ -559,42 +649,29 @@ int _tmain(int argc, TCHAR* argv[])
 		TCHAR ie_version[NUM_IE_VERSION_CHARS] = T("");
 		if(find_internet_explorer_version(ie_version, sizeof(ie_version)))
 		{
-			log_print(LOG_INFO, "Startup: Running Internet Explorer version %s.", ie_version);
-		}
-		else
-		{
-			log_print(LOG_ERROR, "Startup: Failed to get Internet Explorer's version with the error code %lu.", GetLastError());
+			log_info("Startup: Running Internet Explorer version %s.", ie_version);
 		}
 		
 		CPINFOEX code_page_info = {};
 		if(GetCPInfoEx(CP_ACP, 0, &code_page_info) == TRUE)
 		{
-			log_print(LOG_INFO, "Startup: The current Windows ANSI code page is '%s' (%u).", code_page_info.CodePageName, code_page_info.CodePage);
+			log_info("Startup: The current Windows ANSI code page is '%s' (%u).", code_page_info.CodePageName, code_page_info.CodePage);
 		}
 		else
 		{
-			log_print(LOG_INFO, "Startup: The current Windows ANSI code page identifier is %u.", GetACP());
+			log_info("Startup: The current Windows ANSI code page identifier is %u.", GetACP());
 		}
-	}
-
-	if(argc <= 1)
-	{
-		console_print("%hs", COMMAND_LINE_HELP_MESSAGE);
-
-		log_print(LOG_ERROR, "No command line arguments supplied. The program will print a help message and terminate.");
-		clean_up_exporter(&exporter);
-		return 1;
 	}
 
 	Arena* temporary_arena = &(exporter.temporary_arena);
 	{
 		size_t temporary_memory_size = get_temporary_exporter_memory_size_for_os_version(&exporter);
-		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
+		log_info("Startup: Allocating %Iu bytes for the temporary memory arena.", temporary_memory_size);
 
 		if(!create_arena(temporary_arena, temporary_memory_size))
 		{
 			console_print("Could not allocate enough temporary memory to run the program.");
-			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
+			log_error("Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
 			clean_up_exporter(&exporter);
 			return 1;
 		}
@@ -604,22 +681,22 @@ int _tmain(int argc, TCHAR* argv[])
 
 			// Create a smaller, secondary memory arena for Windows 98 and ME. This will be used when loading group files.
 			temporary_memory_size /= 10;
-			log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the secondary temporary memory arena.", temporary_memory_size);
+			log_info("Startup: Allocating %Iu bytes for the secondary temporary memory arena.", temporary_memory_size);
 
 			if(!create_arena(secondary_temporary_arena, temporary_memory_size))
 			{
 				console_print("Could not allocate enough temporary memory to run the program.");
-				log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
+				log_error("Startup: Could not allocate %Iu bytes to run the program.", temporary_memory_size);
 				clean_up_exporter(&exporter);
 				return 1;
 			}
 		#endif
 	}
 
-	log_print(LOG_INFO, "Startup: Parsing command line arguments.");
-	if(!parse_exporter_arguments(argc, argv, &exporter))
+	log_info("Startup: Parsing command line arguments.");
+	if(!parse_exporter_arguments(num_arguments, arguments, &exporter))
 	{
-		log_print(LOG_ERROR, "Startup: An error occured while parsing the command line arguments. The program will terminate.");
+		log_error("Startup: An error occured while parsing the command line arguments. The program will terminate.");
 		clean_up_exporter(&exporter);
 		return 1;
 	}
@@ -636,7 +713,7 @@ int _tmain(int argc, TCHAR* argv[])
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
+			log_error("Startup: Failed to get the executable directory path with error code %lu.", GetLastError());
 		}
 
 		PathCombine(exporter.group_files_path, exporter.executable_path, T("Groups"));
@@ -650,26 +727,26 @@ int _tmain(int argc, TCHAR* argv[])
 			permanent_memory_size += get_total_external_locations_size(&exporter, &num_profiles);
 		}
 
-		log_print(LOG_INFO, "Startup: Allocating %Iu bytes for the permanent memory arena.", permanent_memory_size);
+		log_info("Startup: Allocating %Iu bytes for the permanent memory arena.", permanent_memory_size);
 
 		if(!create_arena(permanent_arena, permanent_memory_size))
 		{
 			console_print("Could not allocate enough permanent memory to run the program.");
-			log_print(LOG_ERROR, "Startup: Could not allocate %Iu bytes to run the program.", permanent_memory_size);
+			log_error("Startup: Could not allocate %Iu bytes to run the program.", permanent_memory_size);
 			clean_up_exporter(&exporter);
 			return 1;
 		}
 
-		log_print(LOG_INFO, "Startup: Loading %d groups.", num_groups);
+		log_info("Startup: Loading %d groups.", num_groups);
 		load_all_group_files(&exporter, num_groups);
 
 		if(exporter.should_load_external_locations)
 		{
-			log_print(LOG_INFO, "Startup: Loading %d profiles from the external locations file '%s'.", num_profiles, exporter.external_locations_file_path);
+			log_info("Startup: Loading %d profiles from the external locations file '%s'.", num_profiles, exporter.external_locations_file_path);
 			load_external_locations(&exporter, num_profiles);			
 		}
 
-		log_print(LOG_INFO, "Startup: The permanent memory arena is at %.2f%% used capacity before being locked.", get_used_arena_capacity(permanent_arena));
+		log_info("Startup: The permanent memory arena is at %.2f%% used capacity before being locked.", get_used_arena_capacity(permanent_arena));
 
 		// This memory lasts throughout the program's lifetime.
 		lock_arena(permanent_arena);
@@ -680,7 +757,7 @@ int _tmain(int argc, TCHAR* argv[])
 	#ifndef BUILD_9X
 		if( (exporter.command_line_cache_type == CACHE_INTERNET_EXPLORER) || (exporter.command_line_cache_type == CACHE_ALL) )
 		{
-			log_print(LOG_INFO, "Startup: Dynamically loading any necessary functions.");
+			log_info("Startup: Dynamically loading any necessary functions.");
 			load_kernel32_functions();
 			load_ntdll_functions();
 			load_esent_functions();
@@ -689,41 +766,37 @@ int _tmain(int argc, TCHAR* argv[])
 
 	if(GetVolumeInformation(NULL, exporter.drive_path, MAX_PATH_CHARS, NULL, NULL, NULL, NULL, 0) == FALSE)
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the Windows drive path with error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the Windows drive path with error code %lu.", GetLastError());
 	}
 
 	if(GetWindowsDirectory(exporter.windows_path, MAX_PATH_CHARS) == 0)
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the Windows directory path with error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the Windows directory path with error code %lu.", GetLastError());
 	}
 
 	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0)
 	{
-		delete_all_temporary_exporter_directories(&exporter);
+		if(exporter.should_delete_previous_temporary_directories) delete_all_temporary_exporter_directories(&exporter);
 
 		if(create_temporary_directory(exporter.windows_temporary_path, exporter.exporter_temporary_path))
 		{
 			exporter.was_temporary_exporter_directory_created = true;
-			log_print(LOG_INFO, "Startup: Created the temporary exporter directory in '%s'.", exporter.exporter_temporary_path);
-		}
-		else
-		{
-			log_print(LOG_ERROR, "Startup: Failed to create the temporary exporter directory with error code %lu.", GetLastError());
+			log_info("Startup: Created the temporary exporter directory in '%s'.", exporter.exporter_temporary_path);
 		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the Temporary Files directory path with error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the Temporary Files directory path with error code %lu.", GetLastError());
 	}
 
 	if(!get_special_folder_path(CSIDL_PROFILE, exporter.user_profile_path))
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the user profile directory path with error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the user profile directory path with error code %lu.", GetLastError());
 	}
 
 	if(!get_special_folder_path(CSIDL_APPDATA, exporter.appdata_path))
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the roaming application data directory path with error code %lu.", GetLastError());
 	}
 
 	if(get_special_folder_path(CSIDL_LOCAL_APPDATA, exporter.local_appdata_path))
@@ -739,17 +812,17 @@ int _tmain(int argc, TCHAR* argv[])
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the local application data directory path with error code %lu.", GetLastError());
 	}
 
 	if(!get_special_folder_path(CSIDL_INTERNET_CACHE, exporter.wininet_cache_path))
 	{
-		log_print(LOG_ERROR, "Startup: Failed to get the Temporary Internet Files cache directory path with the error code %lu.", GetLastError());
+		log_error("Startup: Failed to get the Temporary Internet Files cache directory path with the error code %lu.", GetLastError());
 	}
 
 	if(exporter.is_exporting_from_default_locations && (exporter.command_line_cache_type != CACHE_ALL))
 	{
-		log_print(LOG_INFO, "Startup: No cache path specified. Exporting the cache from any existing default directories.");
+		log_info("Startup: No cache path specified. Exporting the cache from any existing default directories.");
 	}
 
 	if(exporter.should_overwrite_previous_output)
@@ -760,48 +833,58 @@ int _tmain(int argc, TCHAR* argv[])
 		if(delete_directory_and_contents(exporter.output_path))
 		{
 			console_print("Deleted the previous output directory successfully.");
-			log_print(LOG_INFO, "Startup: Deleted the previous output directory successfully.");
+			log_info("Startup: Deleted the previous output directory successfully.");
 		}
-		else
+		// We'll do this little check since the error codes from SHFileOperation() (used by the deletion
+		// function above) are pre-Win32 and may be subject to change.
+		else if(does_directory_exist(exporter.output_path))
 		{	
 			console_print("Warning: Could not delete the previous output directory.");
-			log_print(LOG_ERROR, "Startup: Failed to delete the previous output directory '%s'.", directory_name);
+			log_error("Startup: Failed to delete the previous output directory '%s'.", directory_name);
 		}
 	}
 
-	log_print(LOG_INFO, "Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(temporary_arena));
+	log_info("Startup: The temporary memory arena is at %.2f%% used capacity before exporting files.", get_used_arena_capacity(temporary_arena));
 	
-	log_print_newline();
+	#define YN(member_name) ( (exporter.member_name) ? ("Yes") : ("No") )
+
+	log_newline();
 
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_INFO, "Exporter Options:");
+	log_info("Exporter Options:");
 	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_FULL_NAME[exporter.command_line_cache_type]);
-	log_print(LOG_NONE, "- Should Copy Files: %hs", (exporter.should_copy_files) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Should Create CSV: %hs", (exporter.should_create_csv) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", (exporter.should_overwrite_previous_output) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Should Show Full Paths: %hs", (exporter.should_show_full_paths) ? ("Yes") : ("No"));
-	log_print(LOG_NONE, "- Should Filter By Groups: %hs", (exporter.should_filter_by_groups) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Copy Files: %hs", YN(should_copy_files));
+	log_print(LOG_NONE, "- Should Create CSV: %hs", YN(should_create_csvs));
+	log_print(LOG_NONE, "- Should Overwrite Previous Output: %hs", YN(should_overwrite_previous_output));
+	log_print(LOG_NONE, "- Should Show Full Paths: %hs", YN(should_show_full_paths));
+	log_print(LOG_NONE, "- Should Group By Request Origin: %hs", YN(should_group_by_request_origin));
+	log_print(LOG_NONE, "- Should Decommpress Files: %hs", YN(should_decompress_files));
+	log_print(LOG_NONE, "- Should Delete Previous Temporary Directories: %hs", YN(should_delete_previous_temporary_directories));
+	log_print(LOG_NONE, "------------------------------------------------------------");
+	log_print(LOG_NONE, "- Should Filter By Groups: %hs", YN(should_filter_by_groups));
 	log_print(LOG_NONE, "- Number Of Group Files Enabled For Filtering: %d", (exporter.group_files_for_filtering != NULL) ? (exporter.group_files_for_filtering->num_strings) : (-1));
-	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", (exporter.should_use_ie_hint) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "------------------------------------------------------------");
+	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %hs", YN(should_use_ie_hint));
 	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_NONE, "- Should Load External Locations: %hs", (exporter.should_load_external_locations) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Should Load External Locations: %hs", YN(should_load_external_locations));
 	log_print(LOG_NONE, "- External Locations Path: '%s'", exporter.external_locations_file_path);
 	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
 	log_print(LOG_NONE, "- Output Path: '%s'", exporter.output_path);
-	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", (exporter.is_exporting_from_default_locations) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Is Exporting From Default Locations: %hs", YN(is_exporting_from_default_locations));
 	
-	log_print_newline();
+	log_newline();
 
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_INFO, "Current Locations:");
+	log_info("Current Locations:");
 	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Executable Path: '%s'", exporter.executable_path);
 	log_print(LOG_NONE, "- Exporter Temporary Path: '%s'", exporter.exporter_temporary_path);
-	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", (exporter.was_temporary_exporter_directory_created) ? ("Yes") : ("No"));
+	log_print(LOG_NONE, "- Was Temporary Directory Created: %hs", YN(was_temporary_exporter_directory_created));
 	log_print(LOG_NONE, "------------------------------------------------------------");
+	log_print(LOG_NONE, "- Drive Path: '%s'", exporter.drive_path);
 	log_print(LOG_NONE, "- Windows Directory Path: '%s'", exporter.windows_path);
 	log_print(LOG_NONE, "- Windows Temporary Path: '%s'", exporter.windows_temporary_path);
 	log_print(LOG_NONE, "- User Profile Path: '%s'", exporter.user_profile_path);
@@ -810,7 +893,9 @@ int _tmain(int argc, TCHAR* argv[])
 	log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", exporter.local_low_appdata_path);
 	log_print(LOG_NONE, "- WinINet Cache Path: '%s'", exporter.wininet_cache_path);
 
-	log_print_newline();
+	log_newline();
+
+	#undef YN
 
 	// The temporary arena should be cleared before any cache exporter runs. Any data that needs to stick around should be stored in the permanent arena.
 	_ASSERT(permanent_arena->num_locks == 1);
@@ -871,14 +956,14 @@ int _tmain(int argc, TCHAR* argv[])
 
 		default:
 		{
-			log_print(LOG_ERROR, "Startup: Attempted to export the cache from '%s' using the unhandled cache type %d.", exporter.cache_path, exporter.command_line_cache_type);
+			log_error("Startup: Attempted to export the cache from '%s' using the unhandled cache type %d.", exporter.cache_path, exporter.command_line_cache_type);
 			_ASSERT(false);
 		} break;
 	}
 
 	console_print("Finished running:\n- Created %d CSV files.\n- Processed %d cached files.\n- Copied %d cached files.\n- Assigned %d filenames.", exporter.total_csv_files_created, exporter.total_processed_files, exporter.total_copied_files, exporter.total_assigned_filenames);
-	log_print_newline();
-	log_print(LOG_INFO, "Finished Running: Created %d CSV files. Processed %d cache entries. Copied %d cached files. Assigned %d filenames.", exporter.total_csv_files_created, exporter.total_processed_files, exporter.total_copied_files, exporter.total_assigned_filenames);
+	log_newline();
+	log_info("Finished Running: Created %d CSV files. Processed %d cache entries. Copied %d cached files. Assigned %d filenames.", exporter.total_csv_files_created, exporter.total_processed_files, exporter.total_copied_files, exporter.total_assigned_filenames);
 	
 	clean_up_exporter(&exporter);
 
@@ -894,7 +979,7 @@ int _tmain(int argc, TCHAR* argv[])
 */
 
 // Initializes a cache exporter by performing the following:
-// - Determining the fully qualified version of the cache path.
+// - Determining the absolute version of the cache path.
 // - Resolving the exporter's output paths for copying cache entries and creating CSV files.
 // - Creating a CSV file with a given header.
 //
@@ -908,11 +993,12 @@ int _tmain(int argc, TCHAR* argv[])
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns)
+void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, int num_columns)
 {
 	_ASSERT(count_path_components(cache_identifier) == 1);
 
 	exporter->csv_file_handle = INVALID_HANDLE_VALUE;
+	exporter->exported_at_least_one_file = false;
 	exporter->index_path[0] = T('\0');
 	exporter->browser_name = NULL;
 	exporter->browser_profile = NULL;
@@ -925,8 +1011,6 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 	exporter->csv_column_types = column_types;
 	exporter->num_csv_columns = num_columns;
 
-	Arena* temporary_arena = &(exporter->temporary_arena);
-
 	get_full_path_name(exporter->cache_path);
 	get_full_path_name(exporter->output_path);
 	
@@ -936,50 +1020,35 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 	StringCchCopy(exporter->output_csv_path, MAX_PATH_CHARS, exporter->output_copy_path);
 	StringCchCat(exporter->output_csv_path, MAX_PATH_CHARS, T(".csv"));
 
-	if(exporter->should_create_csv)
+	Arena* temporary_arena = &(exporter->temporary_arena);
+
+	if(exporter->should_create_csvs)
 	{
 		_ASSERT(exporter->csv_file_handle == INVALID_HANDLE_VALUE);
 
-		bool create_csv_success = false;
-		u32 num_retry_attempts = 0;
-		const u32 MAX_RETRY_ATTEMPTS = 10;
-
-		do
+		const int MAX_RETRY_ATTEMPTS = 10;
+		for(int i = 0; i < MAX_RETRY_ATTEMPTS; ++i)
 		{
-			create_csv_success = create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle));
-
-			if(create_csv_success)
+			if(create_csv_file(exporter->output_csv_path, &(exporter->csv_file_handle)))
 			{
-				++(exporter->total_csv_files_created);
-				csv_print_header(temporary_arena, exporter->csv_file_handle, column_types, num_columns);
-				clear_arena(temporary_arena);
+				break;
 			}
 			else
 			{
 				const u32 SLEEP_TIME_IN_SECONDS = 3;
 				const u32 SLEEP_TIME_IN_MILLISECONDS = SLEEP_TIME_IN_SECONDS * 1000;
-
-				++num_retry_attempts;
-				log_print(LOG_ERROR, "Initialize Cache Exporter: Failed to create the CSV file '%s' with the error code %lu. Waiting %I32u seconds and retrying this operation (attempt %I32u of %I32u).", exporter->output_csv_path, GetLastError(), SLEEP_TIME_IN_SECONDS, num_retry_attempts, MAX_RETRY_ATTEMPTS);
-
+				log_warning("Initialize Cache Exporter: Could not create the CSV file. Waiting %I32u seconds and retrying this operation (attempt %d of %d).", SLEEP_TIME_IN_SECONDS, i+1, MAX_RETRY_ATTEMPTS);
 				Sleep(SLEEP_TIME_IN_MILLISECONDS);
-			}
-
-		} while(!create_csv_success && num_retry_attempts < MAX_RETRY_ATTEMPTS);
-
-		if(num_retry_attempts > 0)
-		{
-			if(create_csv_success)
-			{
-				log_print(LOG_WARNING, "Initialize Cache Exporter: Reached %I32u retry attempts before creating the CSV file '%s'.", num_retry_attempts, exporter->output_csv_path);
-			}
-			else
-			{
-				log_print(LOG_ERROR, "Initialize Cache Exporter: Failed to create the CSV file '%s' after %I32u retry attempts.", exporter->output_csv_path, num_retry_attempts);
 			}
 		}
 
+		if(exporter->csv_file_handle == INVALID_HANDLE_VALUE)
+		{
+			log_error("Initialize Cache Exporter: Failed to create the CSV file '%s' after %d retry attempts.", exporter->output_csv_path, MAX_RETRY_ATTEMPTS);
+		}
 	}
+
+	clear_arena(temporary_arena);
 }
 
 // Builds a cache exporter's output path for copying files and adds a given subdirectory's name to the end.
@@ -1026,12 +1095,13 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 {
 	++(exporter->num_assigned_filenames);
 	++(exporter->total_assigned_filenames);
-	StringCchPrintf(result_filename, MAX_PATH_CHARS, T("~WCE-%d"), exporter->num_assigned_filenames);
+	StringCchPrintf(result_filename, MAX_PATH_CHARS, T("~WCE%d"), exporter->num_assigned_filenames);
 }
 
 // Adds a formatted string to the current exporter's warning message. Successive messages are separated by spaces.
 //
 // Use the add_exporter_warning_message() macro to perform this operation without having to wrap the format string with T().
+// This function and macro must be called after initialize_cache_exporter() and before terminate_cache_exporter().
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the current warning message.
@@ -1056,16 +1126,160 @@ void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_
 	StringCchCat(exporter->warning_message, MAX_EXPORTER_WARNING_CHARS, message_buffer);
 }
 
-// Copies an existing file to a new location while taking into account a few quirks, such as copying a temporary file that's being
-// used by the exporter process.
+// Decompresses a cached file to the exporter's temporary directory according to the Content-Encoding HTTP header.
+// Note that this header may contain a list of multiple encodings in the order that they were applied (e.g. "deflate, gzip").
 //
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the current cache exporter's parameters.
-// 2. source_path - The fully qualified path to the source file to copy.
-// 3. destination_path - The fully qualified path to the destination file to create.
+// 2. source_file_path - The path to the file to decompress.
+// 3. content_encoding - The value of the Content-Encoding HTTP header that specifies how the file was compressed.
+// 4. result_decompressed_file_path - The path to the newly created decompressed file.
+// 5. result_decompressed_file_handle - The handle to the newly created decompressed file.
+// 6. result_decompressed_file_size - The size of the newly created decompressed file.
+// 
+// @Returns: True if the file was decompressed successfully. Otherwise, false. Not being able to decompress a file
+// isn't always an important error since some files are either: 1) empty; 2) not compressed despite having the
+// Content-Encoding header set; 3) contain an unsupported or invalid value in the Content-Encoding header.
+static bool decompress_exporter_file(Exporter* exporter, const TCHAR* source_file_path, const TCHAR* content_encoding,
+									 TCHAR* result_decompressed_file_path, HANDLE* result_decompressed_file_handle,
+									 u64* result_decompressed_file_size)
+{
+	u64 file_size = 0;
+	if(get_file_size(source_file_path, &file_size) && file_size == 0) return false;
+
+	TCHAR current_file_path[MAX_PATH_CHARS] = T("");
+	HANDLE current_file_handle = INVALID_HANDLE_VALUE;
+	
+	if(!create_temporary_exporter_file(exporter, current_file_path, &current_file_handle))
+	{
+		log_error("Decompress Exporter File: Failed to create the temporary file to decompress the file '%s' with the content encoding '%s'.", source_file_path, content_encoding);
+		return false;
+	}
+
+	bool success = true;
+
+	Arena* temporary_arena = &(exporter->temporary_arena);
+	String_Array<TCHAR>* split_encodings = split_string(temporary_arena, content_encoding, T(", \t"));
+
+	TCHAR previous_file_path[MAX_PATH_CHARS] = T("");
+	StringCchCopy(previous_file_path, MAX_PATH_CHARS, source_file_path);
+	HANDLE previous_file_handle = INVALID_HANDLE_VALUE;
+
+	// The Content-Encoding HTTP header contains a list of comma-separated encodings in the order they were applied. As such, we'll iterate
+	// over each one backwards and attempt to decompress them one by one. If we can't decompress a supported format or find an invalid one,
+	// then the entire operation stops and the decompression fails.
+	//
+	// This tool only supports the main encodings listed here: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
+	// To avoid any confusion, here's a brief description of each one:
+	//
+	// 1. identity - no compression.
+	// 2. gzip - Gzip file format (RFC 1952) that uses the DEFLATE compression method. Alias: x-gzip.
+	//
+	// 3. deflate - Zlib data format (RFC 1950) that uses the DEFLATE compression method. Despite the name, this is not supposed to be a raw
+	// DEFLATE stream (RFC 1951). Although HTTP 1.1 defines this encoding as the Zlib format, some servers (e.g. Microsoft) transmitted raw
+	// DEFLATE data. As such, we'll try to decompress the data using both approaches when we see the "deflate" encoding.
+	// See: https://zlib.net/zlib_faq.html#faq39
+	//
+	// 4. br - Brotli data format (RFC 7932).
+	// 5. compress - data compressed using the LZW algorithm. Although uncommon nowdays, this method should be handled since we support cache
+	// formats from older browsers. Alias: x-compress.
+	//
+	// See also:
+	// - "Hypertext Transfer Protocol (HTTP) Parameters": https://www.iana.org/assignments/http-parameters/http-parameters.xml#http-parameters-1
+	// - "Hypertext Transfer Protocol -- HTTP/1.0": https://datatracker.ietf.org/doc/html/rfc1945#section-3.5
+	// - "Hypertext Transfer Protocol -- HTTP/1.1": https://datatracker.ietf.org/doc/html/rfc2616#section-3.5
+
+	for(int i = split_encodings->num_strings - 1; i >= 0; --i)
+	{
+		TCHAR* encoding = split_encodings->strings[i];
+
+		if(strings_are_equal(encoding, T("identity"), true))
+		{
+			continue;
+		}
+		else if(strings_are_equal(encoding, T("gzip"), true) || strings_are_equal(encoding, T("deflate"), true) || strings_are_equal(encoding, T("x-gzip"), true))
+		{
+			int error_code = 0;
+			success = decompress_gzip_zlib_deflate_file(temporary_arena, previous_file_path, current_file_handle, &error_code);
+			if(!success) add_exporter_warning_message(exporter, "Failed to decompress the file using Gzip/Zlib/DEFLATE with the error code %d.", error_code);
+			
+			*previous_file_path = T('\0');
+			safe_close_handle(&previous_file_handle);
+		}
+		else if(strings_are_equal(encoding, T("br"), true))
+		{
+			int error_code = 0;
+			success = decompress_brotli_file(temporary_arena, previous_file_path, current_file_handle, &error_code);
+			if(!success) add_exporter_warning_message(exporter, "Failed to decompress the file using Brotli with the error code %d.", error_code);
+			
+			*previous_file_path = T('\0');
+			safe_close_handle(&previous_file_handle);
+		}
+		/*else if(strings_are_equal(encoding, T("compress"), true) || strings_are_equal(encoding, T("x-compress"), true))
+		{
+			// @TODO
+			success = false;
+		}*/
+		else
+		{
+			add_exporter_warning_message(exporter, "Skipping decompression due to the unsupported content encoding '%s'.", encoding);
+			log_warning("Decompress Exporter File: Found unsupported encoding '%s' in '%s' while trying to decompress the file '%s'.", encoding, content_encoding, source_file_path);
+			success = false;
+		}
+
+		if(success)
+		{
+			_ASSERT(string_is_empty(previous_file_path) && previous_file_handle == INVALID_HANDLE_VALUE);
+
+			if(i > 0)
+			{
+				StringCchCopy(previous_file_path, MAX_PATH_CHARS, current_file_path);
+				previous_file_handle = current_file_handle;
+
+				if(!create_temporary_exporter_file(exporter, current_file_path, &current_file_handle))
+				{
+					TCHAR* next_encoding = split_encodings->strings[i-1];
+					add_exporter_warning_message(exporter, "Could not create a temporary file when switching from the content encoding '%s' to '%s'.", encoding, next_encoding);
+					log_error("Decompress Exporter File: Failed to create the temporary file to decompress the file '%s' when switching from the content encoding '%s' to '%s' in '%s'.", source_file_path, encoding, next_encoding, content_encoding);
+					success = false;
+					break;
+				}		
+			}
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	safe_close_handle(&previous_file_handle);
+
+	if(success)
+	{
+		StringCchCopy(result_decompressed_file_path, MAX_PATH_CHARS, current_file_path);
+		*result_decompressed_file_handle = current_file_handle;
+		success = get_file_size(current_file_handle, result_decompressed_file_size);
+	}
+	else
+	{
+		safe_close_handle(&current_file_handle);
+	}
+
+	return success;
+}
+
+// Copies an existing file to a new location while taking into account a few quirks, such as copying a temporary file that's being
+// used by the exporter process.
+//
+// @GetLastError
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the current cache exporter's parameters.
+// 2. source_file_path - The absolute path to the source file to copy.
+// 3. destination_file_path - The absolute path to the destination file to create.
 // 
 // @Returns: True if the file was copied successfully. Otherwise, false and the error code can be retrieved using GetLastError().
-static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, const TCHAR* destination_path)
+static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_file_path, const TCHAR* destination_file_path)
 {
 	// @Note: Any function used to copy the file here must set the last Windows error code properly so that we can perform the correct
 	// checks using GetLastError() in copy_exporter_file_using_url_directory_structure(). This applies to CopyFile(), create_empty_file(),
@@ -1073,20 +1287,20 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, con
 	bool copy_success = false;
 
 	#if defined(BUILD_DEBUG) && defined(EXPORT_EMPTY_FILES)
-		copy_success = create_empty_file(destination_path, false);
+		copy_success = create_empty_file(destination_file_path, false);
 	#else
-		copy_success = CopyFile(source_path, destination_path, TRUE) != FALSE;
+		copy_success = CopyFile(source_file_path, destination_file_path, TRUE) != FALSE;
 
 		// For older Windows versions when we're copying temporary files that are currently being used by the exporter's process.
 		if(!copy_success && GetLastError() == ERROR_SHARING_VIOLATION)
 		{
-			log_print(LOG_WARNING, "Copy Exporter File: Attempting to copy the file '%s' to '%s' chunk by chunk due to a sharing violation.", source_path, destination_path);
+			log_warning("Copy Exporter File: Attempting to copy the file '%s' to '%s' chunk by chunk due to a sharing violation.", source_file_path, destination_file_path);
 
 			u64 file_size = 0;
-			if(get_file_size(source_path, &file_size))
+			if(get_file_size(source_file_path, &file_size))
 			{
 				Arena* temporary_arena = &(exporter->temporary_arena);
-				copy_success = copy_file_chunks(temporary_arena, source_path, file_size, 0, destination_path, false);
+				copy_success = copy_file_chunks(temporary_arena, source_file_path, file_size, 0, destination_file_path, false);
 			}
 			else
 			{
@@ -1125,11 +1339,13 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_path, con
 // destination directory. Using the example above, this would be "C:\Path\file.ext". This limit may be exceed by either the URL structure
 // or the filename.
 //
+// @GetLastError
+//
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the current cache exporter's parameters and the values of command line options
 // that will influence how the file is copied.
 //
-// 2. full_source_path - The fully qualified path to the source file to copy.
+// 2. full_source_path - The absolute path to the source file to copy.
 // 3. url - The URL whose host and path components are converted into a Windows path. If this string is NULL, only the base directory
 // and filename will be used.
 // 4. filename - The filename to add to the end of the path.
@@ -1170,7 +1386,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 		bool build_target_success = convert_url_to_path(temporary_arena, url, url_path) && (PathAppend(full_destination_path, url_path) != FALSE);
 		if(!build_target_success)
 		{
-			log_print(LOG_WARNING, "Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
+			log_warning("Copy File Using Url Structure: The website directory structure for the file '%s' could not be created. This file will be copied to the base export directory instead.", filename);
 			StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
 		}
 	}
@@ -1187,7 +1403,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	}
 	else
 	{
-		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not create the directory structure for the file '%s': '%s'. This file will be copied to the base export directory instead.", filename, full_destination_path);
+		log_warning("Copy File Using Url Structure: Could not create the directory structure for the file '%s': '%s'. This file will be copied to the base export directory instead.", filename, full_destination_path);
 		StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
 	}
 
@@ -1207,12 +1423,12 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	bool build_target_success = PathAppend(full_destination_path, corrected_filename) != FALSE;
 	if(!build_target_success)
 	{
-		log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
+		log_warning("Copy File Using Url Structure: Could not add the filename '%s' to the website directory structure. This file will be copied to the base export directory instead.", filename);
 		
 		StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
 		if(PathAppend(full_destination_path, corrected_filename) == FALSE)
 		{
-			log_print(LOG_WARNING, "Copy File Using Url Structure: Could not add the filename '%s' to the base export directory. This file will be copied using a shorter name generated by the exporter.", filename);
+			log_warning("Copy File Using Url Structure: Could not add the filename '%s' to the base export directory. This file will be copied using a shorter name generated by the exporter.", filename);
 			
 			StringCchCopy(full_destination_path, MAX_PATH_CHARS, full_base_directory_path);
 
@@ -1221,7 +1437,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 
 			if(PathAppend(full_destination_path, corrected_filename) == FALSE)
 			{
-				log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
+				log_error("Copy File Using Url Structure: Failed to build any valid path for the file '%s'. This file will not be copied.", filename);
 				convert_u32_to_string(CUSTOM_ERROR_FAILED_TO_BUILD_VALID_DESTINATION_PATH, result_error_code);
 				return false;
 			}
@@ -1247,7 +1463,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 		++num_naming_collisions;
 		if(num_naming_collisions == 0)
 		{
-			log_print(LOG_ERROR, "Copy File Using Url Structure: Wrapped around the number of naming collisions for the file '%s'. This file will not be copied.", filename);
+			log_error("Copy File Using Url Structure: Wrapped around the number of naming collisions for the file '%s'. This file will not be copied.", filename);
 			SetLastError(CUSTOM_ERROR_TOO_MANY_NAMING_COLLISIONS);
 			break;
 		}
@@ -1265,7 +1481,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 
 		if(!naming_success)
 		{
-			log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to resolve the naming collision %I32u for the file '%s'. This file will not be copied.", num_naming_collisions, filename);
+			log_error("Copy File Using Url Structure: Failed to resolve the naming collision %I32u for the file '%s'. This file will not be copied.", num_naming_collisions, filename);
 			SetLastError(CUSTOM_ERROR_UNRESOLVED_NAMING_COLLISION);
 			break;
 		}
@@ -1296,7 +1512,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	else
 	{
 		DWORD copy_error_code = GetLastError();
-		log_print(LOG_ERROR, "Copy File Using Url Structure: Failed to copy '%s' to '%s' with the error code %lu.", filename, full_destination_path, copy_error_code);
+		log_error("Copy File Using Url Structure: Failed to copy '%s' to '%s' with the error code %lu.", filename, full_destination_path, copy_error_code);
 		convert_u32_to_string(copy_error_code, result_error_code);
 	}
 	
@@ -1321,7 +1537,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 // It's possible that this manipulation may fail (e.g. extracting the payload from a file), leading to a situation where we don't want to copy anything.
 //
 // - The 'url' may be NULL if the cached file has no URL information associated with it.
-// - The 'filename' may be NULL if 'url' or 'file_info' were set and contain a non-empty string. Otherwise, this function assigns the cached
+// - The 'filename' may be NULL if either 'url' or 'file_info' were set and contain a non-empty string. Otherwise, this function assigns the cached
 // file a unique name.
 //
 // - The 'short_location_on_cache' is always required.
@@ -1336,6 +1552,8 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 // @Returns: Nothing.
 void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params)
 {
+	exporter->exported_at_least_one_file = true;
+
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
 	TCHAR* entry_source_path = params->copy_source_path;
@@ -1359,8 +1577,6 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
  
 	if(IS_STRING_EMPTY(entry_filename) && entry_url != NULL)
 	{
-		_ASSERT(!string_is_empty(entry_url));
-
 		Url_Parts url_parts = {};
 		if(partition_url(temporary_arena, entry_url, &url_parts))
 		{
@@ -1382,23 +1598,49 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		entry_filename = short_filename;
 	}
 
+	_ASSERT(!IS_STRING_EMPTY(entry_source_path));
+	_ASSERT(entry_url == NULL || !string_is_empty(entry_url));
 	_ASSERT(!IS_STRING_EMPTY(entry_filename));
+	_ASSERT(!IS_STRING_EMPTY(location_on_cache));
 
-	bool file_exists = does_file_exist(entry_source_path);
+	// ------------------------------------------------------------
+
 	++(exporter->total_processed_files);
+
+	// The 'original_file_path' is the path to the original cached file on disk, while 'entry_source_path' points to
+	// whatever file we want to copy and use to determine the file groups. In most cases these are the same, though
+	// when a file is compressed we want to export the decompressed version instead.
+	bool file_exists = does_file_exist(entry_source_path);
+	TCHAR* original_file_path = entry_source_path;
+	
+	// Decompress the file according to its Content-Encoding HTTP header (if it exists).
+	TCHAR decompressed_file_path[MAX_PATH_CHARS] = T("");
+	HANDLE decompressed_file_handle = INVALID_HANDLE_VALUE;
+	TCHAR decompressed_file_size[MAX_INT64_CHARS] = T("");
+
+	if(exporter->should_decompress_files && file_exists && entry_headers.content_encoding != NULL)
+	{
+		u64 decompressed_file_size_value = 0;
+		if(decompress_exporter_file(exporter, entry_source_path, entry_headers.content_encoding,
+									decompressed_file_path, &decompressed_file_handle, &decompressed_file_size_value))
+		{
+			entry_source_path = decompressed_file_path;
+			convert_u64_to_string(decompressed_file_size_value, decompressed_file_size);
+		}
+	}
 
 	Matchable_Cache_Entry entry_to_match = {};
 	entry_to_match.full_file_path = entry_source_path;
 
-	ssize_t file_group_index = -1;
-	ssize_t url_group_index = -1;
+	int file_group_index = -1;
+	int url_group_index = -1;
 
 	TCHAR file_size[MAX_INT64_CHARS] = T("");
 	TCHAR creation_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	TCHAR last_write_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	
-	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
+	for(int i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
 		bool use_value_from_file_info = (value == NULL && entry_file_info != NULL);
@@ -1447,7 +1689,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 					}
 					else
 					{
-						get_file_size(entry_source_path, &file_size_value);
+						get_file_size(original_file_path, &file_size_value);
 					}
 
 					convert_u64_to_string(file_size_value, file_size);
@@ -1534,6 +1776,12 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 				if(value == NULL) value = entry_headers.content_encoding;
 			} break;
 
+			case(CSV_DECOMPRESSED_FILE_SIZE):
+			{
+				_ASSERT(value == NULL);
+				value = decompressed_file_size;
+			} break;
+
 			// @ExporterParams
 			case(CSV_LOCATION_ON_CACHE):
 			{
@@ -1545,7 +1793,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 			case(CSV_LOCATION_ON_DISK):
 			{
 				_ASSERT(value == NULL);
-				value = entry_source_path;
+				value = original_file_path;
 			} break;
 
 			// @ExporterParams
@@ -1618,7 +1866,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	entry_to_match.url_to_match = entry_url;
 
 	// Files can match groups even if they don't exist on disk.
-	bool matched_group = match_cache_entry_to_groups(temporary_arena, exporter->custom_groups, &entry_to_match);
+	bool matched_group = match_cache_entry_to_groups(exporter, &entry_to_match);
 	if(matched_group)
 	{
 		if(file_group_index != -1)
@@ -1664,7 +1912,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	}
 
 	// For any values that can only be added to the CSV row after copying the file.
-	for(size_t i = 0; i < exporter->num_csv_columns; ++i)
+	for(int i = 0; i < exporter->num_csv_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
 
@@ -1686,13 +1934,31 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		column_values[i].value = value;
 	}
 
-	if(exporter->should_create_csv && match_allows_for_exporting_entry)
+	if(exporter->should_create_csvs && match_allows_for_exporting_entry)
 	{
 		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, exporter->num_csv_columns);
 	}
 
+	safe_close_handle(&decompressed_file_handle);
+
 	clear_arena(temporary_arena);
 	exporter->warning_message[0] = T('\0');
+}
+
+// Resets any exporter members that are used to hold temporary values that should not persist between multiple cache locations
+// even if they belong to the same cache type. Usually only used for web browser cache formats.
+//
+// This function must be called after initialize_cache_exporter() and before terminate_cache_exporter().
+//
+// @Parameters:
+// 1. exporter - The Exporter structure that contains the temporary members to reset.
+// 
+// @Returns: Nothing.
+void reset_temporary_exporter_members(Exporter* exporter)
+{
+	exporter->browser_name = NULL;
+	exporter->browser_profile = NULL;
+	clear_arena(&(exporter->temporary_arena));
 }
 
 // Terminates a cache exporter by performing the following:
@@ -1710,6 +1976,12 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 void terminate_cache_exporter(Exporter* exporter)
 {
 	safe_close_handle(&(exporter->csv_file_handle));
+	if(!exporter->exported_at_least_one_file)
+	{
+		log_info("Terminate Cache Exporter: Deleting the CSV file '%s' since no files were exported for the %s cache.", exporter->output_csv_path, CACHE_TYPE_TO_FULL_NAME[exporter->current_cache_type]);
+		DeleteFile(exporter->output_csv_path);
+	}
+	
 	clear_temporary_exporter_directory(exporter);
 	clear_arena(&(exporter->temporary_arena));
 }
@@ -1729,7 +2001,7 @@ void terminate_cache_exporter(Exporter* exporter)
 // This value defaults to NULL.
 // 
 // @Returns: True if the file was created successfully. Otherwise, false.
-bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename)
+bool create_placeholder_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename)
 {
 	*result_file_path = T('\0');
 	if(!exporter->was_temporary_exporter_directory_created) return false;
@@ -1760,6 +2032,11 @@ bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file
 // in memory_and_file_io.cpp that could interface with a temporary file using only its path (e.g. generating the hash of a temporary
 // cached file).
 //
+// Note also that you should be careful and remember to close any additional file handles that are opened in the previously mentioned
+// functions marked with @TemporaryFiles. Not doing so will prevent the temporary directory from being deleted (since the temporary file
+// would still exist in there). The file itself would be deleted after the application terminates since Windows closes all opened file
+// handles, but an empty temporary directory would be left behind, which is annoying.
+//
 // @Parameters:
 // 1. exporter - The Exporter structure that contains the path to the temporary directory.
 // 2. result_file_path - The buffer that receives the created file's path. This buffer must be able to hold MAX_PATH_CHARS characters.
@@ -1774,7 +2051,7 @@ bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path,
 	if(!exporter->was_temporary_exporter_directory_created) return false;
 
 	// This is only used to get a unique filename. We will overwrite this file below.
-	bool create_success = create_empty_temporary_exporter_file(exporter, result_file_path);
+	bool create_success = create_placeholder_exporter_file(exporter, result_file_path);
 	bool get_handle_success = false;
 
 	if(create_success)
@@ -1833,7 +2110,7 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 
 	TCHAR* parent_exporter_temporary_path = exporter->windows_temporary_path;
 	_ASSERT(!string_is_empty(parent_exporter_temporary_path));
-	log_print(LOG_INFO, "Delete All Temporary Directories: Deleting any previous temporary exporter directories with the prefix '%s' located in '%s'.", TEMPORARY_NAME_PREFIX, parent_exporter_temporary_path);
+	log_info("Delete All Temporary Directories: Deleting any previous temporary exporter directories with the prefix '%s' located in '%s'.", TEMPORARY_NAME_PREFIX, parent_exporter_temporary_path);
 	Traversal_Result* directories = find_objects_in_directory(	temporary_arena, parent_exporter_temporary_path,
 																TEMPORARY_NAME_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false);
 
@@ -1843,7 +2120,7 @@ void delete_all_temporary_exporter_directories(Exporter* exporter)
 		_ASSERT(directory_info.is_directory);
 
 		TCHAR* full_directory_path = directory_info.object_path;
-		log_print(LOG_INFO, "Delete All Temporary Directories: Deleting the temporary directory in '%s'.", full_directory_path);
+		log_info("Delete All Temporary Directories: Deleting the temporary directory in '%s'.", full_directory_path);
 		delete_directory_and_contents(full_directory_path);
 	}
 }
@@ -1927,7 +2204,7 @@ static size_t get_total_external_locations_size(Exporter* exporter, int* result_
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Get Total External Locations Size: Failed to load the external locations file '%s'.", exporter->external_locations_file_path);
+		log_error("Get Total External Locations Size: Failed to load the external locations file '%s'.", exporter->external_locations_file_path);
 	}
 
 	clear_arena(temporary_arena);
@@ -1953,7 +2230,7 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 {
 	if(num_profiles == 0)
 	{
-		log_print(LOG_WARNING, "Load External Locations: Attempted to load zero profiles. No external locations will be loaded.");
+		log_warning("Load External Locations: Attempted to load zero profiles. No external locations will be loaded.");
 		return;
 	}
 
@@ -2011,16 +2288,16 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 
 						is_invalid = false;
 						profile->name = convert_utf_8_string_to_tchar(permanent_arena, temporary_arena, name);
-						log_print(LOG_INFO, "Load External Locations: Loading the profile '%s'.", profile->name);
+						log_info("Load External Locations: Loading the profile '%s'.", profile->name);
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Load External Locations: Skipping invalid profile of type '%hs' and name '%hs'.", type, name);
+						log_error("Load External Locations: Skipping invalid profile of type '%hs' and name '%hs'.", type, name);
 					}
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Load External Locations: Found %d tokens while looking for a new profile when two were expected.", split_tokens->num_strings);
+					log_error("Load External Locations: Found %d tokens while looking for a new profile when two were expected.", split_tokens->num_strings);
 				}
 			}
 			// While processing the current profile.
@@ -2068,14 +2345,14 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 						else SET_IF_TYPE(LOCATION_INTERNET_CACHE, wininet_cache_path)
 						else
 						{
-							log_print(LOG_ERROR, "Load External Locations: Unknown location type '%hs'.", location_type);
+							log_error("Load External Locations: Unknown location type '%hs'.", location_type);
 						}
 
 						#undef SET_IF_TYPE
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Load External Locations: Found %d tokens while loading the path list when two were expected.", split_tokens->num_strings);
+						log_error("Load External Locations: Found %d tokens while loading the path list when two were expected.", split_tokens->num_strings);
 					}
 				}
 			}
@@ -2087,12 +2364,12 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 
 		if(seen_begin_list)
 		{
-			log_print(LOG_WARNING, "Load External Locations: Found unterminated profile location list.");
+			log_warning("Load External Locations: Found unterminated profile location list.");
 		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Load External Locations: Failed to load the external locations file '%s'.", exporter->external_locations_file_path);
+		log_error("Load External Locations: Failed to load the external locations file '%s'.", exporter->external_locations_file_path);
 	}
 
 	clear_arena(temporary_arena);
@@ -2101,7 +2378,7 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 	external_locations->num_profiles = num_processed_profiles;
 	if(num_processed_profiles != num_profiles)
 	{
-		log_print(LOG_ERROR, "Load External Locations: Loaded %d profiles when %d were expected.", num_processed_profiles, num_profiles);
+		log_error("Load External Locations: Loaded %d profiles when %d were expected.", num_processed_profiles, num_profiles);
 	}
 
 	exporter->external_locations = external_locations;
@@ -2116,19 +2393,19 @@ static void load_external_locations(Exporter* exporter, int num_profiles)
 static void export_all_cache_locations(Exporter* exporter)
 {
 	export_default_or_specific_internet_explorer_cache(exporter);
-	log_print_newline();
+	log_newline();
 
 	export_default_or_specific_mozilla_cache(exporter);
-	log_print_newline();
+	log_newline();
 
 	export_default_or_specific_flash_cache(exporter);
-	log_print_newline();
+	log_newline();
 
 	export_default_or_specific_shockwave_cache(exporter);
-	log_print_newline();
+	log_newline();
 
 	export_default_or_specific_java_cache(exporter);
-	log_print_newline();
+	log_newline();
 
 	export_default_or_specific_unity_cache(exporter);
 }
@@ -2148,8 +2425,8 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 		_ASSERT(external_locations != NULL);
 
 		console_print("Exporting the cache from the default locations in %d profiles...", external_locations->num_profiles);
-		log_print(LOG_INFO, "All Locations: Exporting the cache from the default locations in %d profiles.", external_locations->num_profiles);
-		log_print_newline();
+		log_info("All Locations: Exporting the cache from the default locations in %d profiles.", external_locations->num_profiles);
+		log_newline();
 
 		for(int i = 0; i < external_locations->num_profiles; ++i)
 		{
@@ -2160,7 +2437,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 			#define STRING_OR_DEFAULT(str) (str != NULL) ? (str) : (T(""))
 
 			log_print(LOG_NONE, "------------------------------------------------------------");
-			log_print(LOG_INFO, "Exporting from the profile '%s' (%I32u).", profile.name, i);
+			log_info("Exporting from the profile '%s' (%I32u).", profile.name, i);
 			log_print(LOG_NONE, "------------------------------------------------------------");
 			log_print(LOG_NONE, "- Drive Path: '%s'", STRING_OR_DEFAULT(profile.drive_path));
 			log_print(LOG_NONE, "- Windows Directory Path: '%s'", STRING_OR_DEFAULT(profile.windows_path));
@@ -2171,7 +2448,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 			log_print(LOG_NONE, "- LocalLow AppData Path: '%s'", STRING_OR_DEFAULT(profile.local_low_appdata_path));
 			log_print(LOG_NONE, "- WinINet Cache Path: '%s'", STRING_OR_DEFAULT(profile.wininet_cache_path));
 			log_print(LOG_NONE, "------------------------------------------------------------");
-			log_print_newline();
+			log_newline();
 
 			#undef STRING_OR_DEFAULT
 
@@ -2186,13 +2463,13 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 				{\
 					are_all_locations_valid = false;\
 					console_print("This profile will be skipped since the %hs path was not found in the list.", location_name);\
-					log_print(LOG_WARNING, "All Locations: The profile '%s' (%I32u) will be skipped since the %hs path was not found in the list.", profile.name, i, location_name);\
+					log_warning("All Locations: The profile '%s' (%I32u) will be skipped since the %hs path was not found in the list.", profile.name, i, location_name);\
 				}\
 				else if(FAILED(StringCchCopy(exporter->member_name, MAX_PATH_CHARS, profile.member_name)))\
 				{\
 					are_all_locations_valid = false;\
 					console_print("This profile will be skipped since the %hs path is too long.", location_name);\
-					log_print(LOG_WARNING, "All Locations: The profile '%s' (%I32u) will be skipped since the %hs path is too long.", profile.name, i, location_name);\
+					log_warning("All Locations: The profile '%s' (%I32u) will be skipped since the %hs path is too long.", profile.name, i, location_name);\
 				}\
 			} while(false, false)
 
@@ -2212,7 +2489,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 				export_all_cache_locations(exporter);
 			}
 
-			log_print_newline();
+			log_newline();
 		}
 	}
 	else
@@ -2240,7 +2517,7 @@ bool resolve_exporter_external_locations_path(Exporter* exporter, const TCHAR* f
 
 	if(PathIsRelative(full_path) != FALSE)
 	{
-		log_print(LOG_ERROR, "Resolve Exporter External Locations Path: Attempted to resolve the relative path '%s' when an absolute one was expected.", full_path);
+		log_error("Resolve Exporter External Locations Path: Attempted to resolve the relative path '%s' when an absolute one was expected.", full_path);
 		return false;
 	}
 

@@ -1,5 +1,5 @@
 /*
-	A very simple Java application used to create a dummy index file (format version 6.05).
+	A very simple Java application used to create a sample index file (format version 6.05).
 	This was only used when the Java Plugin cache exporter was in its early stages.
 */
 

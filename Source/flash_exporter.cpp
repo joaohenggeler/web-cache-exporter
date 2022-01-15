@@ -49,7 +49,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
-static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
+static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Entry point for the Flash Player's cache exporter. This function will determine where to look for the cache before
 // processing its contents.
@@ -72,7 +72,7 @@ void export_default_or_specific_flash_cache(Exporter* exporter)
 			PathCombine(exporter->cache_path, exporter->appdata_path, T("Adobe\\Flash Player"));
 		}
 
-		log_print(LOG_INFO, "Flash Player: Exporting the cache and videos from '%s'.", exporter->cache_path);
+		log_info("Flash Player: Exporting the cache and videos from '%s'.", exporter->cache_path);
 		
 		set_exporter_output_copy_subdirectory(exporter, T("Cache"));
 		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_flash_cache_files_callback, exporter);
@@ -86,7 +86,7 @@ void export_default_or_specific_flash_cache(Exporter* exporter)
 			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, false, find_flash_video_files_callback, exporter);
 		}
 
-		log_print(LOG_INFO, "Flash Player: Finished exporting the cache.");
+		log_info("Flash Player: Finished exporting the cache.");
 	}
 	terminate_cache_exporter(exporter);
 }
@@ -104,14 +104,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	TCHAR* filename = callback_info->object_name;
 	TCHAR* file_extension = skip_to_file_extension(filename, true);
 
-	// Skip the HEU metadata files.
+	// Skip the metadata files.
 	if(filenames_are_equal(file_extension, T(".heu")))
 	{
 		return true;
 	}
 
-	TCHAR* full_file_path = callback_info->object_path;
-	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
+	TCHAR* full_location_on_cache = callback_info->object_path;
+	TCHAR* short_location_on_cache = skip_to_last_path_components(full_location_on_cache, 3);
 
 	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	TCHAR* access_count = NULL;
@@ -169,7 +169,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Flash Player: Failed to open the metadata file '%s'. No additional information about this library will be extracted.", metadata_file_path);
+				log_warning("Flash Player: Could not retrieve additional metadata.");
 			}
 
 			*file_extension = previous_char;
@@ -187,8 +187,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params params = {};
-	params.copy_source_path = full_file_path;
-	params.filename = filename;
+	params.copy_source_path = full_location_on_cache;
 	params.short_location_on_cache = short_location_on_cache;
 	params.file_info = callback_info;
 
@@ -205,14 +204,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_cache_files_callback)
 static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 {
 	TCHAR* filename = callback_info->object_name;
-	TCHAR* full_file_path = callback_info->object_path;
+	TCHAR* full_location_on_cache = callback_info->object_path;
 
 	const u32 SIGNATURE_BUFFER_SIZE = 3;
 	u8 signature_buffer[SIGNATURE_BUFFER_SIZE] = {};
-	bool is_flv_file = 	read_first_file_bytes(full_file_path, signature_buffer, SIGNATURE_BUFFER_SIZE)
+	bool is_flv_file = 	read_first_file_bytes(full_location_on_cache, signature_buffer, SIGNATURE_BUFFER_SIZE)
 						&& memory_is_equal(signature_buffer, "FLV", SIGNATURE_BUFFER_SIZE);
 
-	// Skip non-FLV files.
 	if(!is_flv_file) return true;
 
 	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
@@ -231,10 +229,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_flash_video_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.copy_source_path = full_file_path;
-	params.filename = filename;
+	params.copy_source_path = full_location_on_cache;
 	params.short_location_on_cache = short_location_on_cache;
-	params.file_info =callback_info;
+	params.file_info = callback_info;
 
 	export_cache_entry(exporter, csv_row, &params);	
 

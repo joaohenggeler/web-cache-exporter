@@ -99,11 +99,11 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_LAST_MODIFIED_TIME, CSV_EXPIRY_TIME,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING,
 	CSV_CODEBASE_IP, CSV_VERSION,
-	CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
+	CSV_DECOMPRESSED_FILE_SIZE, CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION, CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 
-static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
+static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Entry point for the Java Plugin's cache exporter. This function will determine where to look for the cache before
 // processing its contents.
@@ -131,7 +131,7 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 			PathCombine(exporter->cache_path, java_appdata_path, T("Sun\\Java\\Deployment\\cache"));
 		}
 
-		log_print(LOG_INFO, "Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
+		log_info("Java Plugin: Exporting the cache from '%s'.", exporter->cache_path);
 		
 		traverse_directory_objects(exporter->cache_path, T("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 		
@@ -142,22 +142,22 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 		
 			// For Java 1.4 and later (distributed by IBM).
 			PathCombine(exporter->cache_path, java_appdata_path, T("IBM\\Java\\Deployment\\cache"));
-			log_print(LOG_INFO, "Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
+			log_info("Java Plugin: Exporting the IBM Java cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, T("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
 			// For Java 1.4.
 			PathCombine(exporter->cache_path, java_user_home_path, T(".jpi_cache"));
-			log_print(LOG_INFO, "Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
+			log_info("Java Plugin: Exporting the .jpi_cache from '%s'.", exporter->cache_path);
 			traverse_directory_objects(exporter->cache_path, T("*.idx"), TRAVERSE_FILES, true, find_java_index_files_callback, exporter);
 
 			// For Java 1.3.
 			PathCombine(exporter->cache_path, java_user_home_path, T("java_plugin_AppletStore"));
-			log_print(LOG_INFO, "Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
+			log_info("Java Plugin: Exporting the AppletStore cache from '%s'.", exporter->cache_path);
 			set_exporter_output_copy_subdirectory(exporter, T("AppletStore"));
 			traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_java_applet_store_files_callback, exporter);
 		}
 
-		log_print(LOG_INFO, "Java Plugin: Finished exporting the cache.");
+		log_info("Java Plugin: Finished exporting the cache.");
 	}
 	terminate_cache_exporter(exporter);
 }
@@ -169,8 +169,8 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 {
-	TCHAR* full_file_path = callback_info->object_path;
-	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
+	TCHAR* full_location_on_cache = callback_info->object_path;
+	TCHAR* short_location_on_cache = skip_to_last_path_components(full_location_on_cache, 3);
 	TCHAR* cache_version = T("AppletStore");
 
 	Csv_Entry csv_row[] =
@@ -180,7 +180,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 		{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 		{/* Codebase IP */}, {/* Version */},
-		{/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Decompressed File Size */}, {/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
@@ -188,7 +188,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.copy_source_path = full_file_path;
+	params.copy_source_path = full_location_on_cache;
 	params.short_location_on_cache = short_location_on_cache;
 	params.file_info = callback_info;
 
@@ -204,7 +204,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_applet_store_files_callback)
 
 // The type of cache location where the index files are kept.
 // In version 1, there were separate directories for files (images, sounds, and classes) and for archives (ZIPs and JARs).
-// In version 6, all types of files were allowed.
+// In version 6, all file types were allowed.
 enum Java_Location_Type
 {
 	LOCATION_ALL = 0, // For any type of file. Used by version 6.
@@ -350,7 +350,7 @@ static bool find_cached_filename_that_starts_with(Arena* arena, const TCHAR* dir
 		Traversal_Object_Info file_info = files->object_info[i];
 		TCHAR* filename = file_info.object_name;		
 
-		if(!string_ends_with(filename, T(".idx")))
+		if(!filename_ends_with(filename, T(".idx")))
 		{
 			was_found = true;
 			*result_filename = filename;
@@ -477,7 +477,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 			if(actual_file_extension == NULL)
 			{
 				actual_file_extension = skip_to_file_extension(filename, true);
-				if(actual_file_extension != NULL && string_starts_with(actual_file_extension, T(".jar"), true))
+				if(actual_file_extension != NULL && string_begins_with(actual_file_extension, T(".jar"), true))
 				{
 					actual_file_extension = T(".zip");
 				}
@@ -514,10 +514,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		cache_version = cache_version_buffer;
 	}
 
-	TCHAR full_file_path[MAX_PATH_CHARS] = T("");
-	PathCombine(full_file_path, callback_info->directory_path, cached_filename);
+	TCHAR full_location_on_cache[MAX_PATH_CHARS] = T("");
+	PathCombine(full_location_on_cache, callback_info->directory_path, cached_filename);
 
-	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
+	TCHAR* short_location_on_cache = skip_to_last_path_components(full_location_on_cache, 3);
 
 	Csv_Entry csv_row[] =
 	{
@@ -526,15 +526,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 		{/* Content Type */}, {content_length}, {/* Content Range */}, {/* Content Encoding */},
 		{index.codebase_ip}, {index.version},
-		{/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
+		{/* Decompressed File Size */}, {/* Location On Cache */}, {cache_version}, {/* Missing File */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 	
 	Exporter_Params params = {};
-	params.copy_source_path = full_file_path;
+	params.copy_source_path = full_location_on_cache;
 	params.url = url;
-	params.filename = filename;
+	params.filename = filename; // The filename may come from the URL or by modifying the cached filename.
 	params.headers = index.headers;
 	params.short_location_on_cache = short_location_on_cache;
 	params.file_info = callback_info;
@@ -592,13 +592,13 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second byte (0x%08X) does not match the pattern.", modified_utf_8_string, b);
+					log_error("Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second byte (0x%08X) does not match the pattern.", modified_utf_8_string, b);
 					return NULL;
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second byte in the group.", modified_utf_8_string);
+				log_error("Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second byte in the group.", modified_utf_8_string);
 				return NULL;
 			}
 		}
@@ -619,19 +619,19 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second (0x%08X) or third byte (0x%08X) does not match the pattern.", modified_utf_8_string, b, c);
+					log_error("Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The second (0x%08X) or third byte (0x%08X) does not match the pattern.", modified_utf_8_string, b, c);
 					return NULL;
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second or third byte in the group.", modified_utf_8_string);
+				log_error("Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. Missing the second or third byte in the group.", modified_utf_8_string);
 				return NULL;
 			}
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The first byte (0x%08X) does not match any pattern.", modified_utf_8_string, a);
+			log_error("Convert Modified Utf-8 String To Tchar: Error while parsing the string '%hs'. The first byte (0x%08X) does not match any pattern.", modified_utf_8_string, a);
 			return NULL;
 		}
 
@@ -665,7 +665,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 	
 	if(file == NULL)
 	{
-		log_print(LOG_ERROR, "Read Java Index File: Failed to open the index file '%s'. No files will be exported using this index.", index_path);
+		log_error("Read Java Index File: Failed to read the index file.");
 		return;
 	}
 
@@ -821,7 +821,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 		u32 expected_total_bytes_read = VERSION_6_HEADER_SIZE + index->section_2_length;\
 		if(total_bytes_read < expected_total_bytes_read)\
 		{\
-			log_print(LOG_WARNING, "Read Java Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but found only %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
+			log_warning("Read Java Index File: Expected to process a total of %I32u bytes after reading the header and section 2 but found only %I32u bytes in the index file '%s'.", expected_total_bytes_read, total_bytes_read, index_path);\
 		}\
 	} while(false, false)
 
@@ -967,7 +967,7 @@ static void read_index_file(Arena* arena, const TCHAR* index_path, Java_Index* i
 
 			default:
 			{
-				log_print(LOG_ERROR, "Read Java Index File: Unsupported cache version %I32d in the index file '%s'.", index->cache_version, index_path);
+				log_error("Read Java Index File: Found the unsupported cache version %I32d in the index file '%s'.", index->cache_version, index_path);
 			} break;
 		}
 	}

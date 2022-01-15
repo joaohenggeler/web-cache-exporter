@@ -1,9 +1,9 @@
-This document lists any third party code used by the Web Cache Exporter.
-Each third party library is contained in a subdirectory next to this
+This document lists any third-party code used by the Web Cache Exporter.
+Each third-party library is contained in a subdirectory next to this
 text file. This file will document why a library was used, who made it,
 where it can be found, and any modifications.
 
-To make compiling this program easier, we will bundle the third party
+To make compiling this program easier, we will bundle the third-party
 library's code with our own source files, provided we are allowed to
 distribute it. Each library's license will also be included in its
 respective subdirectory.
@@ -12,17 +12,36 @@ respective subdirectory.
 "Portable C++ Hashing Library" by Stephan Brumme
 ======================================================================
 
-This tool uses this hashing library to generate the SHA-256 value for
-each exported file.
-
-The "SHA-256" subdirectory includes two source files: "sha256.h" and
-"sha256.cpp". This last file was modified to disable any warnings that
-would prevent this tool from compiling. This was done by adding the
-line "#pragma warning(...)" to the top of the source file.
+This tool uses this library to generate the SHA-256 hash of each exported
+file.
 
 Project Page: https://github.com/stbrumme/hash-library
 Version: 7 (2015-03-24)
 License: Zlib
+
+======================================================================
+"Zlib" by Jean-loup Gailly and Mark Adler
+======================================================================
+
+This tool uses this library to decompress files using the Gzip, Zlib,
+and raw DEFLATE formats. For example, decompressing cached files according
+to the Content-Encoding value in their HTTP headers.
+
+Project Page: https://zlib.net/
+Version: 1.2.11 (2017-01-15)
+License: Zlib
+
+======================================================================
+"Brotli" by Google
+======================================================================
+
+This tool uses this library to decompress files using the Brotli format.
+For example, decompressing cached files according to the Content-Encoding
+value in their HTTP headers.
+
+Project Page: https://github.com/google/brotli
+Version: 1.0.9 (2020-08-27)
+License: MIT
 
 ======================================================================
 Microsoft's Extensible Storage Engine (ESE) API

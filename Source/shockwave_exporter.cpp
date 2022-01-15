@@ -49,7 +49,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
-static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
+static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Since cached Shockwave files can be stored on disk without a file extension, we'll make it easier to tell what kind of file was
 // found by reading and interpreting their first bytes.
@@ -176,6 +176,10 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 			}
 		}
 	}
+	else
+	{
+		log_warning("Get Director File Type From File Signature: Could not read the file signature.");
+	}
 
 	return file_type;
 }
@@ -207,7 +211,7 @@ void export_default_or_specific_shockwave_cache(Exporter* exporter)
 			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->windows_temporary_path);
 		}
 
-		log_print(LOG_INFO, "Shockwave Player: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
+		log_info("Shockwave Player: Exporting the cache and Xtras from '%s'.", exporter->cache_path);
 
 		Find_Shockwave_Files_Params file_params = {};
 		file_params.exporter = exporter;
@@ -227,7 +231,7 @@ void export_default_or_specific_shockwave_cache(Exporter* exporter)
 			do\
 			{\
 				file_params.location_identifier = identifier;\
-				log_print(LOG_INFO, "Shockwave Player: Exporting Xtras from '%s'.", path);\
+				log_info("Shockwave Player: Exporting Xtras from '%s'.", path);\
 				\
 				PathCombine(exporter->cache_path, path, T("Macromedia"));\
 				traverse_directory_objects(exporter->cache_path, T("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);\
@@ -242,7 +246,7 @@ void export_default_or_specific_shockwave_cache(Exporter* exporter)
 			#undef TRAVERSE_APPDATA_XTRA_FILES
 		}
 
-		log_print(LOG_INFO, "Shockwave Player: Finished exporting the cache.");	
+		log_info("Shockwave Player: Finished exporting the cache.");	
 	}
 	terminate_cache_exporter(exporter);
 }
@@ -261,10 +265,10 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 
 	TCHAR* filename = callback_info->object_name;
 
-	TCHAR full_file_path[MAX_PATH_CHARS] = T("");
-	PathCombine(full_file_path, callback_info->directory_path, filename);
+	TCHAR full_location_on_cache[MAX_PATH_CHARS] = T("");
+	PathCombine(full_location_on_cache, callback_info->directory_path, filename);
 
-	TCHAR* director_file_type = (file_params->is_xtra) ? (T("Xtra")) : (get_director_file_type_from_file_signature(full_file_path));
+	TCHAR* director_file_type = (file_params->is_xtra) ? (T("Xtra")) : (get_director_file_type_from_file_signature(full_location_on_cache));
 
 	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
 	TCHAR* xtra_description = NULL;
@@ -273,16 +277,16 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	if(file_params->is_xtra)
 	{
 		PathCombine(short_location_on_cache, file_params->location_identifier, T("[...]"));
-		PathAppend(short_location_on_cache, skip_to_last_path_components(full_file_path, 3));
+		PathAppend(short_location_on_cache, skip_to_last_path_components(full_location_on_cache, 3));
 
-		if(!get_file_info(arena, full_file_path, INFO_FILE_DESCRIPTION, &xtra_description))
+		if(!get_file_info(arena, full_location_on_cache, INFO_FILE_DESCRIPTION, &xtra_description))
 		{
-			log_print(LOG_WARNING, "Shockwave Player: No file description found for the Xtra '%s'.", filename);
+			log_warning("Shockwave Player: No file description found for the Xtra '%s'.", filename);
 		}
 
-		if(!get_file_info(arena, full_file_path, INFO_PRODUCT_VERSION, &xtra_version))
+		if(!get_file_info(arena, full_location_on_cache, INFO_PRODUCT_VERSION, &xtra_version))
 		{
-			log_print(LOG_WARNING, "Shockwave Player: No product version found for the Xtra '%s'.", filename);
+			log_warning("Shockwave Player: No product version found for the Xtra '%s'.", filename);
 		}
 	}
 	else
@@ -301,8 +305,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params exporter_params = {};
-	exporter_params.copy_source_path = full_file_path;
-	exporter_params.filename = filename;
+	exporter_params.copy_source_path = full_location_on_cache;
 	exporter_params.short_location_on_cache = short_location_on_cache;
 	exporter_params.file_info = callback_info;
 

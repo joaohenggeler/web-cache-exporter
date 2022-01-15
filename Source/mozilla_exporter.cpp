@@ -90,15 +90,15 @@ static const TCHAR* OUTPUT_NAME = T("MZ");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
-	CSV_FILENAME, CSV_URL, CSV_REQUEST_ORIGIN, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
+	CSV_FILENAME, CSV_URL, CSV_REQUEST_ORIGIN, CSV_FILE_EXTENSION, CSV_FILE_SIZE,
 	CSV_LAST_MODIFIED_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME, CSV_ACCESS_COUNT,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING, 
-	CSV_LOCATION_ON_CACHE, CSV_CACHE_ORIGIN, CSV_CACHE_VERSION,
+	CSV_DECOMPRESSED_FILE_SIZE, CSV_LOCATION_ON_CACHE, CSV_CACHE_ORIGIN, CSV_CACHE_VERSION,
 	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR, CSV_EXPORTER_WARNING,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 
-static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
+static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 static void export_mozilla_cache_version_1(Exporter* exporter);
 static void export_mozilla_cache_version_2(Exporter* exporter);
@@ -115,6 +115,13 @@ static void export_mozilla_cache_version_2(Exporter* exporter);
 static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, const TCHAR* prefs_file_path, TCHAR* result_cache_path)
 {
 	*result_cache_path = T('\0');
+	
+	if(!does_file_exist(prefs_file_path))
+	{
+		log_info("Find Cache Parent Directory In Mozilla Prefs: Skipping the missing prefs file '%s'.", prefs_file_path);
+		return false;
+	}
+
 	bool success = false;
 
 	Arena* arena = &(exporter->temporary_arena);
@@ -130,7 +137,7 @@ static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, con
 		for(int i = 0; i < split_prefs->num_strings; ++i)
 		{
 			char* line = split_prefs->strings[i];
-			if(string_starts_with(line, "user_pref"))
+			if(string_begins_with(line, "user_pref"))
 			{
 				// E.g. "user_pref("example.pref", "abc");".
 				// This works because we only care about prefs with string values.
@@ -147,7 +154,7 @@ static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, con
 
 					if(is_cache_key)
 					{
-						log_print(LOG_INFO, "Find Cache Parent Directory In Mozilla Prefs: Found the key '%hs' with the cache path '%hs'.", key, value);
+						log_info("Find Cache Parent Directory In Mozilla Prefs: Found the key '%hs' with the cache path '%hs'.", key, value);
 
 						TCHAR* cache_directory_path = convert_utf_8_string_to_tchar(arena, value);
 						string_unescape(cache_directory_path);
@@ -169,7 +176,7 @@ static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, con
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Find Cache Parent Directory In Mozilla Prefs: Failed to read the prefs file in '%s'.", prefs_file_path);
+		log_error("Find Cache Parent Directory In Mozilla Prefs: Failed to read the prefs file.");
 	}
 
 	clear_arena(arena);
@@ -226,7 +233,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			TCHAR prefs_cache_path[MAX_PATH_CHARS] = T("");
 			if(should_check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
 			{
-				log_print(LOG_INFO, "Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
+				log_info("Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
 			
 				PathCombine(exporter->cache_path, prefs_cache_path, T("."));
 				export_mozilla_cache_version_1(exporter);
@@ -255,7 +262,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Default Mozilla Cache Exporter: Skipping the cache path '%s' since it's the same directory as the one found in the prefs: '%s'.", parent_cache_path, prefs_cache_path);
+				log_warning("Default Mozilla Cache Exporter: Skipping the cache path '%s' since it's the same directory as the one found in the prefs: '%s'.", parent_cache_path, prefs_cache_path);
 			}
 
 			Traversal_Result* salt_directories = find_objects_in_directory(arena, profile_info.object_path, T("*.slt"), TRAVERSE_DIRECTORIES, false);
@@ -272,7 +279,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 				if(should_check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
 				{
-					log_print(LOG_INFO, "Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
+					log_info("Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
 				
 					PathCombine(exporter->cache_path, prefs_cache_path, T("."));
 					export_mozilla_cache_version_1(exporter);
@@ -296,7 +303,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 				}
 				else
 				{
-					log_print(LOG_WARNING, "Default Mozilla Cache Exporter: Skipping the cache path '%s' since it's the same directory as the one found in the prefs: '%s'.", parent_cache_path, prefs_cache_path);
+					log_warning("Default Mozilla Cache Exporter: Skipping the cache path '%s' since it's the same directory as the one found in the prefs: '%s'.", parent_cache_path, prefs_cache_path);
 				}
 			}
 
@@ -317,8 +324,8 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 void export_default_or_specific_mozilla_cache(Exporter* exporter)
 {
 	console_print("Exporting the Mozilla cache...");
-	log_print(LOG_INFO, "Mozilla Cache Exporter: Started exporting the cache.");
-	log_print_newline();
+	log_info("Mozilla Cache Exporter: Started exporting the cache.");
+	log_newline();
 
 	DEBUG_BEGIN_MEASURE_TIME("Export Mozilla's Cache");
 
@@ -327,7 +334,7 @@ void export_default_or_specific_mozilla_cache(Exporter* exporter)
 		if(exporter->is_exporting_from_default_locations)
 		{
 			export_default_mozilla_cache(exporter, T("Mozilla\\Firefox"), 					T("FF"));
-			export_default_mozilla_cache(exporter, T("Mozilla\\SeaMonkey"), 					T("SM"));
+			export_default_mozilla_cache(exporter, T("Mozilla\\SeaMonkey"), 				T("SM"));
 			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Pale Moon"), 	T("PM"));
 			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Basilisk"), 	T("BS"));
 			export_default_mozilla_cache(exporter, T("Waterfox"), 							T("WF"));
@@ -349,8 +356,8 @@ void export_default_or_specific_mozilla_cache(Exporter* exporter)
 
 	DEBUG_END_MEASURE_TIME();
 
-	log_print_newline();
-	log_print(LOG_INFO, "Mozilla Cache Exporter: Finished exporting the cache.");
+	log_newline();
+	log_info("Mozilla Cache Exporter: Finished exporting the cache.");
 }
 
 // @FormatVersion: Mozilla 0.9.5 to Firefox 31 (Cache\_CACHE_MAP_).
@@ -501,42 +508,38 @@ static void parse_mozilla_cache_elements(	Arena* arena, void* elements, u32 elem
 // @Returns: Nothing.
 static void export_mozilla_cache_version_1(Exporter* exporter)
 {
-	log_print(LOG_INFO, "Mozilla Cache Version 1: Exporting the cache from '%s'.", exporter->cache_path);
-
-	Arena* arena = &(exporter->temporary_arena);
+	log_info("Mozilla Cache Version 1: Exporting the cache from '%s'.", exporter->cache_path);
 
 	PathCombine(exporter->index_path, exporter->cache_path, T("_CACHE_MAP_"));
+	if(!does_file_exist(exporter->index_path))
+	{
+		log_info("Mozilla Cache Version 1: Skipping the missing map file '%s'.", exporter->index_path);
+		return;
+	}
+
+	Arena* arena = &(exporter->temporary_arena);
 	u64 map_file_size = 0;
 	void* map_file = read_entire_file(arena, exporter->index_path, &map_file_size);
-
+	
 	if(map_file == NULL)
 	{
-		DWORD error_code = GetLastError();
-		if( (error_code == ERROR_FILE_NOT_FOUND) || (error_code == ERROR_PATH_NOT_FOUND) )
-		{
-			log_print(LOG_ERROR, "Mozilla Cache Version 1: The map file was not found. No files will be exported from this cache.");
-		}
-		else
-		{
-			log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to open the map file with the error code %lu. No files will be exported from this data file.", error_code);
-		}
-
+		log_error("Mozilla Cache Version 1: Failed to read the map file.");
 		return;
 	}
 
 	const size_t MINIMUM_MAP_HEADER_SIZE = MIN(sizeof(Mozilla_1_Map_Header_Version_3_To_5), sizeof(Mozilla_1_Map_Header_Version_6_To_19));
 	if(map_file_size < MINIMUM_MAP_HEADER_SIZE)
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 1: The size of the map file (%I64u) is smaller than the minimum header size (%Iu). No files will be exported from this cache.", map_file_size, MINIMUM_MAP_HEADER_SIZE);
+		log_error("Mozilla Cache Version 1: The size of the map file (%I64u) is smaller than the minimum header size (%Iu).", map_file_size, MINIMUM_MAP_HEADER_SIZE);
 		return;
 	}
 
 	TCHAR temporary_file_path[MAX_PATH_CHARS] = T("");
 	HANDLE temporary_file_handle = INVALID_HANDLE_VALUE;
-	
+
 	if(!create_temporary_exporter_file(exporter, temporary_file_path, &temporary_file_handle))
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to create the intermediate file in the temporary exporter directory. No files will be exported from this cache.");
+		log_error("Mozilla Cache Version 1: Failed to create the intermediate file in the temporary exporter directory.");
 		return;
 	}
 
@@ -565,10 +568,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		if(remaining_header_size < sizeof(variable)) reached_end_of_header = true;\
 		if(reached_end_of_header) break;\
 		\
-		for(int i = 0; i < _countof(variable); ++i)\
-		{\
-			READ_INTEGER(variable[i]);\
-		}\
+		for(int _i = 0; _i < _countof(variable); ++_i) READ_INTEGER(variable[_i]);\
 	} while(false, false)
 
 	Mozilla_1_Map_Header_Version_6_To_19 header = {};
@@ -609,11 +609,11 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = T("");
 	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("%hu.%hu"), header.major_version, header.minor_version);
 
-	log_print(LOG_INFO, "Mozilla Cache Version 1: The map file (version %s) was opened successfully.", cache_version);
+	log_info("Mozilla Cache Version 1: The map file (version %s) was opened successfully.", cache_version);
 
 	if(header.dirty_flag != 0)
 	{
-		log_print(LOG_WARNING, "Mozilla Cache Version 1: The map file's dirty flag is set to 0x%08X.", header.dirty_flag);
+		log_warning("Mozilla Cache Version 1: The map file's dirty flag is set to 0x%08X.", header.dirty_flag);
 	}
 
 	u32 num_records = ((u32) map_file_size - MAP_HEADER_SIZE) / sizeof(Mozilla_1_Map_Record);
@@ -621,11 +621,11 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	{
 		if(header.num_records < 0)
 		{
-			log_print(LOG_WARNING, "Mozilla Cache Version 1: The map file header has a negative number of records (%I32d).", header.num_records);
+			log_warning("Mozilla Cache Version 1: The map file header has a negative number of records (%I32d).", header.num_records);
 		}
 		else if(num_records != (u32) header.num_records)
 		{
-			log_print(LOG_WARNING, "Mozilla Cache Version 1: The map file header has %I32d records when %I32u were expected. Only this last number of records will be processed.", header.num_records, num_records);
+			log_warning("Mozilla Cache Version 1: The map file header has %I32d records when %I32u were expected. Only this last number of records will be processed.", header.num_records, num_records);
 		}
 	}
 
@@ -654,18 +654,14 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		StringCchPrintf(block_file->filename, MAX_BLOCK_FILENAME_CHARS, T("_CACHE_00%d_"), i);
 		PathCombine(block_file->file_path, exporter->cache_path, block_file->filename);
 
-		block_file->file_handle = create_handle(block_file->file_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0);
+		block_file->file_handle = create_handle(block_file->file_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS);
 
 		if(block_file->file_handle != INVALID_HANDLE_VALUE)
 		{
 			u64 file_size = 0;
 			if(get_file_size(block_file->file_handle, &file_size))
 			{
-				log_print(LOG_INFO, "Mozilla Cache Version 1: The block file '%s' has a size of %I64u bytes.", block_file->filename, file_size);
-			}
-			else
-			{
-				log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to find the size of block file '%s' with the error code %lu.", block_file->filename, GetLastError());
+				log_info("Mozilla Cache Version 1: The block file '%s' has a size of %I64u bytes.", block_file->filename, file_size);
 			}
 		}
 		else
@@ -673,11 +669,11 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			DWORD error_code = GetLastError();
 			if( (error_code == ERROR_FILE_NOT_FOUND) || (error_code == ERROR_PATH_NOT_FOUND) )
 			{
-				log_print(LOG_ERROR, "Mozilla Cache Version 1: The block file '%s' was not found. No files will be exported from this block file.", block_file->filename);
+				log_warning("Mozilla Cache Version 1: The block file '%s' was not found.", block_file->filename);
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to open block file '%s' with the error code %lu. No files will be exported from this block file.", block_file->filename, error_code);
+				log_error("Mozilla Cache Version 1: Failed to open block file '%s' with the error code %lu.", block_file->filename, error_code);
 			}
 		}
 		
@@ -727,7 +723,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	exporter->browser_profile = find_path_component(arena, exporter->cache_path, -2);
 
 	// E.g. "C:\Documents and Settings\<Username>\Local Settings\Application Data\<Vendor and Browser>\Profiles\<Profile Name>\<8 Characters>.slt\Cache".
-	bool using_old_directory_format = string_ends_with(exporter->browser_profile, T(".slt"), true);
+	bool using_old_directory_format = filename_ends_with(exporter->browser_profile, T(".slt"));
 	if(using_old_directory_format)
 	{
 		TCHAR* profile_name = find_path_component(arena, exporter->cache_path, -3);
@@ -743,9 +739,9 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	lock_arena(arena);
 
 	Mozilla_1_Map_Record* record_array = (Mozilla_1_Map_Record*) advance_bytes(map_file, MAP_HEADER_SIZE);
-	_ASSERT((uintptr_t) record_array % sizeof(u32) == 0);
+	_ASSERT(IS_POINTER_ALIGNED_TO_TYPE(record_array, u32));
 
-	log_print(LOG_INFO, "Mozilla Cache Version 1: Processing %I32u records in the map file.", num_records);
+	log_info("Mozilla Cache Version 1: Processing %I32u records in the map file.", num_records);
 
 	for(u32 i = 0; i < num_records; ++i)
 	{
@@ -835,12 +831,12 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 						if(metadata_file_size < sizeof(Mozilla_1_Metadata_Entry))
 						{
 							metadata = NULL;
-							log_print(LOG_WARNING, "Mozilla Cache Version 1: Skipping the read metadata file for record %I32u in '%s' since its size of %I64u is smaller than the minimum possible entry size.", i, full_metadata_path, metadata_file_size);
+							log_warning("Mozilla Cache Version 1: Skipping the read metadata file for record %I32u in '%s' since its size of %I64u is smaller than the minimum possible entry size.", i, full_metadata_path, metadata_file_size);
 						}
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to read the metadata file for record %I32u in '%s' with the error code %lu.", i, full_metadata_path, GetLastError());
+						log_error("Mozilla Cache Version 1: Failed to read the metadata file for record %I32u in '%s'.", i, full_metadata_path);
 					}
 				}
 				else
@@ -861,21 +857,21 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 							if(read_metadata_size < sizeof(Mozilla_1_Metadata_Entry))
 							{
 								metadata = NULL;
-								log_print(LOG_WARNING, "Mozilla Cache Version 1: Skipping the read metadata for record %I32u in block file '%s' at the offset %I32u since the read size of %I32u is smaller than the minimum possible entry size.", i, block_file.filename, offset_in_block_file, read_metadata_size);
+								log_warning("Mozilla Cache Version 1: Skipping the read metadata for record %I32u in block file '%s' at the offset %I32u since the read size of %I32u is smaller than the minimum possible entry size.", i, block_file.filename, offset_in_block_file, read_metadata_size);
 							}
 						}
 						else
 						{
 							metadata = NULL;
-							log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to read the metadata for record %I32u in block file '%s' at the offset %I32u and with a total size of %I32u.", i, block_file.filename, offset_in_block_file, total_metadata_size);
+							log_error("Mozilla Cache Version 1: Failed to read the metadata for record %I32u in block file '%s' at the offset %I32u and with a total size of %I32u.", i, block_file.filename, offset_in_block_file, total_metadata_size);
 						}
 					}
-				}				
+				}
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Mozilla Cache Version 1: Skipping the unknown metadata selector %I32u in record %I32u.", metadata_selector, i);
-			}	
+				log_warning("Mozilla Cache Version 1: Skipping the unknown metadata selector %I32u in record %I32u.", metadata_selector, i);
+			}
 		}
 
 		TCHAR cached_file_size_string[MAX_INT32_CHARS] = T("");
@@ -942,7 +938,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 				}
 				else
 				{
-					log_print(LOG_WARNING, "Mozilla Cache Version 1: The key '%s' in record %I32u does not contain the URL.", key, i);
+					log_warning("Mozilla Cache Version 1: The key '%s' in record %I32u does not contain the URL.", key, i);
 				}
 
 				remaining_metadata_size -= metadata->key_size;
@@ -956,12 +952,12 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 				}
 				else
 				{
-					log_print(LOG_WARNING, "Mozilla Cache Version 1: Skipping the elements metadata in record %I32u since the remaining size (%I32u) is too small to contain the elements (%I32u).", i, remaining_metadata_size, metadata->elements_size);
+					log_warning("Mozilla Cache Version 1: Skipping the elements metadata in record %I32u since the remaining size (%I32u) is too small to contain the elements (%I32u).", i, remaining_metadata_size, metadata->elements_size);
 				}
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Mozilla Cache Version 1: Skipping the key and elements metadata in record %I32u since the remaining size (%I32u) is too small to contain the key (%I32u).", i, remaining_metadata_size, metadata->key_size);
+				log_warning("Mozilla Cache Version 1: Skipping the key and elements metadata in record %I32u since the remaining size (%I32u) is too small to contain the key (%I32u).", i, remaining_metadata_size, metadata->key_size);
 			}
 		}
 
@@ -1027,7 +1023,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 								read_cached_file_size -= num_null_bytes;
 
 								add_exporter_warning_message(exporter, "Removed %I32u bytes from the end of the file due to missing metadata. The file size was reduced from %I32u to %I32u.", num_null_bytes, read_cached_file_size + num_null_bytes, read_cached_file_size);
-								log_print(LOG_WARNING, "Mozilla Cache Version 1: Attempted to find the cached file's size in record %I32u since the metadata was missing. Reduced the size to %I32u after finding %I32u null bytes. The exported file may be corrupted.", i, read_cached_file_size, num_null_bytes);
+								log_warning("Mozilla Cache Version 1: Attempted to find the cached file's size in record %I32u since the metadata was missing. Reduced the size to %I32u after finding %I32u null bytes. The exported file may be corrupted.", i, read_cached_file_size, num_null_bytes);
 							}
 
 							bool write_success = empty_file(temporary_file_handle) && write_to_file(temporary_file_handle, cached_file_in_block_file, read_cached_file_size);
@@ -1038,7 +1034,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 							}
 							else
 							{
-								log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to write the cached file (%I32u) in record %I32u from block file '%s' to the temporary exporter directory.", read_cached_file_size, i, block_file.filename);
+								log_error("Mozilla Cache Version 1: Failed to write the cached file (%I32u) in record %I32u from block file '%s' to the temporary exporter directory.", read_cached_file_size, i, block_file.filename);
 							}
 
 							// Create a pretty version of the location on cache which includes the address and size in the block file.
@@ -1054,14 +1050,14 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 						}
 						else
 						{
-							log_print(LOG_ERROR, "Mozilla Cache Version 1: Failed to read the file for record %I32u in block file '%s' at the offset %I32u and with a total size of %I32u.", i, block_file.filename, offset_in_block_file, total_file_size);
+							log_error("Mozilla Cache Version 1: Failed to read the file for record %I32u in block file '%s' at the offset %I32u and with a total size of %I32u.", i, block_file.filename, offset_in_block_file, total_file_size);
 						}
 					}
 				}				
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Mozilla Cache Version 1: Skipping the unknown file selector %I32u in record %I32u.", file_selector, i);
+				log_warning("Mozilla Cache Version 1: Skipping the unknown file selector %I32u in record %I32u.", file_selector, i);
 			}
 		}
 
@@ -1073,7 +1069,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			{last_modified_time}, {last_access_time}, {expiry_time}, {access_count},
 			{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 			{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
-			{/* Location On Cache */}, {exporter->browser_name}, {cache_version},
+			{/* Decompressed File Size */}, {/* Location On Cache */}, {exporter->browser_name}, {cache_version},
 			{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
 			{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 		};
@@ -1092,10 +1088,6 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	}
 
 	unlock_arena(arena);
-	clear_arena(arena);
-
-	exporter->browser_name = NULL;
-	exporter->browser_profile = NULL;
 
 	for(int i = 1; i <= MAX_NUM_BLOCK_FILES; ++i)
 	{
@@ -1104,6 +1096,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	}
 
 	safe_close_handle(&temporary_file_handle);
+
+	reset_temporary_exporter_members(exporter);
 }
 
 // @FormatVersion: Mozilla Firefox 32 and later (cache2\entries\*).
@@ -1191,14 +1185,14 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	if(total_file_size < sizeof(metadata_offset))
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: The size of file '%s' is too small to contain the metadata offset. This cached file will not be exported.", cached_filename);
+		log_error("Mozilla Cache Version 2: The size of file '%s' is too small to contain the metadata offset. This cached file will not be exported.", cached_filename);
 		return true;
 	}
 
 	// @Format: CacheFileMetadata::ReadMetadata() in https://hg.mozilla.org/mozilla-central/file/tip/netwerk/cache2/CacheFileMetadata.cpp
 	if(!read_file_chunk(full_location_on_cache, &metadata_offset, sizeof(metadata_offset), total_file_size - sizeof(metadata_offset)))
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: Failed to read the metadata offset in the file '%s' with the error code %lu. This cached file will not be exported.", cached_filename, GetLastError());
+		log_error("Mozilla Cache Version 2: Failed to read the metadata offset in the file '%s'.", cached_filename);
 		return true;
 	}
 
@@ -1206,7 +1200,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	if(metadata_offset > total_file_size)
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: The metadata offset 0x%08X goes past the end of the file '%s'. This cached file will not be exported.", metadata_offset, cached_filename);
+		log_error("Mozilla Cache Version 2: The metadata offset 0x%08X goes past the end of the file '%s'. This cached file will not be exported.", metadata_offset, cached_filename);
 		return true;
 	}
 
@@ -1220,7 +1214,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	if(remaining_metadata_size < minimum_metadata_size)
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: The size of the metadata in file '%s' was %I32u when at least %I32u bytes were expected. This cached file will not be exported.", cached_filename, remaining_metadata_size, minimum_metadata_size);
+		log_error("Mozilla Cache Version 2: The size of the metadata in file '%s' was %I32u when at least %I32u bytes were expected. This cached file will not be exported.", cached_filename, remaining_metadata_size, minimum_metadata_size);
 		return true;
 	}
 	
@@ -1228,7 +1222,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 
 	if(!read_file_chunk(full_location_on_cache, metadata, remaining_metadata_size, metadata_offset))
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: Failed to read the metadata in the file '%s' with the error code %lu.", cached_filename, GetLastError());
+		log_error("Mozilla Cache Version 2: Failed to read the metadata in the file '%s'.", cached_filename);
 		metadata = NULL;
 	}
 
@@ -1304,7 +1298,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		else
 		{
 			is_version_supported = false;
-			log_print(LOG_WARNING, "Mozilla Cache Version 2: Skipping the unsupported metadata version %I32u in the file '%s'.", metadata_header.version, cached_filename);
+			log_warning("Mozilla Cache Version 2: Skipping the unsupported metadata version %I32u in the file '%s'.", metadata_header.version, cached_filename);
 		}
 
 		#undef READ_INTEGER
@@ -1317,7 +1311,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 			format_time64_t_date_time(metadata_header.last_modified_time, last_modified_time);
 			format_time64_t_date_time(metadata_header.expiry_time, expiry_time);
 
-			StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("2-i%I32u-e%I32u"), find_params->index_version, metadata_header.version);
+			StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("2.i%I32u.e%I32u"), find_params->index_version, metadata_header.version);
 
 			u32 key_size = metadata_header.key_length + 1;
 			if(remaining_metadata_size >= key_size)
@@ -1345,9 +1339,9 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 				// And also:
 				// - GetOriginAttributesWithScheme() in https://hg.mozilla.org/mozilla-central/file/tip/toolkit/components/antitracking/StoragePrincipalHelper.cpp
 				// - URLParams::Serialize() in https://hg.mozilla.org/mozilla-central/file/tip/netwerk/base/nsURLHelper.cpp
-				TCHAR* key = convert_ansi_string_to_tchar(arena, (char*) metadata);
+				TCHAR* full_key = convert_ansi_string_to_tchar(arena, (char*) metadata);
 
-				String_Array<TCHAR>* split_key = split_string(arena, key, T(":"), 1);
+				String_Array<TCHAR>* split_key = split_string(arena, full_key, T(":"), 1);
 
 				if(split_key->num_strings == 2)
 				{
@@ -1361,7 +1355,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 					{
 						TCHAR* tag = split_tags->strings[i];
 
-						if(string_starts_with(tag, T("O^")))
+						if(string_begins_with(tag, T("O^")))
 						{
 							String_Array<TCHAR>* tag_params = split_string(arena, tag + 2, T("&"));
 
@@ -1394,7 +1388,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 										}
 										else
 										{
-											log_print(LOG_WARNING, "Mozilla Cache Version 2: The partition key '%s' in the file '%s' does not contain a scheme and host.", value, cached_filename);
+											log_warning("Mozilla Cache Version 2: The partition key '%s' in the file '%s' does not contain a scheme and host.", value, cached_filename);
 										}
 
 										// We don't care about the other parameters.
@@ -1403,7 +1397,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 								}
 								else
 								{
-									log_print(LOG_WARNING, "Mozilla Cache Version 2: The key-value pair '%s' in the file '%s' does not contain a value.", pair, cached_filename);
+									log_warning("Mozilla Cache Version 2: The key-value pair '%s' in the file '%s' does not contain a value.", pair, cached_filename);
 								}
 							}
 
@@ -1414,7 +1408,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 				}
 				else
 				{
-					log_print(LOG_WARNING, "Mozilla Cache Version 2: The key '%s' in the file '%s' does not contain the URL.", key, cached_filename);
+					log_warning("Mozilla Cache Version 2: The key '%s' in the file '%s' does not contain the URL.", full_key, cached_filename);
 				}
 
 				metadata = advance_bytes(metadata, key_size);
@@ -1424,7 +1418,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Mozilla Cache Version 2: Skipping the URL and partition key metadata in the file '%s' since the remaining size (%I32u) is too small to contain them (%I32u).", cached_filename, remaining_metadata_size, key_size);
+				log_warning("Mozilla Cache Version 2: Skipping the URL and partition key metadata in the file '%s' since the remaining size (%I32u) is too small to contain them (%I32u).", cached_filename, remaining_metadata_size, key_size);
 			}
 		}
 	}
@@ -1451,7 +1445,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: Failed to copy the cached file of size %I32u in the file '%s' to the temporary exporter directory.", metadata_offset, cached_filename);
+		log_error("Mozilla Cache Version 2: Failed to copy the cached file of size %I32u in the file '%s' to the temporary exporter directory.", metadata_offset, cached_filename);
 	}
 
 	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
@@ -1463,7 +1457,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		{last_modified_time}, {last_access_time}, {expiry_time}, {access_count},
 		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 		{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
-		{/* Location On Cache */}, {exporter->browser_name}, {cache_version},
+		{/* Decompressed File Size */}, {/* Location On Cache */}, {exporter->browser_name}, {cache_version},
 		{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
 		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
@@ -1492,7 +1486,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 // @Returns: Nothing.
 static void export_mozilla_cache_version_2(Exporter* exporter)
 {
-	log_print(LOG_INFO, "Mozilla Cache Version 2: Exporting the cache from '%s'.", exporter->cache_path);
+	log_info("Mozilla Cache Version 2: Exporting the cache from '%s'.", exporter->cache_path);
 
 	Arena* arena = &(exporter->temporary_arena);
 
@@ -1506,7 +1500,7 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 
 	if(!does_directory_exist(exporter->cache_path))
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: The cache entry directory '%s' does not exist. No files will be exported from this cache.", exporter->cache_path);
+		log_info("Mozilla Cache Version 2: The cache entry directory '%s' does not exist.", exporter->cache_path);
 		return;
 	}
 
@@ -1521,12 +1515,12 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 
 		if(index_header.dirty_flag != 0)
 		{
-			log_print(LOG_WARNING, "Mozilla Cache Version 2: The index file's dirty flag is set to 0x%08X.", index_header.dirty_flag);
+			log_warning("Mozilla Cache Version 2: The index file's dirty flag is set to 0x%08X.", index_header.dirty_flag);
 		}
 	}
 	else
 	{
-		log_print(LOG_WARNING, "Mozilla Cache Version 2: Failed to open the index file with the error code %lu.", GetLastError());
+		log_warning("Mozilla Cache Version 2: Could not read the header from the index file.");
 	}
 
 	Find_Mozilla_2_Files_Params params = {};
@@ -1547,14 +1541,12 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Mozilla Cache Version 2: Failed to create the intermediate file in the temporary exporter directory. No files will be exported from this cache.");
+		log_error("Mozilla Cache Version 2: Failed to create the intermediate file in the temporary exporter directory.");
 	}
 
 	unlock_arena(arena);
-	clear_arena(arena);
-
-	exporter->browser_name = NULL;
-	exporter->browser_profile = NULL;
 
 	safe_close_handle(&params.temporary_file_handle);
+
+	reset_temporary_exporter_members(exporter);
 }

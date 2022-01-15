@@ -55,7 +55,7 @@ BEGIN_FILE_GROUP Cabinet
 
 END
 
-BEGIN_FILE_GROUP GZIP
+BEGIN_FILE_GROUP Gzip
 
 	BEGIN_FILE_SIGNATURES
 		1F 8B
@@ -139,6 +139,23 @@ BEGIN_FILE_GROUP ZIP
 
 	BEGIN_FILE_EXTENSIONS
 		zip
+	END
+
+END
+
+BEGIN_FILE_GROUP Zlib
+
+	BEGIN_FILE_SIGNATURES
+		; Assumes 0x78 as the first byte (DEFLATE with a 32K window).
+
+		; No compression (level 0)
+		78 01
+		; Best speed (level 1-5)
+		78 5E
+		; Default compression (level 6)
+		78 9C
+		; Best compression (level 7-9)
+		78 DA
 	END
 
 END

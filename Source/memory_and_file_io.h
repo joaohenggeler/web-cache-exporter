@@ -31,15 +31,21 @@ const Arena NULL_ARENA = {};
 
 bool create_arena(Arena* arena, size_t total_size);
 void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size);
+void* aligned_push_arena_64(Arena* arena, u64 push_size, size_t alignment_size);
 void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alignment_size, const void* data, size_t data_size);
 #define push_arena(arena, push_size, Type) ((Type*) aligned_push_arena(arena, push_size, __alignof(Type)))
 #define push_and_copy_to_arena(arena, push_size, Type, data, data_size) ((Type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(Type), data, data_size))
 TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy);
 f32 get_used_arena_capacity(Arena* arena);
+u32 get_arena_file_buffer_size(Arena* arena, HANDLE file_handle);
+u32 get_arena_chunk_buffer_size(Arena* arena, size_t min_size);
 void lock_arena(Arena* arena);
 void unlock_arena(Arena* arena);
 void clear_arena(Arena* arena);
 bool destroy_arena(Arena* arena);
+
+// Used to simulate the behavior of malloc() or calloc() (properly aligned for any type) when using aligned_push_arena() or read_entire_file().
+const size_t MAX_SCALAR_ALIGNMENT_SIZE = 16;
 
 /*
 	>>>>>>>>>>>>>>>>>>>>
@@ -57,8 +63,12 @@ bool destroy_arena(Arena* arena);
 //
 // @Parameters:
 // 1. value - The value to align.
-// 2. alignment - The alignment size in bytes. This value must be a power of two.
-#define ALIGN_UP(value, alignment) ( ( (value) + ((alignment) - 1) ) & ~((alignment) - 1) )
+// 2. alignment_size - The alignment size in bytes. This value must be a power of two.
+#define ALIGN_UP(value, alignment_size) ( ( (value) + ((alignment_size) - 1) ) & ~((alignment_size) - 1) )
+#define ALIGN_OFFSET(value, alignment_size) (ALIGN_UP(value, alignment_size) - (value))
+
+#define IS_POINTER_ALIGNED_TO_SIZE(pointer, alignment_size) ( ((uintptr_t) (pointer)) % (alignment_size) == 0 )
+#define IS_POINTER_ALIGNED_TO_TYPE(pointer, Type) IS_POINTER_ALIGNED_TO_SIZE(pointer, __alignof(Type))
 
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
@@ -109,7 +119,9 @@ struct Dos_Date_Time
 
 const size_t MAX_FORMATTED_DATE_TIME_CHARS = 32;
 bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string);
+bool format_filetime_date_time(u64 value, TCHAR* formatted_string);
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string);
+bool format_dos_date_time(u32 value, TCHAR* formatted_string);
 bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string);
 
 /*
@@ -135,8 +147,8 @@ bool strings_are_equal(const wchar_t* str_1, const wchar_t* str_2, bool optional
 bool strings_are_at_most_equal(const char* str_1, const char* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
 bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_t max_num_chars, bool optional_case_insensitive = false);
 
-bool string_starts_with(const char* str, const char* prefix, bool optional_case_insensitive = false);
-bool string_starts_with(const wchar_t* str, const wchar_t* prefix, bool optional_case_insensitive = false);
+bool string_begins_with(const char* str, const char* prefix, bool optional_case_insensitive = false);
+bool string_begins_with(const wchar_t* str, const wchar_t* prefix, bool optional_case_insensitive = false);
 
 bool string_ends_with(const TCHAR* str, const TCHAR* suffix, bool optional_case_insensitive = false);
 
@@ -240,6 +252,7 @@ const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(TCHAR);
 
 bool filenames_are_equal(const TCHAR* filename_1, const TCHAR* filename_2);
+bool filename_ends_with(const TCHAR* filename, const TCHAR* suffix);
 TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
 TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components);
 int count_path_components(const TCHAR* path);
@@ -328,9 +341,8 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 bool create_empty_file(const TCHAR* file_path, bool overwrite);
 
 void* memory_map_entire_file(HANDLE file_handle, u64* file_size_result, bool optional_read_only = true);
-void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only = true);
 
-void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator = false, size_t optional_alignment_size = 0);
+void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_treat_as_text = false);
 
 bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
 						bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
@@ -338,10 +350,13 @@ bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_re
 bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
 						bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
 
+bool read_first_file_bytes(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read,
+							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
+
 bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes = false, u32* optional_result_num_bytes_read = NULL);
 
-bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* optional_result_num_bytes_written = NULL);
+bool write_to_file(HANDLE file_handle, const void* data, u32 num_bytes_to_write, u32* optional_result_num_bytes_written = NULL);
 
 bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 num_bytes_to_copy, u64 file_offset, HANDLE destination_file_handle);
 bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_bytes_to_copy, u64 file_offset, const TCHAR* destination_file_path, bool overwrite);
@@ -349,6 +364,9 @@ bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_byt
 bool empty_file(HANDLE file_handle);
 
 TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path);
+
+bool decompress_gzip_zlib_deflate_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code);
+bool decompress_brotli_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, T(key_name), T(value_name), value_data, value_data_size)
@@ -374,15 +392,19 @@ enum File_Info_Type
 };
 
 // An array that maps the previous values to ANSI strings.
-const char* const FILE_INFO_TYPE_TO_STRING[NUM_FILE_INFO_TYPES] =
+const char* const FILE_INFO_TYPE_TO_STRING[] =
 {
 	"Comments", "InternalName", "ProductName",
 	"CompanyName", "LegalCopyright", "ProductVersion",
 	"FileDescription", "LegalTrademarks", "PrivateBuild",
 	"FileVersion", "OriginalFilename", "SpecialBuild"
 };
+_STATIC_ASSERT(_countof(FILE_INFO_TYPE_TO_STRING) == NUM_FILE_INFO_TYPES);
 
 bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type info_type, TCHAR** result_info);
+
+extern bool GLOBAL_LOG_ENABLED;
+extern bool GLOBAL_CONSOLE_ENABLED;
 
 // The types of log lines in the global log file.
 // See: tchar_log_print().
@@ -398,17 +420,23 @@ enum Log_Type
 };
 
 // An array that maps the previous values to TCHAR strings. These strings will appear at the beginning of every log line.
-const TCHAR* const LOG_TYPE_TO_STRING[NUM_LOG_TYPES] = {T(""), T("[INFO] "), T("[WARNING] "), T("[ERROR] "), T("[BUILD_DEBUG] ")};
+const TCHAR* const LOG_TYPE_TO_STRING[] = {T(""), T("[INFO] "), T("[WARNING] "), T("[ERROR] "), T("[DEBUG] ")};
+_STATIC_ASSERT(_countof(LOG_TYPE_TO_STRING) == NUM_LOG_TYPES);
 
 bool create_log_file(const TCHAR* log_file_path);
 void close_log_file(void);
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
-#define log_print(log_type, string_format, ...) tchar_log_print(log_type, T(string_format), __VA_ARGS__)
-#define log_print_newline() log_print(LOG_NONE, "")
+#define log_print(log_type, string_format, ...) if(GLOBAL_LOG_ENABLED) tchar_log_print(log_type, T(string_format), __VA_ARGS__)
+
+#define log_newline() log_print(LOG_NONE, "")
+#define log_info(string_format, ...) log_print(LOG_INFO, string_format, __VA_ARGS__)
+#define log_warning(string_format, ...) log_print(LOG_WARNING, string_format, __VA_ARGS__)
+#define log_error(string_format, ...) log_print(LOG_ERROR, string_format, __VA_ARGS__)
+
 #ifdef BUILD_DEBUG
-	#define debug_log_print(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
+	#define log_debug(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
 #else
-	#define debug_log_print(...)
+	#define log_debug(...)
 #endif
 
 // Writes a formatted TCHAR string to the standard output stream. This string will be followed by two newline characters.
@@ -417,7 +445,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 // 1. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
 // strings (narrow ANSI or wide UTF-16 depending on the build target).
 // 2. ... - Zero or more arguments to be inserted in the format string.
-#define console_print(string_format, ...) _tprintf(T(string_format) T("\n\n"), __VA_ARGS__)
+#define console_print(string_format, ...) if(GLOBAL_CONSOLE_ENABLED) _tprintf(T(string_format) T("\n\n"), __VA_ARGS__)
 
 /*
 	Format Specifiers For Printf Functions:
@@ -498,7 +526,8 @@ enum Csv_Type
 	CSV_CACHE_ORIGIN,
 	CSV_CACHE_VERSION,
 
-	// Set automatically:
+	// Always set automatically:
+	CSV_DECOMPRESSED_FILE_SIZE,
 	CSV_LOCATION_ON_CACHE,
 	CSV_LOCATION_ON_DISK,
 	CSV_MISSING_FILE,
@@ -528,7 +557,7 @@ enum Csv_Type
 
 // An array that maps the previous values to UTF-8 strings. Used to write the columns' names directly to the CSV file
 // (which uses UTF-8 as the character encoding). This project's source files are stored in UTF-8.
-const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
+const char* const CSV_TYPE_TO_UTF_8_STRING[] =
 {
 	"None",
 	
@@ -538,6 +567,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Response", "Server", "Cache Control", "Pragma", "Content Type", "Content Length", "Content Range", "Content Encoding",
 	"Cache Origin", "Cache Version",
 	
+	"Decompressed File Size",
 	"Location On Cache", "Location On Disk", "Missing File",
 	"Location In Output", "Copy Error", "Exporter Warning",
 	"Custom File Group", "Custom URL Group", "SHA-256",
@@ -546,6 +576,7 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[NUM_CSV_TYPES] =
 	"Director File Type", "Xtra Description", "Xtra Version",
 	"Codebase IP", "Version"
 };
+_STATIC_ASSERT(_countof(CSV_TYPE_TO_UTF_8_STRING) == NUM_CSV_TYPES);
 
 // A helper structure used to write values to the CSV file. The 'value' member is the ANSI or UTF-16 string to write, and
 // 'utf_16_value' an intermediary variable that is used to convert the string to UTF-8.
@@ -557,8 +588,8 @@ struct Csv_Entry
 };
 
 bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle);
-void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_types, size_t num_columns);
-void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, size_t num_columns);
+void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_types, int num_columns);
+void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, int num_columns);
 
 // Retrieves the address of a function from a loaded library and sets a given variable to this value.
 //
@@ -577,12 +608,12 @@ do\
 	}\
 	else\
 	{\
-		log_print(LOG_ERROR, "Get Function Address: Failed to retrieve the function address for '%hs' with the error code %lu.", function_name, GetLastError());\
+		log_error("Get Function Address: Failed to retrieve the function address for '%hs' with the error code %lu.", function_name, GetLastError());\
 	}\
 } while(false, false)
 
 // Define custom error codes that are passed to SetLastError(). This is only done for functions that mix Windows errors (e.g. copying a file) with their
-// own error conditions (e.g. failed to resolve a naming collision). See: copy_file_using_url_directory_structure().
+// own error conditions (e.g. failed to resolve a naming collision). See: functions with the @GetLastError annotation.
 // @Docs: "Bit 29 is reserved for application-defined error codes; no system error code has this bit set." - SetLastError - Win32 API Reference.
 #define CUSTOM_WIN32_ERROR_CODE(n) ( (1 << 28) | (n) )
 enum Custom_Error_Code

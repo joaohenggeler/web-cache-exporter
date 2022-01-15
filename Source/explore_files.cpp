@@ -18,7 +18,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
-static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
+static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Called every time a file is found in the specified directory and subdirectories. Used to export every file.
 //
@@ -27,9 +27,6 @@ static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 {
-	TCHAR* filename = callback_info->object_name;
-	TCHAR* full_file_path = callback_info->object_path;
-
 	Csv_Entry csv_row[] =
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
@@ -42,8 +39,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
 	Exporter_Params params = {};
-	params.copy_source_path = full_file_path;
-	params.filename = filename;
+	params.copy_source_path = callback_info->object_path;
 	params.file_info = callback_info;
 
 	export_cache_entry(exporter, csv_row, &params);
@@ -60,13 +56,13 @@ static TRAVERSE_DIRECTORY_CALLBACK(explore_files_callback)
 // @Returns: Nothing.
 void export_explored_files(Exporter* exporter)
 {
-	console_print("Exploring and exporting the files from '%s'...", exporter->cache_path);
+	console_print("Exploring the files in '%s'...", exporter->cache_path);
 
 	initialize_cache_exporter(exporter, CACHE_EXPLORE, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
-		log_print(LOG_INFO, "Explore Files: Exporting the files from '%s'.", exporter->cache_path);
+		log_info("Explore Files: Exploring the files in '%s'.", exporter->cache_path);
 		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, explore_files_callback, exporter);
-		log_print(LOG_INFO, "Explore Files: Finished exporting the files.");
+		log_info("Explore Files: Finished exploring the files.");
 	}
 	terminate_cache_exporter(exporter);
 }

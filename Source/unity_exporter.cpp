@@ -41,7 +41,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
 
-static const size_t CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
+static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
 
 // Entry point for the Unity Web Player's cache exporter. This function will determine where to look for the cache before
 // processing its contents.
@@ -67,11 +67,11 @@ void export_default_or_specific_unity_cache(Exporter* exporter)
 			PathCombine(exporter->cache_path, unity_appdata_path, T("Unity\\WebPlayer\\Cache"));
 		}
 
-		log_print(LOG_INFO, "Unity Web Player: Exporting the cache from '%s'.", exporter->cache_path);
+		log_info("Unity Web Player: Exporting the cache from '%s'.", exporter->cache_path);
 		
 		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_unity_cache_files_callback, exporter);
 		
-		log_print(LOG_INFO, "Unity Web Player: Finished exporting the cache.");
+		log_info("Unity Web Player: Finished exporting the cache.");
 	}
 	terminate_cache_exporter(exporter);
 }
@@ -94,8 +94,8 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 		return true;
 	}
 
-	TCHAR* full_file_path = callback_info->object_path;
-	TCHAR* short_location_on_cache = skip_to_last_path_components(full_file_path, 3);
+	TCHAR* full_location_on_cache = callback_info->object_path;
+	TCHAR* short_location_on_cache = skip_to_last_path_components(full_location_on_cache, 3);
 	{
 		TCHAR copy_subdirectory[MAX_PATH_CHARS] = T("");
 		PathCombine(copy_subdirectory, short_location_on_cache, T(".."));
@@ -146,7 +146,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Unity Web Player: Failed to open the metadata file '%s'. No additional information about this file will be extracted.", metadata_file_path);
+			log_warning("Unity Web Player: Could not retrieve additional metadata.");
 		}
 	}
 
@@ -160,8 +160,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_unity_cache_files_callback)
 	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter_Params params = {};
-	params.copy_source_path = full_file_path;
-	params.filename = filename;
+	params.copy_source_path = full_location_on_cache;
 	params.short_location_on_cache = short_location_on_cache;
 	params.file_info = callback_info;
 

@@ -4,9 +4,6 @@
 // see http://create.stephan-brumme.com/disclaimer.html
 //
 
-// (2021-02-01): The original file was modified to disable the following warnings.
-#pragma warning(disable : 4244 4530 4995)
-
 #include "sha256.h"
 
 // big endian architectures need #define __BYTE_ORDER __BIG_ENDIAN

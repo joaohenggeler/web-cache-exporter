@@ -8,12 +8,12 @@
 *.py text
 *.md text
 
-LICENSE text
-
 *.bat text eol=crlf
 *.rc text eol=crlf
-*.txt text eol=crlf
 *.group text eol=crlf
+version.txt text eol=crlf
+readme_body.txt text eol=crlf
+LICENSE text eol=crlf
 
 *.png binary
 *.ico binary

@@ -1,13 +1,22 @@
 #include "web_cache_exporter.h"
 #include "memory_and_file_io.h"
 
-// @Dependencies: Headers for third party libraries:
+// @Dependencies: Headers for third-party libraries:
 
 // "Portable C++ Hashing Library" by Stephan Brumme.
 #pragma warning(push)
 #pragma warning(disable : 4244 4530 4995)
-	#include "sha256.h"
+	// It might seem a little weird to import the source file itself, but it works for
+	// this simple case and it allows us to supress any warnings without having to
+	// modify it.
+	#include "SHA-256/sha256.cpp"
 #pragma warning(pop)
+
+// "Zlib" by Jean-loup Gailly and Mark Adler.
+#include "Zlib/zlib.h"
+
+// "Brotli" by Google.
+#include "brotli/decode.h"
 
 /*
 	This file defines functions for memory management, file I/O (including creating and writing to the log and CSV files), date time
@@ -87,9 +96,14 @@ bool create_arena(Arena* arena, size_t total_size)
 	#endif
 
 	bool success = arena->available_memory != NULL;
+	
+	if(!success)
+	{
+		log_error("Create Arena: Failed to allocate %Iu bytes with the error code %lu.", total_size, GetLastError());
+	}
+
 	arena->used_size = 0;
 	arena->total_size = (success) ? (total_size) : (0);
-
 	arena->num_locks = 0;
 
 	#ifdef BUILD_DEBUG
@@ -98,11 +112,6 @@ bool create_arena(Arena* arena, size_t total_size)
 			FillMemory(arena->available_memory, arena->total_size, DEBUG_ARENA_DEALLOCATED_VALUE);
 		}
 	#endif
-
-	if(!success)
-	{
-		log_print(LOG_ERROR, "Create Arena: Failed to allocate %Iu bytes with the error code %lu.", total_size, GetLastError());
-	}
 
 	return success;
 }
@@ -128,40 +137,41 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 {
 	if(arena->available_memory == NULL)
 	{
-		log_print(LOG_ERROR, "Aligned Push Arena: Failed to push %Iu bytes since no memory was previously allocated.", push_size);
+		log_error("Aligned Push Arena: Failed to push %Iu bytes since no memory was previously allocated.", push_size);
 		return NULL;
 	}
 
 	if(alignment_size == 0)
 	{
-		log_print(LOG_ERROR, "Aligned Push Arena: Failed to push %Iu bytes since the alignment size is zero.", push_size);
+		log_error("Aligned Push Arena: Failed to push %Iu bytes since the alignment size is zero.", push_size);
 		_ASSERT(false);
 		return NULL;
 	}
 
-	void* misaligned_address = arena->available_memory;
-	void* aligned_address = misaligned_address;
+	void* aligned_address = arena->available_memory;
+	size_t alignment_offset = ALIGN_OFFSET((uintptr_t) arena->available_memory, alignment_size);
+
 	if(alignment_size > 1)
 	{
 		if(IS_POWER_OF_TWO(alignment_size))
 		{
-			aligned_address = (void*) ALIGN_UP((uintptr_t) misaligned_address, alignment_size);
+			aligned_address = advance_bytes(arena->available_memory, alignment_offset);
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Aligned Push Arena: Failed to align the memory address since the alignment size %Iu is not a power of two.", alignment_size);
+			log_error("Aligned Push Arena: Failed to align the memory address since the alignment size %Iu is not a power of two.", alignment_size);
 			_ASSERT(false);
 			return NULL;
 		}
 	}
 	
-	size_t aligned_push_size = push_size + pointer_difference(aligned_address, misaligned_address);
+	size_t aligned_push_size = push_size + alignment_offset;
 	_ASSERT(push_size <= aligned_push_size);
-	_ASSERT(((uintptr_t) aligned_address) % alignment_size == 0);
-	
+	_ASSERT(IS_POINTER_ALIGNED_TO_SIZE(aligned_address, alignment_size));
+
 	if(arena->used_size + aligned_push_size > arena->total_size)
 	{
-		log_print(LOG_ERROR, "Aligned Push Arena: Ran out of memory. Pushing %Iu more bytes to %Iu would exceed the total size of %Iu bytes.", aligned_push_size, arena->used_size, arena->total_size);
+		log_error("Aligned Push Arena: Ran out of memory. Pushing %Iu more bytes to %Iu would exceed the total size of %Iu bytes.", aligned_push_size, arena->used_size, arena->total_size);
 		_ASSERT(false);
 		return NULL;
 	}
@@ -176,18 +186,42 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 	// Keep track of the maximum used size starting at a certain value. This gives us an idea of how
 	// much memory each cache type and Windows version uses before clearing the arena.
 	#ifdef BUILD_DEBUG
-		const size_t MAX_USED_SIZE_INCREMENT = kilobytes_to_bytes(128);
-		static size_t max_used_size_marker = MAX_USED_SIZE_INCREMENT;
+		static size_t max_used_size_marker = kilobytes_to_bytes(256);
 		
 		if(arena->used_size > max_used_size_marker)
 		{
 			size_t previous_marker_size = max_used_size_marker;
-			max_used_size_marker += MAX_USED_SIZE_INCREMENT;
-			debug_log_print("Aligned Push Arena: Moved the maximum used size marker from %Iu to %Iu after pushing %Iu bytes. The arena is now at %.2f%% used capacity.", previous_marker_size, max_used_size_marker, aligned_push_size, get_used_arena_capacity(arena));
+			max_used_size_marker += max_used_size_marker / 2;
+			log_debug("Aligned Push Arena: Moved the maximum used size marker from %Iu to %Iu after pushing %Iu bytes. The arena is now at %.2f%% used capacity.", previous_marker_size, max_used_size_marker, aligned_push_size, get_used_arena_capacity(arena));
 		}
 	#endif
 
 	return aligned_address;
+}
+
+// Behaves like aligned_push_arena() but always takes a 64-bit push size. This function has to be called directly and does
+// not have any convenience macro.
+//
+// @Parameters: See aligned_push_arena().
+//
+// @Returns: See aligned_push_arena().
+void* aligned_push_arena_64(Arena* arena, u64 push_size, size_t alignment_size)
+{
+	void* result = aligned_push_arena(arena, 0, alignment_size);
+	
+	// This is a silly way to be able to push more than 4 GB even in 32-bit builds but it works for now.
+	for(u64 i = 0; i < push_size / ULONG_MAX; ++i)
+	{
+		if(push_arena(arena, ULONG_MAX, u8) == NULL)
+		{
+			result = NULL;
+			break;
+		}
+	}	
+	
+	if(push_arena(arena, (u32) (push_size % ULONG_MAX), u8) == NULL) result = NULL;
+
+	return result;
 }
 
 // Behaves like aligned_push_arena() but also copies a given amount of bytes from one memory location to the arena's memory.
@@ -201,7 +235,7 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 {
 	if(data_size > push_size)
 	{
-		log_print(LOG_ERROR, "Aligned Push And Copy To Arena: Attempted to copy %Iu bytes from %p while only pushing %Iu bytes.", data_size, data, push_size);
+		log_error("Aligned Push And Copy To Arena: Attempted to copy %Iu bytes from %p while only pushing %Iu bytes.", data_size, data, push_size);
 		_ASSERT(false);
 		return NULL;
 	}
@@ -240,6 +274,50 @@ f32 get_used_arena_capacity(Arena* arena)
 	return ((f32) arena->used_size) / arena->total_size * 100;
 }
 
+// Retrieves an appropriate buffer size that may be pushed into the arena for processing a given file.
+//
+// This value has the following properties:
+// - Fits small enough files into memory, avoiding fragmentation when allocating multiple buffers.
+// - Allows reading large files in chunks whose size doesn't cause any problems when calling ReadFile().
+// - Always greater than zero. For empty files or full arenas, a size of one byte is returned. For the
+// first case, calling ReadFile() will let us know we finished reading the file. For the second case,
+// calling push_arena() will return NULL.
+//
+// @Parameters:
+// 1. arena - The Arena structure whose remaining available size is used to determine the result.
+// 2. file_handle - The file whose size is used to determine the result.
+//
+// @Returns: The appropriate file buffer size for the given arena in bytes.
+u32 get_arena_file_buffer_size(Arena* arena, HANDLE file_handle)
+{
+	// This should be kept at around a quarter of the arena's remaining size for operations like
+	// decompressing files, where we have one quarter for the file buffer (worst case), one half
+	// for the decompressed data, and the remaining quarter for a third-party library's requested
+	// memory.
+	size_t remaining_arena_size = arena->total_size - arena->used_size;
+	u32 max_size = (u32) MIN(remaining_arena_size / 4, megabytes_to_bytes(50));
+	u64 file_size = 0;
+	if(!get_file_size(file_handle, &file_size)) file_size = ULONG_MAX;
+	u32 buffer_size = (u32) MIN(file_size, (u64) max_size);
+	return MAX(buffer_size, 1);
+}
+
+// Retrieves an appropriate buffer size that may be pushed into the arena for processing a chunk of data.
+//
+// See get_arena_file_buffer_size() for more details.
+//
+// @Parameters:
+// 1. arena - The Arena structure whose remaining available size is used to determine the result.
+// 2. min_size - The minimum desired size used to determine the result.
+//
+// @Returns: The appropriate chunk buffer size for the given arena in byte
+u32 get_arena_chunk_buffer_size(Arena* arena, size_t min_size)
+{
+	size_t remaining_arena_size = arena->total_size - arena->used_size;
+	u32 chunk_size = (u32) MAX(remaining_arena_size / 4, min_size);
+	return MAX(chunk_size, 1);
+}
+
 // Adds a new lock to the arena. A lock marks the currently used size and prevents clear_arena() from clearing any of
 // this memory. The arena keeps track of these locked regions by using a stack that holds at most MAX_NUM_ARENA_LOCKS
 // locks. This operation is reversed using unlock_arena(). For example:
@@ -268,7 +346,7 @@ void lock_arena(Arena* arena)
 {
 	if(arena->available_memory == NULL)
 	{
-		log_print(LOG_ERROR, "Lock Arena: Failed to lock the arena since no memory was previously allocated.");
+		log_error("Lock Arena: Failed to lock the arena since no memory was previously allocated.");
 		return;
 	}
 
@@ -279,7 +357,7 @@ void lock_arena(Arena* arena)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Lock Arena: Ran out of lock slots in the arena.");
+		log_error("Lock Arena: Ran out of lock slots in the arena.");
 		_ASSERT(false);
 	}
 }
@@ -295,7 +373,7 @@ void unlock_arena(Arena* arena)
 {
 	if(arena->available_memory == NULL)
 	{
-		log_print(LOG_ERROR, "Unlock Arena: Failed to unlock the arena since no memory was previously allocated.");
+		log_error("Unlock Arena: Failed to unlock the arena since no memory was previously allocated.");
 		return;
 	}
 
@@ -306,7 +384,7 @@ void unlock_arena(Arena* arena)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Unlock Arena: Attempted to unlock an arena without any previously locked sizes.");
+		log_error("Unlock Arena: Attempted to unlock an arena without any previously locked sizes.");
 		_ASSERT(false);
 	}
 }
@@ -324,7 +402,7 @@ void clear_arena(Arena* arena)
 {
 	if(arena->available_memory == NULL)
 	{
-		log_print(LOG_ERROR, "Clear Arena: Failed to clear the arena since no memory was previously allocated.");
+		log_error("Clear Arena: Failed to clear the arena since no memory was previously allocated.");
 		return;
 	}
 
@@ -589,11 +667,24 @@ bool format_filetime_date_time(FILETIME date_time, TCHAR* formatted_string)
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Format Filetime Date Time: Failed to format the FILETIME date time (high = %lu, low = %lu) with the error code %lu..", date_time.dwHighDateTime, date_time.dwLowDateTime, GetLastError());
+		log_error("Format Filetime Date Time: Failed to format the FILETIME date time (high = %lu, low = %lu) with the error code %lu.", date_time.dwHighDateTime, date_time.dwLowDateTime, GetLastError());
 		*formatted_string = T('\0');
 	}
 
 	return success;
+}
+
+bool format_filetime_date_time(u64 value, TCHAR* formatted_string)
+{
+	u32 high_value = 0;
+	u32 low_value = 0;
+	separate_u64_into_high_and_low_u32s(value, &high_value, &low_value);
+	
+	FILETIME date_time = {};
+	date_time.dwHighDateTime = high_value;
+	date_time.dwLowDateTime = low_value;
+
+	return format_filetime_date_time(date_time, formatted_string);
 }
 
 bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
@@ -610,11 +701,18 @@ bool format_dos_date_time(Dos_Date_Time date_time, TCHAR* formatted_string)
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Format Dos Date Time: Failed to format the DOS date time (date = %I32u, time = %I32u) with the error code %lu..", date_time.date, date_time.time, GetLastError());
+		log_error("Format Dos Date Time: Failed to format the DOS date time (date = %I32u, time = %I32u) with the error code %lu.", date_time.date, date_time.time, GetLastError());
 		*formatted_string = T('\0');
 	}
 
 	return success;
+}
+
+bool format_dos_date_time(u32 value, TCHAR* formatted_string)
+{
+	Dos_Date_Time date_time = {};
+	separate_u32_into_high_and_low_u16s(value, &(date_time.time), &(date_time.date));
+	return format_dos_date_time(date_time, formatted_string);
 }
 
 bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string)
@@ -631,7 +729,7 @@ bool format_time64_t_date_time(__time64_t date_time, TCHAR* formatted_string)
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Format Time64_t: Failed to format the time64_t date time (time = %I64u) with the error code %d.", date_time, errno);
+		log_error("Format Time64_t: Failed to format the time64_t date time (time = %I64u) with the error code %d.", date_time, errno);
 		*formatted_string = T('\0');
 	}
 
@@ -754,13 +852,13 @@ bool strings_are_at_most_equal(const wchar_t* str_1, const wchar_t* str_2, size_
 // This value defaults to false.
 //
 // @Returns: True if the string begins with that prefix. Otherwise, false.
-bool string_starts_with(const char* str, const char* prefix, bool optional_case_insensitive)
+bool string_begins_with(const char* str, const char* prefix, bool optional_case_insensitive)
 {
 	if(optional_case_insensitive) 	return _strnicmp(str, prefix, string_length(prefix)) == 0;
 	else 							return strncmp(str, prefix, string_length(prefix)) == 0;
 }
 
-bool string_starts_with(const wchar_t* str, const wchar_t* prefix, bool optional_case_insensitive)
+bool string_begins_with(const wchar_t* str, const wchar_t* prefix, bool optional_case_insensitive)
 {
 	if(optional_case_insensitive) 	return _wcsnicmp(str, prefix, string_length(prefix)) == 0;
 	else 							return wcsncmp(str, prefix, string_length(prefix)) == 0;
@@ -935,7 +1033,7 @@ static bool convert_hexadecimal_char_to_integer(TCHAR hex_char, u8* result_integ
 	else
 	{
 		success = false;
-		log_print(LOG_ERROR, "Convert Hexadecimal Character To Integer: The character '%c' (%hhd) cannot be converted into an integer.", hex_char, (char) hex_char);
+		log_error("Convert Hexadecimal Character To Integer: The character '%c' (%hhd) cannot be converted into an integer.", hex_char, (char) hex_char);
 	}
 
 	return success;
@@ -999,7 +1097,7 @@ TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary
 
 	if(num_chars_required_utf_16 == 0)
 	{
-		log_print(LOG_ERROR, "Convert Code Page String To Tchar: Failed to determine the number of characters required to convert the code page %I32u string '%hs' into a UTF-16 string with the error code %lu.", code_page, string, GetLastError());
+		log_error("Convert Code Page String To Tchar: Failed to determine the number of characters required to convert the code page %I32u string '%hs' into a UTF-16 string with the error code %lu.", code_page, string, GetLastError());
 		return NULL;
 	}
 
@@ -1014,7 +1112,7 @@ TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary
 
 	if(MultiByteToWideChar(code_page, 0, string, -1, utf_16_string, num_chars_required_utf_16) == 0)
 	{
-		log_print(LOG_ERROR, "Convert Code Page String To Tchar: Failed to convert the code page %I32u string '%hs' into a UTF-16 string with the error code %lu.", code_page, string, GetLastError());
+		log_error("Convert Code Page String To Tchar: Failed to convert the code page %I32u string '%hs' into a UTF-16 string with the error code %lu.", code_page, string, GetLastError());
 		return NULL;
 	}
 
@@ -1069,7 +1167,7 @@ TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string
 		
 		if(size_required_ansi == 0)
 		{
-			log_print(LOG_ERROR, "Convert Utf-16 String To Tchar: Failed to determine the size required to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			log_error("Convert Utf-16 String To Tchar: Failed to determine the size required to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
 			return NULL;
 		}
 
@@ -1077,7 +1175,7 @@ TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string
 		
 		if(WideCharToMultiByte(CP_UTF8, 0, utf_16_string, -1, ansi_string, size_required_ansi, NULL, NULL) == 0)
 		{
-			log_print(LOG_ERROR, "Convert Utf-16 String To Tchar: Failed to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
+			log_error("Convert Utf-16 String To Tchar: Failed to convert the UTF-16 string '%ls' into an ANSI string with the error code %lu.", utf_16_string, GetLastError());
 			return NULL;
 		}
 
@@ -1199,7 +1297,7 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 
 	if(scheme == NULL || string_is_empty(scheme) || string_is_empty(remaining_url))
 	{
-		log_print(LOG_WARNING, "Partition Url: Missing the scheme in '%s'.", original_url);
+		log_warning("Partition Url: Missing the scheme in '%s'.", original_url);
 		return false;
 	}
 
@@ -1254,7 +1352,7 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 			else
 			{
 				// For cases like "scheme://". Note that "scheme:///" is allowed, and results in an empty host and path.
-				log_print(LOG_WARNING, "Partition Url: Found authority identifier but missing the value itself in '%s'.", original_url);
+				log_warning("Partition Url: Found authority identifier but missing the value itself in '%s'.", original_url);
 				return false;
 			}
 		}
@@ -1346,7 +1444,7 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 			{
 				// If the percent sign isn't followed by two characters or if the characters
 				// don't represent a valid hexadecimal value.
-				log_print(LOG_WARNING, "Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
+				log_warning("Decode Url: Found an invalid percent-encoded character while decoding the URL. The remaining encoded URL is '%s'.", url);
 				break;
 			}
 		}
@@ -1369,7 +1467,7 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 
 	if(tchar_url == NULL)
 	{
-		log_print(LOG_ERROR, "Decode Url: Failed to convert the decoded URL from UTF-8 to an ANSI or UTF-16 string: '%s'.", original_url);
+		log_error("Decode Url: Failed to convert the decoded URL from UTF-8 to an ANSI or UTF-16 string: '%s'.", original_url);
 		// It's possible that converting the decoded UTF-8 URL to the current active code page on Windows 98/ME is not possible
 		// without losing data (since it can't represent every character used in the specific Unicode string).
 		//
@@ -1662,7 +1760,8 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 			}
 			else
 			{
-				log_print(LOG_WARNING, "Parse Cache Headers: Could not separate the header line into a key and value pair.");
+				_ASSERT(!string_is_empty(split_fields->strings[0]));
+				log_warning("Parse Http Headers: Could not separate the header line '%hs' into a key and value pair.", split_fields->strings[0]);
 			}
 
 		}
@@ -1690,6 +1789,19 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 bool filenames_are_equal(const TCHAR* filename_1, const TCHAR* filename_2)
 {
 	return strings_are_equal(filename_1, filename_2, true);
+}
+
+// Checks if a filename ends with a given suffix (e.g. a file extension). This comparison is case insensitive as it assumes
+// that the current file system is case insensitive. See filenames_are_equal().
+//
+// @Parameters:
+// 1. filename - The filename to check.
+// 2. suffix - The suffix string to use.
+//
+// @Returns: True if the filename ends with that suffix. Otherwise, false.
+bool filename_ends_with(const TCHAR* filename, const TCHAR* suffix)
+{
+	return string_ends_with(filename, suffix, true);
 }
 
 // Skips to the file extension in a path. This function considers the substring after the last period character
@@ -1857,6 +1969,8 @@ TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 // - get_full_path_name(2 or 3), which copies the output to another buffer.
 // - get_full_path_name(1), which copies the output to the same buffer.
 //
+// @GetLastError
+//
 // @Parameters:
 // 1. path - The specified path to make absolute.
 // 2. result_full_path - The buffer which receives the absolute path.
@@ -1891,6 +2005,8 @@ bool get_full_path_name(TCHAR* result_full_path)
 // - Windows 2000 through 10: version 5.0 or older.
 // E.g. This function fails if you use CSIDL_LOCAL_APPDATA (available starting with version 5.0) in the Windows 98/ME builds.
 //
+// @GetLastError
+//
 // @Parameters:
 // 1. csidl - The CSIDL that identifies the special folder.
 // 2. result_path - The buffer which receives the absolute path to the special folder. This buffer must be at least MAX_PATH_CHARS
@@ -1915,18 +2031,18 @@ bool get_special_folder_path(int csidl, TCHAR* result_path)
 // 1. path - The path to modify.
 //
 // @Returns: Nothing.
-static DWORD MAXIMUM_COMPONENT_LENGTH = 0;
+static DWORD GLOBAL_MAXIMUM_COMPONENT_LENGTH = 0;
 void truncate_path_components(TCHAR* path)
 {
 	TCHAR* component_begin = path;
 	bool is_first_char = true;
 
-	if(MAXIMUM_COMPONENT_LENGTH == 0)
+	if(GLOBAL_MAXIMUM_COMPONENT_LENGTH == 0)
 	{
-		if(GetVolumeInformationA(NULL, NULL, 0, NULL, &MAXIMUM_COMPONENT_LENGTH, NULL, NULL, 0) == FALSE)
+		if(GetVolumeInformationA(NULL, NULL, 0, NULL, &GLOBAL_MAXIMUM_COMPONENT_LENGTH, NULL, NULL, 0) == FALSE)
 		{
-			MAXIMUM_COMPONENT_LENGTH = 255;
-			log_print(LOG_WARNING, "Truncate Path Components: Failed to get the maximum component length with the error code %lu. This value will be set to %lu.", GetLastError(), MAXIMUM_COMPONENT_LENGTH);	
+			GLOBAL_MAXIMUM_COMPONENT_LENGTH = 255;
+			log_warning("Truncate Path Components: Failed to get the maximum component length with the error code %lu. This value will be set to %lu.", GetLastError(), GLOBAL_MAXIMUM_COMPONENT_LENGTH);	
 		}
 	}
 
@@ -1945,13 +2061,13 @@ void truncate_path_components(TCHAR* path)
 
 			component_begin = component_end + 1;
 
-			if(num_component_chars > MAXIMUM_COMPONENT_LENGTH)
+			if(num_component_chars > GLOBAL_MAXIMUM_COMPONENT_LENGTH)
 			{
 				// "C:\Path\<255 chars>123\ABC" -> "C:\Path\<255 chars>\ABC"
 				//          ^ begin       ^ end
 				// "C:\Path\ABC\<255 chars>123" -> "C:\Path\ABC\<255 chars>"
 				//              ^ begin       ^ end
-				size_t num_chars_over_limit = num_component_chars - MAXIMUM_COMPONENT_LENGTH;
+				size_t num_chars_over_limit = num_component_chars - GLOBAL_MAXIMUM_COMPONENT_LENGTH;
 				MoveMemory(component_end - num_chars_over_limit, component_end, string_size(component_end));
 				component_begin -= num_chars_over_limit;
 			}
@@ -2027,7 +2143,7 @@ void correct_reserved_path_components(TCHAR* path)
 											compare_reserved_names);
 			if(search_result != NULL)
 			{
-				log_print(LOG_WARNING, "Correct Reserved Path Components: Found a path component that uses a reserved name: '%s'.", component_begin);
+				log_warning("Correct Reserved Path Components: Found a path component that uses a reserved name: '%s'.", component_begin);
 				*component_begin = T('_');
 			}
 
@@ -2052,6 +2168,8 @@ void correct_reserved_path_components(TCHAR* path)
 
 // Creates or opens a file or I/O device. This function is essentially a convenience wrapper for using CreateFile() in Windows 98 to Windows 10.
 //
+// @GetLastError
+//
 // @Parameters: See CreateFile() in the Win32 API Reference:
 // - https://web.archive.org/web/20030210222137/http://msdn.microsoft.com/library/en-us/fileio/base/createfile.asp
 // - https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea
@@ -2067,8 +2185,9 @@ HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode,
 	// - "Windows 95/98/Me: The hTemplateFile parameter must be NULL. If you supply a handle, the call fails and GetLastError returns ERROR_NOT_SUPPORTED."
 
 	#ifdef BUILD_9X
-		// Remove the unsupported flags for Windows 98 and ME.
-		flags_and_attributes &= ~FILE_SHARE_DELETE;
+		// Remove the unsupported flags for Windows 98/ME so CreateFile() doesn't fail with the error
+		// code 87 (ERROR_INVALID_PARAMETER).
+		shared_mode &= ~FILE_SHARE_DELETE;
 		flags_and_attributes &= ~FILE_FLAG_BACKUP_SEMANTICS;
 	#endif
 
@@ -2076,6 +2195,8 @@ HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode,
 }
 
 // Creates a handle for a directory.
+//
+// @GetLastError
 //
 // @Compatibility: Windows 2000 to 10 only.
 //
@@ -2182,6 +2303,8 @@ bool does_directory_exist(const TCHAR* directory_path)
 
 // Determines the size in bytes of a file from its handle.
 //
+// @GetLastError
+//
 // @Parameters:
 // 1. file_handle - The handle of the file whose size is of interest.
 // 2. result_file_size - The resulting file size in bytes.
@@ -2189,21 +2312,26 @@ bool does_directory_exist(const TCHAR* directory_path)
 // @Returns: True if the function succeeds. Otherwise, it returns false and the file size is not modified.
 bool get_file_size(HANDLE file_handle, u64* result_file_size)
 {
+	*result_file_size = 0;
 	#ifdef BUILD_9X
 		DWORD file_size_high = 0;
 		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
 		bool success = !( (file_size_low == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR) );
 		if(success) *result_file_size = combine_high_and_low_u32s_into_u64(file_size_high, file_size_low);
+		else log_error("Get File Size: Failed to get the file size with the error code %lu.", GetLastError());
 		return success;
 	#else
 		LARGE_INTEGER file_size = {};
 		bool success = GetFileSizeEx(file_handle, &file_size) != FALSE;
 		if(success) *result_file_size = file_size.QuadPart;
+		else log_error("Get File Size: Failed to get the file size with the error code %lu.", GetLastError());
 		return success;
 	#endif
 }
 
 // Determines the size in bytes of a file from its path.
+//
+// @GetLastError
 //
 // @Parameters:
 // 1. file_path - The path to the file.
@@ -2212,6 +2340,7 @@ bool get_file_size(HANDLE file_handle, u64* result_file_size)
 // @Returns: True if the function succeeds. Otherwise, it returns false and the file size is not modified.
 bool get_file_size(const TCHAR* file_path, u64* result_file_size)
 {
+	*result_file_size = 0;
 	if(file_path == NULL) return false;
 
 	bool success = false;
@@ -2226,7 +2355,7 @@ bool get_file_size(const TCHAR* file_path, u64* result_file_size)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Get File Size: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+		log_error("Get File Size: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
 	}
 
 	return success;
@@ -2240,12 +2369,14 @@ bool get_file_size(const TCHAR* file_path, u64* result_file_size)
 // @Returns: Nothing.
 void safe_close_handle(HANDLE* handle)
 {
+	DWORD previous_error_code = GetLastError();
 	if(*handle != INVALID_HANDLE_VALUE && *handle != NULL)
 	{
 		CloseHandle(*handle);
 	}
 
 	*handle = INVALID_HANDLE_VALUE;
+	SetLastError(previous_error_code);
 }
 
 // Closes a file search handle and sets its value to INVALID_HANDLE_VALUE.
@@ -2256,12 +2387,14 @@ void safe_close_handle(HANDLE* handle)
 // @Returns: Nothing.
 void safe_find_close(HANDLE* search_handle)
 {
+	DWORD previous_error_code = GetLastError();
 	if(*search_handle != INVALID_HANDLE_VALUE && *search_handle != NULL)
 	{
 		FindClose(*search_handle);
 	}
 
 	*search_handle = INVALID_HANDLE_VALUE;
+	SetLastError(previous_error_code);
 }
 
 // Unmaps a mapped view of a file and sets its value to NULL.
@@ -2274,15 +2407,17 @@ void safe_unmap_view_of_file(void** base_address)
 {
 	if(*base_address != NULL)
 	{
+		DWORD previous_error_code = GetLastError();
 		UnmapViewOfFile(*base_address);
 		*base_address = NULL;
 		#ifdef BUILD_DEBUG
 			DEBUG_MEMORY_MAPPING_BASE_ADDRESS = retreat_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 		#endif
+		SetLastError(previous_error_code);
 	}
 	else
 	{
-		log_print(LOG_WARNING, "Safe Unmap View Of File: Attempted to unmap an invalid address.");
+		log_warning("Safe Unmap View Of File: Attempted to unmap an invalid address.");
 	}
 }
 
@@ -2482,7 +2617,7 @@ Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory
 
 	if(result->num_objects != params.expected_num_objects)
 	{
-		log_print(LOG_WARNING, "Find Objects In Directory: Found %d objects when %d were expected in the directory '%s'.", result->num_objects, params.expected_num_objects, directory_path);
+		log_warning("Find Objects In Directory: Found %d objects when %d were expected in the directory '%s'.", result->num_objects, params.expected_num_objects, directory_path);
 	}
 
 	return result;
@@ -2522,7 +2657,7 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 
 	if(!get_full_path_name(path_to_create, path, MAX_CREATE_DIRECTORY_PATH_CHARS))
 	{
-		log_print(LOG_ERROR, "Create Directory: Failed to create the directory in '%s' because its fully qualified path could not be determined with the error code %lu.", path_to_create, GetLastError());
+		log_error("Create Directory: Failed to create the directory in '%s' because its fully qualified path could not be determined with the error code %lu.", path_to_create, GetLastError());
 		return false;
 	}
 
@@ -2550,11 +2685,11 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 				while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS && does_file_exist(path))
 				{
 					++num_naming_collisions;
-					log_print(LOG_INFO, "Create Directory: Resolving file naming collision number %I32u for the directory in '%s'.", num_naming_collisions, path);
+					log_info("Create Directory: Resolving file naming collision number %I32u for the directory in '%s'.", num_naming_collisions, path);
 
 					if(num_naming_collisions == 0)
 					{
-						log_print(LOG_ERROR, "Create Directory: Wrapped around the number of naming collisions for the directory '%s'. This directory will not be created.", path);
+						log_error("Create Directory: Wrapped around the number of naming collisions for the directory '%s'. This directory will not be created.", path);
 						collision_resolution_success = false;
 						break;
 					}
@@ -2565,7 +2700,7 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 
 					if(!naming_success)
 					{
-						log_print(LOG_ERROR, "Create Directory: Failed to resolve the file naming collision %I32u for the directory '%s'. This directory will not be created.", num_naming_collisions, path);
+						log_error("Create Directory: Failed to resolve the file naming collision %I32u for the directory '%s'. This directory will not be created.", num_naming_collisions, path);
 						collision_resolution_success = false;
 						break;
 					}
@@ -2587,7 +2722,7 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Create Directory: Failed to create the directory while trying to resolve the file name collision for '%s' with the error code %lu.", path, GetLastError());
+						log_error("Create Directory: Failed to create the directory while trying to resolve the file name collision for '%s' with the error code %lu.", path, GetLastError());
 						collision_resolution_success = false;
 						break;
 					}
@@ -2614,7 +2749,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 {
 	if(string_is_empty(directory_path))
 	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory since its path was empty.");
+		log_error("Delete Directory: Failed to delete the directory since its path was empty.");
 		return false;
 	}
 
@@ -2622,7 +2757,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	TCHAR path_to_delete[MAX_PATH_CHARS + 1] = T("");
 	if(!get_full_path_name(directory_path, path_to_delete))
 	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' since its fully qualified path could not be determined with the error code %lu.", directory_path, GetLastError());
+		log_error("Delete Directory: Failed to delete the directory '%s' since its fully qualified path could not be determined with the error code %lu.", directory_path, GetLastError());
 		return false;
 	}
 
@@ -2640,7 +2775,7 @@ bool delete_directory_and_contents(const TCHAR* directory_path)
 	int error_code = SHFileOperation(&file_operation);
 	if(error_code != 0)
 	{
-		log_print(LOG_ERROR, "Delete Directory: Failed to delete the directory '%s' and its contents with error code %d.", directory_path, error_code);
+		log_error("Delete Directory: Failed to delete the directory '%s' and its contents with error code %d.", directory_path, error_code);
 	}
 
 	return error_code == 0;
@@ -2663,10 +2798,12 @@ bool create_temporary_directory(const TCHAR* base_temporary_path, TCHAR* result_
 	u32 unique_id = GetTickCount();
 	do
 	{
-		create_success = GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, unique_id, result_directory_path) != 0
-						&& CreateDirectory(result_directory_path, NULL) != FALSE;
+		create_success = (GetTempFileName(base_temporary_path, TEMPORARY_NAME_PREFIX, unique_id, result_directory_path) != 0)
+					  && (CreateDirectory(result_directory_path, NULL) != FALSE);
 		++unique_id;
 	} while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS);
+
+	if(!create_success) log_error("Create Temporary Directory: Failed to create a directory in '%s' with error code %lu.", base_temporary_path, GetLastError());
 
 	return create_success;
 }
@@ -2755,12 +2892,12 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 
 					if(mapped_memory == NULL)
 					{
-						log_print(LOG_ERROR, "Memory Map Entire File: Failed to map a view of the file with the error code %lu.", GetLastError());
+						log_error("Memory Map Entire File: Failed to map a view of the file with the error code %lu.", GetLastError());
 					}
 				}
 				else
 				{
-					log_print(LOG_ERROR, "Memory Map Entire File: Failed to create the file mapping with the error code %lu.", GetLastError());
+					log_error("Memory Map Entire File: Failed to create the file mapping with the error code %lu.", GetLastError());
 				}
 
 				// About CloseHandle() and UnmapViewOfFile():
@@ -2769,52 +2906,17 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Memory Map Entire File: Failed to create a file mapping since the file is empty.");
+				log_error("Memory Map Entire File: Failed to create a file mapping since the file is empty.");
 			}
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Memory Map Entire File: Failed to get the file's size with the error code %lu.", GetLastError());
+			log_error("Memory Map Entire File: Failed to get the file's size with the error code %lu.", GetLastError());
 		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Memory Map Entire File: Failed to map the entire file into memory since the file handle is invalid.");
-	}
-
-	return mapped_memory;
-}
-
-// Behaves like memory_map_entire_file(2) but takes the file's path instead of its handle. This handle is instead returned
-// along with the memory mapping's address and file size, and is created with exclusive access.
-//
-// @Parameters: In addition to the previous ones, this function also takes the following parameters:
-// 1. file_path - The path of the file to map into memory.
-// 2. result_file_handle - The address of a variable that receives the handle of the memory mapped file.
-// 
-// @Returns: See memory_map_entire_file(2). In addition to using the safe_unmap_view_of_file() function to unmap this memory,
-// the resulting file handle should also be closed with safe_close_handle().
-void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle, u64* result_file_size, bool optional_read_only)
-{
-	void* mapped_memory = NULL;
-	*result_file_size = 0;
-
-	// @Docs:
-	// PAGE_READONLY - "The file specified must have been created with the GENERIC_READ access right."
-	// PAGE_WRITECOPY - "The files specified must have been created with the GENERIC_READ and GENERIC_WRITE access rights."
-	// - CreateFileMapping - Win32 API Reference.
-	DWORD desired_access = (optional_read_only) ? (GENERIC_READ) : (GENERIC_READ | GENERIC_WRITE);
-	HANDLE file_handle = create_handle(file_path, desired_access, 0, OPEN_EXISTING, 0);
-
-	*result_file_handle = file_handle;
-
-	if(file_handle != INVALID_HANDLE_VALUE)
-	{
-		mapped_memory = memory_map_entire_file(file_handle, result_file_size, optional_read_only);
-	}
-	else
-	{
-		log_print(LOG_ERROR, "Memory Map Entire File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+		log_error("Memory Map Entire File: Failed to map the entire file into memory since the file handle is invalid.");
 	}
 
 	return mapped_memory;
@@ -2827,81 +2929,85 @@ void* memory_map_entire_file(const TCHAR* file_path, HANDLE* result_file_handle,
 // 2. file_path - The path of the file to read.
 // 3. result_file_size - The resulting file size in bytes.
 //
-// 4. optional_add_null_terminator - An optional parameter that specifies whether to add a null terminator to the end of the
-// file's contents. This value defaults to false. This is useful when reading text data from a file since this function does
-// not distinguish between text and binary data. If set to true, this function will actually add two zero bytes to represent
-// a null terminator in UTF-16. This is done for convenience since it allows us to read text encoded using UTF-8 or UTF-16.
+// 4. optional_treat_as_text - An optional parameter that specifies whether to treat the data as text. If set to true,
+// the resulting pointer is aligned to wchar_t and two zero bytes are added to the end. Otherwise, the data is aligned
+// to MAX_SCALAR_ALIGNMENT_SIZE. This is done for convenience since it allows us to read text encoded using UTF-8 or UTF-16,
+// or binary data that can then be cast to some structure. This value defaults to false.
 //
-// 5. optional_alignment_size - An optional parameter that specifies the alignment size in bytes used to align the resulting
-// address. This value defaults to zero, which tells the function to align it to the current page size. This was done so this
-// function's behavior was the same as memory_map_entire_file(). If some other value is used, it must be a power of two.
-// 
-// @Returns: True if all of the file's contents were read successfully. Otherwise, false.
-void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_add_null_terminator, size_t optional_alignment_size)
+// @Returns: A pointer to the file's contents if it was read successfully. Otherwise, NULL.
+void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_size, bool optional_treat_as_text)
 {
-	void* read_file = NULL;
+	void* file_contents = NULL;
 	*result_file_size = 0;
 
 	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0);
 
-	if(file_handle != INVALID_HANDLE_VALUE)
+	if(file_handle != INVALID_HANDLE_VALUE && get_file_size(file_handle, result_file_size))
 	{
-		const u32 FILE_BUFFER_SIZE = 65536;
-		_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
-		
-		void* file_buffer = push_arena(arena, FILE_BUFFER_SIZE, u8);
+		// These optional extra NUL bytes should not be added to the resulting file size.
+		size_t alignment_size = (optional_treat_as_text) ? (__alignof(wchar_t)) : (MAX_SCALAR_ALIGNMENT_SIZE);
+		u64 file_contents_size = (optional_treat_as_text) ? (*result_file_size + sizeof(wchar_t)) : (*result_file_size);
+		u32 file_buffer_size = get_arena_file_buffer_size(arena, file_handle);
 
-		if(optional_alignment_size == 0)
+		lock_arena(arena);
+		file_contents = aligned_push_arena_64(arena, file_contents_size, alignment_size);
+
+		if(file_contents != NULL)
 		{
-			SYSTEM_INFO system_info = {};
-			GetSystemInfo(&system_info);
-			optional_alignment_size = system_info.dwPageSize;
-		}
-		_ASSERT(IS_POWER_OF_TWO(optional_alignment_size));
-
-		read_file = aligned_push_arena(arena, 0, optional_alignment_size);
-		
-		bool reached_end_of_file = false;
-		do
-		{
-			DWORD num_bytes_read = 0;
-			bool read_success = ReadFile(file_handle, file_buffer, FILE_BUFFER_SIZE, &num_bytes_read, NULL) != FALSE;
-
-			if(read_success)
+			void* file_cursor = file_contents;
+			u64 total_bytes_read = 0;
+			bool reached_end_of_file = false;
+			
+			do
 			{
-				if(num_bytes_read > 0)
+				// We only want to read at most the file size we determined earlier. This calculation
+				// reads the file in chunks (if it's too big) or in a single pass (if it's small, which
+				// is usually the case). ReadFile() would fail if we asked it to read the maximum amount
+				// possible.
+				u32 num_bytes_to_read = (u32) MIN(*result_file_size - total_bytes_read, (u64) file_buffer_size);
+				u32 num_bytes_read = 0;
+
+				if(read_file_chunk(file_handle, file_cursor, num_bytes_to_read, total_bytes_read, true, &num_bytes_read))
 				{
-					push_and_copy_to_arena(arena, num_bytes_read, u8, file_buffer, num_bytes_read);
-					*result_file_size += num_bytes_read;
+					if(num_bytes_read > 0)
+					{
+						file_cursor = advance_bytes(file_cursor, (u32) num_bytes_read);
+						total_bytes_read += num_bytes_read;
+					}
+					else
+					{
+						reached_end_of_file = true;
+						// Note that the allocated memory is initialized to zero so we don't need to
+						// handle the optional null terminator explicitly.
+					}
 				}
 				else
 				{
+					log_error("Read Entire File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes of %I64u.", file_path, GetLastError(), total_bytes_read, *result_file_size);
 					reached_end_of_file = true;
-
-					if(optional_add_null_terminator)
-					{
-						push_and_copy_to_arena(arena, sizeof(wchar_t), u8, L"\0", sizeof(wchar_t));
-						// These extra bytes are not added to the resulting file size.
-					}
+					file_contents = NULL;
+					file_cursor = NULL;
+					clear_arena(arena);
 				}
-			}
-			else
-			{
-				reached_end_of_file = true;
-				read_file = NULL;
-				log_print(LOG_ERROR, "Read Entire File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes until now.", file_path, GetLastError(), *result_file_size);
-			}
 
-		} while(!reached_end_of_file);
-		
+				_ASSERT(total_bytes_read <= *result_file_size);
+
+			} while(!reached_end_of_file);
+		}
+		else
+		{
+			log_error("Read Entire File: Failed to allocate the %I64u bytes required to read the entirety of '%s' into memory.", file_path, file_contents_size);
+		}
+
+		unlock_arena(arena);
 		safe_close_handle(&file_handle);
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Read Entire File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+		log_error("Read Entire File: Failed to get the file handle and size for '%s' with the error code %lu.", file_path, GetLastError());
 	}
-
-	return read_file;
+	
+	return file_contents;
 }
 
 // Reads a given number of bytes at a specific offset from a file.
@@ -2916,15 +3022,22 @@ void* read_entire_file(Arena* arena, const TCHAR* file_path, u64* result_file_si
 // the ones requested. This value defaults to false.
 // 6. optional_result_num_bytes_read - An optional parameter that receives number of bytes read. This value defaults to NULL.
 // 
-// @Returns: True if the file's contents were read successfully. Otherwise, false.
+// @Returns: True if the file's contents were read successfully. Otherwise, false. Reading zero bytes always succeeds.
 // This function fails under the following conditions:
-// 1. The requested number of bytes is zero.
-// 2. The file handle is invalid.
-// 3. It read fewer bytes than the specified value and optional_allow_reading_fewer_bytes is false or not specified.
+// 1. The file handle is invalid.
+// 2. It read fewer bytes than the specified value and optional_allow_reading_fewer_bytes is false or not specified.
 bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
 						bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
-	if(file_handle == INVALID_HANDLE_VALUE || num_bytes_to_read == 0) return false;
+	if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = 0;
+
+	if(file_handle == INVALID_HANDLE_VALUE)
+	{
+		log_error("Read File Chunk: Attempted to read %I32u bytes at %I64u from an invalid file handle.", num_bytes_to_read, file_offset);
+		return false;
+	}
+
+	if(num_bytes_to_read == 0) return true;
 
 	OVERLAPPED overlapped = {};
 	u32 offset_high = 0;
@@ -2934,10 +3047,18 @@ bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_re
 	overlapped.Offset = offset_low;
 
 	DWORD num_bytes_read = 0;
-	bool success = (ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, &overlapped) != FALSE)
-				&& ( (num_bytes_read == num_bytes_to_read) || optional_allow_reading_fewer_bytes );
+	bool success = (ReadFile(file_handle, file_buffer, num_bytes_to_read, &num_bytes_read, &overlapped) != FALSE) || (GetLastError() == ERROR_HANDLE_EOF);
 
-	if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = num_bytes_read;
+	if(success)
+	{
+		success = (num_bytes_read == num_bytes_to_read) || optional_allow_reading_fewer_bytes;
+		if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = num_bytes_read;
+	}
+	else
+	{
+		log_error("Read File Chunk: Failed to read %I32u bytes at %I64u with the error code %lu.", num_bytes_to_read, file_offset, GetLastError());
+	}
+
 	return success;
 }
 
@@ -2950,51 +3071,77 @@ bool read_file_chunk(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_re
 bool read_file_chunk(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read, u64 file_offset,
 						bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
-	if(file_path == NULL || string_is_empty(file_path) || num_bytes_to_read == 0) return false;
+	if(optional_result_num_bytes_read != NULL) *optional_result_num_bytes_read = 0;
+	if(num_bytes_to_read == 0) return true;
 
 	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
 	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 	
-	bool success = read_file_chunk(	file_handle, file_buffer, num_bytes_to_read, file_offset,
-									optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
+	bool success = false;
+	if(file_handle != INVALID_HANDLE_VALUE)
+	{
+		success = read_file_chunk(file_handle, file_buffer, num_bytes_to_read, file_offset, optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
+		safe_close_handle(&file_handle);
+	}
+	else
+	{
+		log_error("Read File Chunk: Failed to read %I32u bytes at %I64u from the file '%s' with the error code %lu", num_bytes_to_read, file_offset, file_path, GetLastError());
+	}
 	
-	safe_close_handle(&file_handle);
 	return success;
 }
 
 // Reads a given number of bytes from the beginning of a file. This function behaves like read_file_chunk() with an offset of zero.
 //
+// This function can be used with either the file's handle or its path as the first argument.
+//
 // @Parameters: See read_file_chunk().
 // 
 // @Returns: See read_file_chunk().
+bool read_first_file_bytes(	HANDLE file_handle, void* file_buffer, u32 num_bytes_to_read,
+							bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
+{
+	return read_file_chunk(file_handle, file_buffer, num_bytes_to_read, 0, optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
+}
+
 bool read_first_file_bytes(	const TCHAR* file_path, void* file_buffer, u32 num_bytes_to_read,
 							bool optional_allow_reading_fewer_bytes, u32* optional_result_num_bytes_read)
 {
 	return read_file_chunk(file_path, file_buffer, num_bytes_to_read, 0, optional_allow_reading_fewer_bytes, optional_result_num_bytes_read);
 }
 
-// Writes a given amount of bytes at a memory location to a file.
+// Writes a given amount of bytes to a file.
 //
 // @Parameters:
 // 1. file_handle - The handle of the file where the data will be written to.
-// 2. data - The memory location of the data to write.
-// 3. data_size - The size of the data in bytes.
+// 2. data - The data to write.
+// 3. num_bytes_to_write - The amount of data to write in bytes.
 // 4. optional_result_num_bytes_written - An optional parameter that receives number of bytes written. This value defaults to NULL.
 //
-// @Returns: True if the data was written successfully. Otherwise, false.
-bool write_to_file(HANDLE file_handle, const void* data, u32 data_size, u32* optional_result_num_bytes_written)
+// @Returns: True if the data was written successfully. Otherwise, false. Writing zero bytes always succeeds.
+bool write_to_file(HANDLE file_handle, const void* data, u32 num_bytes_to_write, u32* optional_result_num_bytes_written)
 {
+	if(optional_result_num_bytes_written != NULL) *optional_result_num_bytes_written = 0;
+
+	if(file_handle == INVALID_HANDLE_VALUE)
+	{
+		log_error("Write To File: Attempted to write %I32u bytes to an invalid file handle.", num_bytes_to_write);
+		return false;
+	}
+
+	if(num_bytes_to_write == 0) return true;
+
 	bool success = false;
 	DWORD num_bytes_written = 0;
 	
-	if(WriteFile(file_handle, data, data_size, &num_bytes_written, NULL) != FALSE)
+	if(WriteFile(file_handle, data, num_bytes_to_write, &num_bytes_written, NULL) != FALSE)
 	{
-		success = (num_bytes_written == data_size);
+		success = (num_bytes_written == num_bytes_to_write);
 		if(optional_result_num_bytes_written != NULL) *optional_result_num_bytes_written = num_bytes_written;
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Write To File: Failed to write %I32u bytes with the error code %lu.", data_size, GetLastError());
+		log_error("Write To File: Failed to write %I32u bytes with the error code %lu.", num_bytes_to_write, GetLastError());
 	}
 
 	return success;
@@ -3022,15 +3169,16 @@ bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_byt
 	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
 	HANDLE source_file_handle = create_handle(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 
-	const u32 FILE_BUFFER_SIZE = 65536;
-	_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
-
-	void* file_buffer = push_arena(arena, FILE_BUFFER_SIZE, u8);
-	u32 total_bytes_read = 0;
+	u32 file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
+	void* file_buffer = push_arena(arena, file_buffer_size, u8);
+	u64 total_bytes_read = 0;
 
 	do
 	{
-		u32 num_bytes_to_read = (u32) MIN(total_bytes_to_copy - total_bytes_read, FILE_BUFFER_SIZE);
+		// This calculation reads the file in chunks (if it's too big) or in a single pass (if it's
+		// small, which is usually the case). ReadFile() would fail if we asked it to read the maximum
+		// amount possible.
+		u32 num_bytes_to_read = (u32) MIN(total_bytes_to_copy - total_bytes_read, (u64) file_buffer_size);
 
 		u32 num_bytes_read = 0;
 		success = success 	&& read_file_chunk(source_file_handle, file_buffer, num_bytes_to_read, file_offset + total_bytes_read, false, &num_bytes_read)
@@ -3045,6 +3193,8 @@ bool copy_file_chunks(Arena* arena, const TCHAR* source_file_path, u64 total_byt
 }
 
 // Behaves like copy_file_chunks() but takes the destination file's path instead of its handle.
+//
+// @GetLastError
 //
 // @Parameters: All parameters are the same except for the last one:
 // 5. destination_file_path - The path of the destination file where the chunk will be written to.
@@ -3088,7 +3238,7 @@ bool empty_file(HANDLE file_handle)
 
 // Generates the SHA-256 hash of a file.
 //
-// @Dependencies: This function calls third party code from the Portable C++ Hashing Library.
+// @Dependencies: This function calls third-party code from the Portable C++ Hashing Library.
 //
 // @Parameters:
 // 1. arena - The Arena structure that will receive the computed hash as a hexadecimal character string.
@@ -3105,21 +3255,17 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 	HANDLE file_handle = create_handle(file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, 0);
 
 	if(file_handle != INVALID_HANDLE_VALUE)
-	{
-		const u32 FILE_BUFFER_SIZE = 65536;
-		_STATIC_ASSERT(IS_POWER_OF_TWO(FILE_BUFFER_SIZE));
-		
-		void* file_buffer = push_arena(arena, FILE_BUFFER_SIZE, u8);
+	{		
+		u32 file_buffer_size = get_arena_file_buffer_size(arena, file_handle);
+		void* file_buffer = push_arena(arena, file_buffer_size, u8);
 		u64 total_bytes_read = 0;
 		SHA256 hash_stream;
 
 		bool reached_end_of_file = false;
 		do
-		{
-			DWORD num_bytes_read = 0;
-			bool read_success = ReadFile(file_handle, file_buffer, FILE_BUFFER_SIZE, &num_bytes_read, NULL) != FALSE;
-
-			if(read_success)
+		{	
+			u32 num_bytes_read = 0;
+			if(read_file_chunk(file_handle, file_buffer, file_buffer_size, total_bytes_read, true, &num_bytes_read))
 			{
 				if(num_bytes_read > 0)
 				{
@@ -3139,7 +3285,7 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 			{
 				reached_end_of_file = true;
 				result = NULL;
-				log_print(LOG_ERROR, "Generate Sha-256 From File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes so far.", file_path, GetLastError(), total_bytes_read);
+				log_error("Generate Sha-256 From File: Failed to read a chunk of the file '%s' with the error code %lu. Read %I64u bytes so far.", file_path, GetLastError(), total_bytes_read);
 			}
 
 		} while(!reached_end_of_file);
@@ -3148,10 +3294,299 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Generate Sha-256 From File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
+		log_error("Generate Sha-256 From File: Failed to get the file handle for '%s' with the error code %lu.", file_path, GetLastError());
 	}
 
 	return result;
+}
+
+// Custom memory allocation function passed to the Zlib library.
+static voidpf zlib_alloc(voidpf opaque, uInt num_items, uInt item_size)
+{
+	Arena* arena = (Arena*) opaque;
+	void* result = aligned_push_arena(arena, num_items * item_size, MAX_SCALAR_ALIGNMENT_SIZE);
+	return (result != NULL) ? (result) : (Z_NULL);
+}
+
+// Custom memory deallocation function passed to the Zlib library.
+static void zlib_free(voidpf opaque, voidpf address)
+{
+	// Leak memory since the arena is cleared when we finish decompressing a file.
+}
+
+// Decompresses a file using the Gzip, Zlib, or raw DEFLATE compression formats.
+//
+// @Dependencies: This function calls third-party code from the Zlib library.
+//
+// @Parameters:
+// 1. arena - The Arena structure that is used as the intermediate file buffer.
+// 2. source_file_path - The path of the source file to decompress.
+// 3. destination_file_handle - The handle of the destination file where the decompressed data will be written to.
+// 4. result_error_code - The error code generated by Zlib's functions if the file cannot be decompressed.
+// 
+// @Returns: True if the file was decompressed successfully. Otherwise, false.
+bool decompress_gzip_zlib_deflate_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code)
+{
+	*result_error_code = Z_ERRNO;
+
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
+	HANDLE source_file_handle = create_handle(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN);
+
+	if(source_file_handle == INVALID_HANDLE_VALUE)
+	{
+		log_error("Decompress Gzip Zlib Deflate File: Failed to get the file handle for '%s' with the error code %lu.", source_file_path, GetLastError());
+		return false;
+	}
+
+	bool success = false;
+
+	lock_arena(arena);
+
+	u32 source_file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
+	void* source_file_buffer = push_arena(arena, source_file_buffer_size, u8);
+	
+	u32 destination_file_buffer_size = source_file_buffer_size;
+	void* destination_file_buffer = push_arena(arena, destination_file_buffer_size, u8);
+
+	const size_t file_signature_size = 2;
+	u8 file_signature[file_signature_size] = {};
+	read_first_file_bytes(source_file_handle, file_signature, file_signature_size);
+
+	// @Note: Assumes 0x78 as the first byte (DEFLATE with a 32K window) for the Zlib format.
+	bool is_gzip_or_zlib = memory_is_equal(file_signature, "\x1F\x8B", file_signature_size)
+						|| memory_is_equal(file_signature, "\x78\x01", file_signature_size)
+						|| memory_is_equal(file_signature, "\x78\x5E", file_signature_size)
+						|| memory_is_equal(file_signature, "\x78\x9C", file_signature_size)
+						|| memory_is_equal(file_signature, "\x78\xDA", file_signature_size);
+
+	// @Docs: "zlib 1.2.11 Manual"  - https://zlib.net/manual.html
+	z_stream stream = {};
+	stream.zalloc = zlib_alloc;
+	stream.zfree = zlib_free;
+	stream.opaque = arena;
+	stream.next_in = Z_NULL;
+
+	int window_bits = (is_gzip_or_zlib) ? (15 + 32) : (-15);
+	int error_code = inflateInit2(&stream, window_bits);
+
+	#define GET_ZLIB_ERROR_MESSAGE() ( (stream.msg != NULL) ? (stream.msg) : ("") )
+
+	if(error_code == Z_OK)
+	{
+		u64 total_bytes_read = 0;
+
+		do
+		{
+			u32 num_bytes_read = 0;
+			if(read_file_chunk(source_file_handle, source_file_buffer, source_file_buffer_size, total_bytes_read, true, &num_bytes_read))
+			{
+				// End of file.
+				if(num_bytes_read == 0)
+				{
+					error_code = Z_STREAM_END;
+					break;
+				}
+
+				stream.avail_in = num_bytes_read;
+				stream.next_in = (Bytef*) source_file_buffer;
+				total_bytes_read += num_bytes_read;
+			}
+			else
+			{
+				log_error("Decompress Gzip Zlib Deflate File: Failed to read a chunk from '%s' after reading %I64u bytes.", source_file_path, total_bytes_read);
+				error_code = Z_ERRNO;
+				break;
+			}
+
+			do
+			{
+				stream.avail_out = destination_file_buffer_size;
+				stream.next_out = (Bytef*) destination_file_buffer;
+				
+				error_code = inflate(&stream, Z_NO_FLUSH);
+
+				if(error_code != Z_OK && error_code != Z_STREAM_END)
+				{
+					log_error("Decompress Gzip Zlib Deflate File: Failed to decompress a chunk from '%s' after reading %I64u bytes with the error %d '%hs'.", source_file_path, total_bytes_read, error_code, GET_ZLIB_ERROR_MESSAGE());
+					goto break_outer_loop;
+				}
+
+				u32 num_bytes_to_write = destination_file_buffer_size - stream.avail_out;
+				if(!write_to_file(destination_file_handle, destination_file_buffer, num_bytes_to_write))
+				{
+					log_error("Decompress Gzip Zlib Deflate File: Failed to write a decompressed chunk from '%s' to the destination file after reading %I64u bytes.", source_file_path, total_bytes_read);
+					error_code = Z_ERRNO;
+					goto break_outer_loop;
+				}
+
+			} while(stream.avail_out == 0);
+
+		} while(error_code != Z_STREAM_END);
+
+		break_outer_loop:;
+		success = (error_code == Z_STREAM_END);
+	}
+	else
+	{
+		log_error("Decompress Gzip Zlib Deflate File: Failed to initialize the stream to decompress the file '%s' with the error %d '%hs'.", source_file_path, error_code, GET_ZLIB_ERROR_MESSAGE());
+	}
+
+	#undef GET_ZLIB_ERROR_MESSAGE
+
+	inflateEnd(&stream);
+
+	clear_arena(arena);
+	unlock_arena(arena);
+
+	safe_close_handle(&source_file_handle);
+
+	*result_error_code = error_code;
+	return success;
+}
+
+// Custom memory allocation function passed to the Brotli library.
+static void* brotli_alloc(void* opaque, size_t size)
+{
+	Arena* arena = (Arena*) opaque;
+	return aligned_push_arena(arena, size, MAX_SCALAR_ALIGNMENT_SIZE);
+}
+
+// Custom memory deallocation function passed to the Brotli library.
+static void brotli_free(void* opaque, void* address)
+{
+	// Leak memory since the arena is cleared when we finish decompressing a file.
+}
+
+// Decompresses a file using the Brotli compression format.
+//
+// @Dependencies: This function calls third-party code from the Brotli library.
+//
+// @Parameters:
+// 1. arena - The Arena structure that is used as the intermediate file buffer.
+// 2. source_file_path - The path of the source file to decompress.
+// 3. destination_file_handle - The handle of the destination file where the decompressed data will be written to.
+// 4. result_error_code - The error code generated by Brotli's functions if the file cannot be decompressed.
+// 
+// @Returns: True if the file was decompressed successfully. Otherwise, false.
+bool decompress_brotli_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code)
+{
+	*result_error_code = BROTLI_LAST_ERROR_CODE;
+
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
+	HANDLE source_file_handle = create_handle(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN);
+
+	if(source_file_handle == INVALID_HANDLE_VALUE)
+	{
+		log_error("Decompress Brotli File: Failed to get the file handle for '%s' with the error code %lu.", source_file_path, GetLastError());
+		return false;
+	}
+
+	bool success = false;
+
+	lock_arena(arena);
+
+	u32 source_file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
+	u8* source_file_buffer = push_arena(arena, source_file_buffer_size, u8);
+
+	u32 destination_file_buffer_size = source_file_buffer_size;
+	u8* destination_file_buffer = push_arena(arena, destination_file_buffer_size, u8);
+
+	// @Docs: "decode.h File Reference"  - https://brotli.org/decode.html
+	BrotliDecoderState* state = BrotliDecoderCreateInstance(brotli_alloc, brotli_free, arena);
+	
+	#define GET_BROTLI_ERROR_CODE_AND_MESSAGE() BrotliDecoderGetErrorCode(state), BrotliDecoderErrorString(BrotliDecoderGetErrorCode(state))
+
+	if(state != NULL)
+	{
+		BrotliDecoderResult decoder_result = BROTLI_DECODER_RESULT_ERROR;
+		u64 total_bytes_read = 0;
+
+		size_t available_in = source_file_buffer_size; // As input: source buffer size. As output: unused size in buffer.
+		const u8* next_in = source_file_buffer; // Next compressed byte.
+		
+		size_t available_out = destination_file_buffer_size; // As input: destination buffer size. As output: remaining size in buffer.
+		u8* next_out = destination_file_buffer; // Next decompressed byte.
+
+		do
+		{
+			u32 num_bytes_read = 0;
+			if(read_file_chunk(source_file_handle, source_file_buffer, source_file_buffer_size, total_bytes_read, true, &num_bytes_read))
+			{
+				// End of file.
+				if(num_bytes_read == 0)
+				{
+					decoder_result = BROTLI_DECODER_RESULT_SUCCESS;
+					break;
+				}
+				
+				available_in = num_bytes_read;
+				next_in = source_file_buffer;
+				total_bytes_read += num_bytes_read;
+			}
+			else
+			{
+				log_error("Decompress Brotli File: Failed to read a chunk from '%s' after reading %I64u bytes.", source_file_path, total_bytes_read);
+				break;
+			}
+
+			do
+			{	
+				decoder_result = BrotliDecoderDecompressStream(state, &available_in, &next_in, &available_out, &next_out, NULL);
+
+				if(decoder_result == BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT)
+				{
+					// Continue reading.
+					log_warning("Decompress Brolit File: More input is required to decompress the file '%s' with a source buffer size of %I32u bytes and after reading %I64u bytes.", source_file_path, source_file_buffer_size, total_bytes_read);
+					goto continue_outer_loop;
+				}
+				else if(decoder_result == BROTLI_DECODER_RESULT_ERROR)
+				{
+					log_error("Decompress Brolit File: Failed to decompress a chunk from '%s' after reading %I64u bytes with the error %d '%hs'.", source_file_path, total_bytes_read, GET_BROTLI_ERROR_CODE_AND_MESSAGE());
+					goto break_outer_loop;
+				}
+
+				_ASSERT(decoder_result == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT || decoder_result == BROTLI_DECODER_RESULT_SUCCESS);
+
+				u32 num_bytes_to_write = destination_file_buffer_size - (u32) available_out;
+				if(!write_to_file(destination_file_handle, destination_file_buffer, num_bytes_to_write))
+				{
+					log_error("Decompress Brotli File: Failed to write a decompressed chunk from '%s' to the destination file after reading %I64u bytes.", source_file_path, total_bytes_read);
+					goto break_outer_loop;
+				}
+
+				// Unlike with Zlib, we only update these values after successfully writing the decompressed data to
+				// the file since we would otherwise clobber any partially decompressed output data if the decoder
+				// required more input.
+				available_out = destination_file_buffer_size;
+				next_out = destination_file_buffer;
+
+			} while(BrotliDecoderHasMoreOutput(state) == BROTLI_TRUE);
+
+			continue_outer_loop:;
+		} while(decoder_result != BROTLI_DECODER_RESULT_SUCCESS);
+
+		break_outer_loop:;
+		success = (decoder_result == BROTLI_DECODER_RESULT_SUCCESS);
+	}
+	else
+	{
+		log_error("Decompress Brotli File: Failed to initialize the decoder state to decompress the file '%s' with the error %d '%hs'.", source_file_path, GET_BROTLI_ERROR_CODE_AND_MESSAGE());
+	}
+
+	#undef GET_BROTLI_ERROR_CODE_AND_MESSAGE
+
+	_ASSERT( (success && BrotliDecoderIsFinished(state)) || !BrotliDecoderIsFinished(state) );
+
+	*result_error_code = (int) BrotliDecoderGetErrorCode(state);
+	BrotliDecoderDestroyInstance(state);
+	state = NULL;
+
+	clear_arena(arena);
+	unlock_arena(arena);
+
+	safe_close_handle(&source_file_handle);
+
+	return success;
 }
 
 // Retrieves the data of a specified registry value of type string (REG_SZ).
@@ -3161,11 +3596,6 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 //
 // This function is usually called by using the macro query_registry(), which takes the same arguments but where key_name and
 // value_name are ANSI strings (for convenience).
-//
-// Since this function returns true on success, you can short-circuit various calls if the data you're interested in is located
-// in multiple registry keys. For example:
-// 		query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "svcVersion", ..., ...)
-// || 	query_registry(HKEY_LOCAL_MACHINE, "Software\\Microsoft\\Internet Explorer", "Version", ..., ...);
 //
 // @Parameters:
 // 1. hkey - The handle to an open registry key. This can be one of the following predefined keys:
@@ -3177,25 +3607,20 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 // 2. key_name - The name of the registry subkey to query.
 // 3. value_name - The name of the registry value to query.
 // 4. value_data - The buffer that receives the resulting string read from the registry value.
-// 5. value_data_size - The size of the buffer in bytes. Be sure that this includes the null terminator and is able to hold
-// strings of the desired type (ANSI or UTF-16).
+// 5. value_data_size - The size of the buffer in bytes. This must include the null terminator.
 // 
 // @Returns: True if the value was retrieved successfully. Otherwise, false.
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size)
 {
-	LONG error_code = ERROR_SUCCESS;
 	bool success = true;
 
 	HKEY opened_key = NULL;
-	error_code = RegOpenKeyEx(hkey, key_name, 0, KEY_QUERY_VALUE, &opened_key);
+	LONG error_code = RegOpenKeyEx(hkey, key_name, 0, KEY_QUERY_VALUE, &opened_key);
 	success = (error_code == ERROR_SUCCESS);
 
 	if(!success)
 	{
-		log_print(LOG_ERROR, "Query Registry: Failed to open the registry key '%s' with the error code %lu.", key_name, error_code);
-		// These registry functions only return this value, they don't set the last error code.
-		// We'll do it ourselves for consistent error handling when calling our function.
-		SetLastError(error_code);
+		log_error("Query Registry: Failed to open the registry key '%s' with the error code %lu.", key_name, error_code);
 		return success;
 	}
 
@@ -3209,23 +3634,27 @@ bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_n
 
 	_ASSERT(actual_value_data_size > 0);
 
-	// For now, we'll only handle simple string. Strings with expandable environment variables are skipped (REG_EXPAND_SZ).
-	if(success && (value_data_type != REG_SZ))
-	{
-		log_print(LOG_ERROR, "Query Registry: Unsupported data type %lu in registry value '%s\\%s'.", value_data_type, key_name, value_name);
-		error_code = ERROR_NOT_SUPPORTED;
-		success = false;
-	}
-
-	// According to the documentation, we need to ensure that string values are null terminated. Whoever calls this function should
-	// always guarantee that the buffer is able to hold whatever the possible string values are, including the null terminator.
-	size_t num_value_data_chars = actual_value_data_size / sizeof(TCHAR);
 	if(success)
-	{	
-		value_data[num_value_data_chars] = T('\0');
+	{
+		if(value_data_type == REG_SZ)
+		{
+			// According to the documentation, we need to ensure that string values are null terminated. Whoever calls this function should
+			// always guarantee that the buffer is able to hold whatever the possible string values are, including the null terminator.
+			size_t num_value_data_chars = actual_value_data_size / sizeof(TCHAR);
+			value_data[num_value_data_chars] = T('\0');
+		}
+		else
+		{
+			// For now, we'll only handle simple strings. Strings with expandable environment variables are skipped (REG_EXPAND_SZ).
+			log_error("Query Registry: Found the unsupported data type %lu in the registry value '%s\\%s'.", value_data_type, key_name, value_name);
+			success = false;	
+		}
+	}
+	else
+	{
+		log_error("Query Registry: Failed to query the registry key '%s' with the error code %lu.", key_name, error_code);
 	}
 
-	SetLastError(error_code);
 	return success;
 }
 
@@ -3272,7 +3701,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 				{
 					if(num_languages_and_code_pages > 1)
 					{
-						log_print(LOG_WARNING, "Get File Info: Ignoring %d language and code page info structures for the file '%s' and info type %d.", num_languages_and_code_pages - 1, full_file_path, info_type);
+						log_warning("Get File Info: Ignoring %d language and code page info structures for the file '%s' and info type %d.", num_languages_and_code_pages - 1, full_file_path, info_type);
 					}
 
 					WORD language = language_code_page_info[0].wLanguage;
@@ -3291,7 +3720,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 						{
 							if(code_page != CODE_PAGE_UTF_16_LE)
 							{
-								log_print(LOG_INFO, "Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
+								log_info("Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
 							}
 
 							// This file information was found in the info_block which is already part of our own memory arena.
@@ -3300,32 +3729,32 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 						}
 						else
 						{
-							log_print(LOG_WARNING, "Get File Info: No language and code page info for the file '%s' and info type %d.", full_file_path, info_type);
+							log_warning("Get File Info: No language and code page info for the file '%s' and info type %d.", full_file_path, info_type);
 						}
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Get File Info: Failed to query the language and code page info for the file '%s' and info type %d. The subblock query was '%s'.", full_file_path, info_type, string_subblock);
+						log_error("Get File Info: Failed to query the language and code page info for the file '%s' and info type %d. The subblock query was '%s'.", full_file_path, info_type, string_subblock);
 					}
 				}
 				else
 				{
-					log_print(LOG_WARNING, "Get File Info: No translation info found for the file '%s' and info type %d.", full_file_path, info_type);
+					log_warning("Get File Info: No translation info found for the file '%s' and info type %d.", full_file_path, info_type);
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Get File Info: Failed to query the translation info for the file '%s' and info type %d.", full_file_path, info_type);
+				log_error("Get File Info: Failed to query the translation info for the file '%s' and info type %d.", full_file_path, info_type);
 			}
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Get File Info: Failed to get the version info for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
+			log_error("Get File Info: Failed to get the version info for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
 		}
 	}
 	else
 	{
-		log_print(LOG_ERROR, "Get File Info: Failed to determine the version info size for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
+		log_error("Get File Info: Failed to determine the version info size for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
 	}
 
 	return success;
@@ -3344,7 +3773,7 @@ bool create_log_file(const TCHAR* log_file_path)
 {
 	if(GLOBAL_LOG_FILE_HANDLE != INVALID_HANDLE_VALUE)
 	{
-		log_print(LOG_ERROR, "Create Log File: Attempted to create a second log file in '%s' when the current one is still open.", log_file_path);
+		log_error("Create Log File: Attempted to create a second log file in '%s' when the current one is still open.", log_file_path);
 		return false;
 	}
 
@@ -3355,12 +3784,13 @@ bool create_log_file(const TCHAR* log_file_path)
 	
 	create_directories(full_log_directory_path);
 
-	GLOBAL_LOG_FILE_HANDLE = create_handle(log_file_path, GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH);
+	GLOBAL_LOG_FILE_HANDLE = create_handle(log_file_path, GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
+	if(GLOBAL_LOG_FILE_HANDLE == INVALID_HANDLE_VALUE) console_print("Error: Failed to create the log file with the error code %lu.", GetLastError());
 
-	return GLOBAL_LOG_FILE_HANDLE != INVALID_HANDLE_VALUE;
+	return (GLOBAL_LOG_FILE_HANDLE != INVALID_HANDLE_VALUE);
 }
 
-// Closes the global log file. After being closed, all future log_print() calls will do nothing.
+// Closes the global log file. After being closed, log_print() should no longer be called.
 //
 // @Parameters: None.
 // 
@@ -3376,7 +3806,7 @@ void close_log_file(void)
 // This function is usually called by using the macro log_print(log_type, string_format, ...), which takes the same arguments but
 // where string_format is an ANSI string (for convenience).
 //
-// Use log_print_newline() to add an empty line, and debug_log_print() to add a line of type LOG_DEBUG. This last function is only
+// Use log_newline() to add an empty line, and log_debug() to add a line of type LOG_DEBUG. This last function is only
 // called if the BUILD_DEBUG macro is defined.
 //
 // @Parameters:
@@ -3385,7 +3815,7 @@ void close_log_file(void)
 // - LOG_INFO
 // - LOG_WARNING
 // - LOG_ERROR
-// For LOG_DEBUG, use debug_log_print() instead. LOG_NONE is usually used when calling log_print_newline(), though it may be used
+// For LOG_DEBUG, use log_debug() instead. LOG_NONE is usually used when calling log_newline(), though it may be used
 // directly with log_print() in certain cases.
 // 2. string_format - The format string. Note that %hs is used for narrow ANSI strings, %ls for wide UTF-16 strings, and %s for TCHAR
 // strings (narrow ANSI or wide UTF-16 depending on the build target).
@@ -3399,6 +3829,10 @@ static const size_t MAX_CHARS_PER_LOG_WRITE = MAX_CHARS_PER_LOG_TYPE + MAX_CHARS
 
 void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 {
+	DWORD previous_error_code = GetLastError();
+
+	_ASSERT(GLOBAL_LOG_FILE_HANDLE != INVALID_HANDLE_VALUE);
+
 	TCHAR log_buffer[MAX_CHARS_PER_LOG_WRITE] = T("");
 	
 	// Add the log type identifier string to the beginning of the line.
@@ -3433,6 +3867,8 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 	StringCbLengthA(utf_8_log_buffer, sizeof(utf_8_log_buffer), &num_bytes_to_write);
 
 	write_to_file(GLOBAL_LOG_FILE_HANDLE, utf_8_log_buffer, (u32) num_bytes_to_write);
+
+	SetLastError(previous_error_code);
 }
 
 // Checks if a CSV string needs to be escaped, and returns the number of bytes that are necessary to store the escaped string
@@ -3569,14 +4005,20 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 	
 	create_directories(full_csv_directory_path);
 
-	*result_file_handle = create_handle(csv_file_path, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
+	// Normally we could just replace GENERIC_WRITE with FILE_APPEND_DATA, but that doesn't seem to be supported in
+	// Windows 98/ME since CreateFile() fails with the error code 87 (ERROR_INVALID_PARAMETER). Instead of using
+	// that parameter, we'll set the file pointer to the end of the CSV file.
+	*result_file_handle = create_handle(csv_file_path, GENERIC_WRITE, FILE_SHARE_READ, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL);
 
-	return *result_file_handle != INVALID_HANDLE_VALUE;
+	bool success = (*result_file_handle != INVALID_HANDLE_VALUE) && (SetFilePointer(*result_file_handle, 0, NULL, FILE_END) != INVALID_SET_FILE_POINTER);
+	if(!success) log_error("Create Csv File: Failed to create the CSV file '%s' with the error code %lu.", csv_file_path, GetLastError());
+	return success;
 }
 
 // Writes the header to a CSV file using UTF-8 as the character encoding. This header string is built using the Csv_Type enumeration
 // values that correspond to each column. These values will be separated by commas.
 // For example: the array {CSV_FILENAME, CSV_URL, CSV_RESPONSE} would write the string "Filename, URL, Server Response".
+//
 // This header is only added to empty CSV files. If the file already contains text, this function does nothing.
 //
 // @Parameters:
@@ -3586,17 +4028,23 @@ bool create_csv_file(const TCHAR* csv_file_path, HANDLE* result_file_handle)
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_types, size_t num_columns)
+void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_types, int num_columns)
 {
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
-		log_print(LOG_ERROR, "Csv Print Header: Attempted to add the header to a CSV file that wasn't been opened yet.");
+		log_error("Csv Print Header: Attempted to add the header to a CSV file that hasn't been opened yet.");
 		return;
 	}
 
+	u64 file_size = 0;
+	bool file_size_success = get_file_size(csv_file_handle, &file_size);
+
+	// If we couldn't get the file size, we don't want to potentially add a header to the middle of non-empty CSV file.
+	if(!file_size_success || file_size > 0) return;
+
 	// Build the final CSV line where the strings are contiguous in memory.
 	char* csv_header = push_arena(arena, 0, char);
-	for(size_t i = 0; i < num_columns; ++i)
+	for(int i = 0; i < num_columns; ++i)
 	{
 		Csv_Type type = column_types[i];
 		const char* column_name = CSV_TYPE_TO_UTF_8_STRING[type];
@@ -3636,19 +4084,19 @@ void csv_print_header(Arena* arena, HANDLE csv_file_handle, Csv_Type* column_typ
 // 4. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, size_t num_columns)
+void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_values, int num_columns)
 {
 	_ASSERT(num_columns > 0);
 
 	if(csv_file_handle == INVALID_HANDLE_VALUE)
 	{
-		log_print(LOG_ERROR, "Csv Print Row: Attempted to add the header to a CSV file that wasn't been opened yet.");
+		log_error("Csv Print Row: Attempted to add the header to a CSV file that hasn't been opened yet.");
 		return;
 	}
 
 	// First pass: escape values that require it and convert every value to UTF-16 (only necessary for ANSI strings
 	// in Windows 98 and ME).
-	for(size_t i = 0; i < num_columns; ++i)
+	for(int i = 0; i < num_columns; ++i)
 	{
 		TCHAR* value = column_values[i].value;
 		// If there's no value, use an empty string never needs escaping. This string will still be copied.
@@ -3674,13 +4122,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 				
 				if(MultiByteToWideChar(CP_ACP, 0, value, -1, utf_16_value, num_chars_required_utf_16) == 0)
 				{
-					log_print(LOG_ERROR, "Csv Print Row: Failed to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+					log_error("Csv Print Row: Failed to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu. Using an empty string instead.", value, GetLastError());
 					utf_16_value = L"";
 				}
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Csv Print Row: Failed to determine the size required to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+				log_error("Csv Print Row: Failed to determine the size required to convert the ANSI string '%hs' into a UTF-16 string with the error code %lu. Using an empty string instead.", value, GetLastError());
 			}
 
 			column_values[i].utf_16_value = utf_16_value;
@@ -3693,7 +4141,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 	// Second pass: convert every value to UTF-8 and build the final CSV line where the strings are contiguous in memory.
 	char* csv_row = push_arena(arena, 0, char);
-	for(size_t i = 0; i < num_columns; ++i)
+	for(int i = 0; i < num_columns; ++i)
 	{
 		wchar_t* value = column_values[i].utf_16_value;
 
@@ -3701,7 +4149,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 		if(size_required_utf_8 == 0)
 		{
-			log_print(LOG_ERROR, "Csv Print Row: Failed to determine the size required to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+			log_error("Csv Print Row: Failed to determine the size required to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
 			value = L"";
 			size_required_utf_8 = (int) string_size(value);
 		}
@@ -3717,7 +4165,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Csv Print Row: Failed to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+				log_error("Csv Print Row: Failed to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
 				csv_row_value[0] = '\r';
 				csv_row_value[1] = '\n';
 			}
@@ -3733,7 +4181,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 			}
 			else
 			{
-				log_print(LOG_ERROR, "Csv Print Row: Failed to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
+				log_error("Csv Print Row: Failed to convert the UTF-16 string '%ls' into a UTF-8 string with the error code %lu. Using an empty string instead.", value, GetLastError());
 				csv_row_value[0] = ',';
 			}
 		}
@@ -3791,7 +4239,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	#define NT_QUERY_SYSTEM_INFORMATION(function_name) NTSTATUS WINAPI function_name(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, PULONG ReturnLength)
 	static NT_QUERY_SYSTEM_INFORMATION(stub_nt_query_system_information)
 	{
-		log_print(LOG_WARNING, "NtQuerySystemInformation: Calling the stub version of this function.");
+		log_warning("NtQuerySystemInformation: Calling the stub version of this function.");
 		return STATUS_NOT_IMPLEMENTED;
 	}
 	typedef NT_QUERY_SYSTEM_INFORMATION(Nt_Query_System_Information);
@@ -3812,7 +4260,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		if(ntdll_library != NULL)
 		{
-			log_print(LOG_WARNING, "Load Ntdll Functions: The library was already loaded.");
+			log_warning("Load Ntdll Functions: The library was already loaded.");
 			return;
 		}
 
@@ -3823,7 +4271,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Load Ntdll Functions: Failed to load the library with error code %lu.", GetLastError());
+			log_error("Load Ntdll Functions: Failed to load the library with error code %lu.", GetLastError());
 		}
 	}
 
@@ -3839,7 +4287,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		if(ntdll_library == NULL)
 		{
-			log_print(LOG_ERROR, "Free Ntdll: Failed to free the library since it wasn't previously loaded.");
+			log_error("Free Ntdll: Failed to free the library since it wasn't previously loaded.");
 			return;
 		}
 
@@ -3850,7 +4298,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Free Ntdll: Failed to free the library with the error code %lu.", GetLastError());
+			log_error("Free Ntdll: Failed to free the library with the error code %lu.", GetLastError());
 		}
 	}
 
@@ -3862,7 +4310,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	#define GET_OVERLAPPED_RESULT_EX(function_name) BOOL WINAPI function_name(HANDLE hFile, LPOVERLAPPED lpOverlapped, LPDWORD lpNumberOfBytesTransferred, DWORD dwMilliseconds, BOOL bAlertable)
 	static GET_OVERLAPPED_RESULT_EX(stub_get_overlapped_result_ex)
 	{
-		log_print(LOG_WARNING, "GetOverlappedResultEx: Calling the stub version of this function. The timeout and alertable arguments will be ignored. These were set to %lu and %d.", dwMilliseconds, bAlertable);
+		log_warning("GetOverlappedResultEx: Calling the stub version of this function. The timeout and alertable arguments will be ignored. These were set to %lu and %d.", dwMilliseconds, bAlertable);
 		BOOL bWait = (dwMilliseconds > 0) ? (TRUE) : (FALSE);
 		return GetOverlappedResult(hFile, lpOverlapped, lpNumberOfBytesTransferred, bWait);
 	}
@@ -3884,7 +4332,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		if(kernel32_library != NULL)
 		{
-			log_print(LOG_WARNING, "Load Kernel32 Functions: The library was already loaded.");
+			log_warning("Load Kernel32 Functions: The library was already loaded.");
 			return;
 		}
 
@@ -3895,7 +4343,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Load Kernel32 Functions: Failed to load the library with error code %lu.", GetLastError());
+			log_error("Load Kernel32 Functions: Failed to load the library with error code %lu.", GetLastError());
 		}
 	}
 
@@ -3911,7 +4359,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	{
 		if(kernel32_library == NULL)
 		{
-			log_print(LOG_ERROR, "Free Kernel32: Failed to free the library since it wasn't previously loaded.");
+			log_error("Free Kernel32: Failed to free the library since it wasn't previously loaded.");
 			return;
 		}
 
@@ -3922,7 +4370,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 		else
 		{
-			log_print(LOG_ERROR, "Free Kernel32: Failed to free the library with the error code %lu.", GetLastError());
+			log_error("Free Kernel32: Failed to free the library with the error code %lu.", GetLastError());
 		}
 	}
 
@@ -3942,6 +4390,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	// 4. If it couldn't query the system for information on all opened handles.
 	static bool query_file_handle_from_file_path(Arena* arena, const wchar_t* full_file_path, HANDLE* result_file_handle)
 	{
+		bool success = false;
 		*result_file_handle = INVALID_HANDLE_VALUE;
 
 		lock_arena(arena);
@@ -3969,13 +4418,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		{
 			// Clear the previous allocated memory so we can try again with the actual size required. Remember that we locked
 			// the arena before trying to query the information.
-			clear_arena(arena);
 			FREE_IF_USED_VIRTUAL_ALLOC();
+			clear_arena(arena);
 
 			// On the next attempt, the overall size of this information may have changed (new handles could have been created),
 			// so we'll go the extra mile and use the actual size plus an extra bit.
 			handle_info_size = actual_handle_info_size + (ULONG) kilobytes_to_bytes(128);
-			log_print(LOG_WARNING, "Query File Handle: Insufficient buffer size while trying to query system information. Attempting to expand the buffer to %lu bytes.", handle_info_size);
+			log_warning("Query File Handle: Insufficient buffer size while trying to query system information. Attempting to expand the buffer to %lu bytes.", handle_info_size);
 
 			handle_info = push_arena(arena, handle_info_size, SYSTEM_HANDLE_INFORMATION);
 			if(handle_info != NULL)
@@ -3986,7 +4435,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 			else
 			{
 				// Ran out of memory in the arena to hold all the returned handle information.
-				log_print(LOG_WARNING, "Query File Handle: Ran out of memory in the arena while trying to query system information. Attempting to use VirtualAlloc to allocate %lu bytes.", handle_info_size);
+				log_warning("Query File Handle: Ran out of memory in the arena while trying to query system information. Attempting to use VirtualAlloc to allocate %lu bytes.", handle_info_size);
 
 				// Try to query the handle information again but with VirtualAlloc().
 				handle_info = (SYSTEM_HANDLE_INFORMATION*) VirtualAlloc(NULL, handle_info_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -3998,41 +4447,35 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 				else
 				{
 					// Ran out of memory in both the arena and VirtualAlloc().
-					log_print(LOG_ERROR, "Query File Handle: Could not allocate enough memory query system information. The required buffer size was %lu bytes.", handle_info_size);
+					log_error("Query File Handle: Could not allocate enough memory query system information. The required buffer size was %lu bytes.", handle_info_size);
 					break;
 				}
 			}
 		}
 
-		unlock_arena(arena);
-
 		if(!NT_SUCCESS(error_code))
 		{
-			log_print(LOG_ERROR, "Query File Handle: Failed to query system information with error code %ld.", error_code);
-			FREE_IF_USED_VIRTUAL_ALLOC();
-			return false;
+			log_error("Query File Handle: Failed to query system information with error code %ld.", error_code);
+			goto clean_up;
 		}
 
-		log_print(LOG_INFO, "Query File Handle: Processing %lu bytes of handle information.", handle_info_size);
+		log_info("Query File Handle: Processing %lu bytes of handle information.", handle_info_size);
 
 		// When we iterate over these handles, we'll want to check which one corresponds to the desired file path.
 		// To do this robustly, we'll need another handle for this file. Since the whole point of this function is
 		// getting a handle for a file that's being used by another process, we'll want to avoid asking for any
-		// access rights  that result in a sharing violation. Because of this, we'll ask for the right to read the
+		// access rights that result in a sharing violation. Because of this, we'll ask for the right to read the
 		// file's attributes.
-		HANDLE read_attributes_file_handle = CreateFileW(full_file_path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+		HANDLE read_attributes_file_handle = create_handle(full_file_path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, OPEN_EXISTING, 0);
 		if(read_attributes_file_handle == INVALID_HANDLE_VALUE)
 		{
-			log_print(LOG_ERROR, "Query File Handle: Failed to get the read attributes files handle for '%ls' with error code %lu.", full_file_path, GetLastError());
-			FREE_IF_USED_VIRTUAL_ALLOC();
-			return false;
+			log_error("Query File Handle: Failed to get the read attributes files handle for '%ls' with error code %lu.", full_file_path, GetLastError());
+			goto clean_up;
 		}
 
 		DWORD current_process_id = GetCurrentProcessId();
 		HANDLE current_process_handle = GetCurrentProcess();
 		// This pseudo handle doesn't have to be closed.
-
-		bool success = false;
 
 		for(ULONG i = 0; i < handle_info->NumberOfHandles; ++i)
 		{
@@ -4061,7 +4504,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 					success = true;
 					*result_file_handle = duplicated_file_handle;
 					safe_close_handle(&process_handle);
-					log_print(LOG_INFO, "Query File Handle: Found handle with attributes 0x%02X and granted access 0x%08X.", handle_entry.HandleAttributes, handle_entry.GrantedAccess);
+					log_info("Query File Handle: Found handle with attributes 0x%02X and granted access 0x%08X.", handle_entry.HandleAttributes, handle_entry.GrantedAccess);
 					break;
 				}
 
@@ -4073,8 +4516,11 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 		safe_close_handle(&read_attributes_file_handle);
 
+		clean_up:
 		FREE_IF_USED_VIRTUAL_ALLOC();
 		#undef FREE_IF_USED_VIRTUAL_ALLOC
+		clear_arena(arena);
+		unlock_arena(arena);
 
 		return success;
 	}
@@ -4110,17 +4556,9 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		HANDLE source_file_handle = INVALID_HANDLE_VALUE;
 		bool was_source_handle_found = query_file_handle_from_file_path(arena, copy_source_path, &source_file_handle);
 
-		clear_arena(arena);
-
 		if(was_source_handle_found)
 		{
-			HANDLE destination_file_handle = CreateFileW(	copy_destination_path,
-															GENERIC_WRITE,
-															0,
-															NULL,
-															CREATE_ALWAYS,
-															FILE_ATTRIBUTE_NORMAL,
-															NULL);
+			HANDLE destination_file_handle = create_handle(copy_destination_path, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
 
 			if(destination_file_handle != INVALID_HANDLE_VALUE)
 			{
@@ -4141,10 +4579,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 				SYSTEM_INFO system_info = {};
 				GetSystemInfo(&system_info);
 
-				const u32 DESIRED_FILE_BUFFER_SIZE = 65536;
-				_STATIC_ASSERT(IS_POWER_OF_TWO(DESIRED_FILE_BUFFER_SIZE));
-
-				u32 file_buffer_size = ALIGN_UP(DESIRED_FILE_BUFFER_SIZE, system_info.dwPageSize);
+				u32 file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
+				file_buffer_size = ALIGN_UP(file_buffer_size, system_info.dwPageSize);
 				_ASSERT(file_buffer_size % system_info.dwPageSize == 0);
 
 				void* file_buffer = aligned_push_arena(arena, file_buffer_size, system_info.dwPageSize);
@@ -4187,13 +4623,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 								else if(overlapped_result_error_code == WAIT_TIMEOUT)
 								{
 									++num_read_retry_attempts;
-									log_print(LOG_WARNING, "Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
+									log_warning("Force Copy Open File: Failed to get the overlapped result because the function timed out after %lu seconds. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", TIMEOUT_IN_SECONDS, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
 									continue;
 								}
 								else
 								{
 									++num_read_retry_attempts;
-									log_print(LOG_ERROR, "Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
+									log_error("Force Copy Open File: Failed to get the overlapped result while reading the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", copy_source_path, overlapped_result_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
 									continue;
 								}
 							}
@@ -4206,7 +4642,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 						else
 						{
 							++num_read_retry_attempts;
-							log_print(LOG_ERROR, "Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", copy_source_path, read_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
+							log_error("Force Copy Open File: Failed to read the file '%ls' with the unhandled error code %lu. Read %I64u and wrote %I64u bytes so far. Retrying read operation (attempt %I32u of %I32u).", copy_source_path, read_error_code, total_bytes_read, total_bytes_written, num_read_retry_attempts, MAX_READ_RETRY_ATTEMPTS);
 							continue;
 						}
 					}
@@ -4228,7 +4664,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 						}
 						else
 						{
-							log_print(LOG_ERROR, "Force Copy Open File: Failed to write %I32u bytes to the destination file in '%ls' with the error code %lu. Read %I64u and wrote %I64u bytes so far. This function will terminate prematurely.", num_bytes_read, copy_destination_path, GetLastError(), total_bytes_read, total_bytes_written);
+							log_error("Force Copy Open File: Failed to write %I32u bytes to the destination file in '%ls' with the error code %lu. Read %I64u and wrote %I64u bytes so far. This function will terminate prematurely.", num_bytes_read, copy_destination_path, GetLastError(), total_bytes_read, total_bytes_written);
 							break;
 						}
 
@@ -4246,17 +4682,15 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 				} while(!reached_end_of_file && num_read_retry_attempts < MAX_READ_RETRY_ATTEMPTS);
 
-				clear_arena(arena);
-
 				if(num_read_retry_attempts > 0)
 				{
 					if(reached_end_of_file)
 					{
-						log_print(LOG_WARNING, "Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
+						log_warning("Force Copy Open File: Retried read operations %I32u time(s) before reaching the end of file.", num_read_retry_attempts);
 					}
 					else
 					{
-						log_print(LOG_ERROR, "Force Copy Open File: Failed to reach the end of file after retrying the read operations %I32u times. Read %I64u and wrote %I64u bytes in total.", num_read_retry_attempts, total_bytes_read, total_bytes_written);
+						log_error("Force Copy Open File: Failed to reach the end of file after retrying the read operations %I32u times. Read %I64u and wrote %I64u bytes in total.", num_read_retry_attempts, total_bytes_read, total_bytes_written);
 					}
 				}
 
@@ -4266,7 +4700,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 				u64 file_size = 0;
 				if(copy_success && get_file_size(source_file_handle, &file_size))
 				{
-					copy_success = copy_success && (total_bytes_read == file_size);
+					copy_success = (total_bytes_read == file_size);
 				}
 			}
 
@@ -4275,6 +4709,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		
 		safe_close_handle(&source_file_handle);
 		
+		clear_arena(arena);
 		unlock_arena(arena);
 
 		return copy_success;
@@ -4303,24 +4738,24 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 
 		if( (error_code == ERROR_FILE_NOT_FOUND) || (error_code == ERROR_PATH_NOT_FOUND) )
 		{
-			log_print(LOG_ERROR, "Copy Open File: Failed to copy '%s' to '%s' since the file or path could not be found.", copy_source_path, copy_destination_path);
+			log_error("Copy Open File: Failed to copy '%s' to '%s' since the file or path could not be found.", copy_source_path, copy_destination_path);
 		}
 		else if(error_code == ERROR_SHARING_VIOLATION)
 		{
 			#ifndef BUILD_9X
-				log_print(LOG_INFO, "Copy Open File: Attempting to forcibly copy the file '%s' since its being used by another process.", copy_source_path);
+				log_info("Copy Open File: Attempting to forcibly copy the file '%s' since its being used by another process.", copy_source_path);
 				copy_success = force_copy_open_file(arena, copy_source_path, copy_destination_path);
 				if(!copy_success)
 				{
-					log_print(LOG_ERROR, "Copy Open File: Failed to forcibly copy the file '%s'.", copy_source_path);
+					log_error("Copy Open File: Failed to forcibly copy the file '%s'.", copy_source_path);
 				}
 			#else
-				log_print(LOG_ERROR, "Copy Open File: Failed to copy the file '%s' since its being used by another process.", copy_source_path);
+				log_error("Copy Open File: Failed to copy the file '%s' since its being used by another process.", copy_source_path);
 			#endif
 		}
 		else
 		{
-			log_print(LOG_INFO, "Copy Open File: Failed to copy the file '%s' normally with the error code %lu.", copy_source_path, error_code);
+			log_info("Copy Open File: Failed to copy the file '%s' normally with the error code %lu.", copy_source_path, error_code);
 		}
 	}
 
@@ -4372,16 +4807,16 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 			_ASSERT(identifier != NULL);
 			measurement->identifier = identifier;
 
-			debug_log_print("Debug Measure Time #%d [%hs]: Started time measurement.", current_measurement, measurement->identifier);
+			log_debug("Debug Measure Time #%d [%hs]: Started time measurement.", current_measurement, measurement->identifier);
 			
 			if(QueryPerformanceFrequency(&frequency) == FALSE)
 			{
-				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance frequency with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
+				log_debug("Debug Measure Time #%d [%hs]: Failed to query the performance frequency with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
 			}
 
 			if(QueryPerformanceCounter(&measurement->start_counter) == FALSE)
 			{
-				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the starting time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
+				log_debug("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the starting time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
 			}
 
 			++current_measurement;
@@ -4396,11 +4831,11 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 
 			if(QueryPerformanceCounter(&measurement->stop_counter) == FALSE)
 			{
-				debug_log_print("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the stopping time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
+				log_debug("Debug Measure Time #%d [%hs]: Failed to query the performance counter for the stopping time with the error code %lu.", current_measurement, measurement->identifier, GetLastError());
 			}
 			
 			f64 elapsed_time = (measurement->stop_counter.QuadPart - measurement->start_counter.QuadPart) / (f64) frequency.QuadPart;
-			debug_log_print("Debug Measure Time #%d [%hs]: Stopped time measurement at %.9f seconds.", current_measurement, measurement->identifier, elapsed_time);
+			log_debug("Debug Measure Time #%d [%hs]: Stopped time measurement at %.9f seconds.", current_measurement, measurement->identifier, elapsed_time);
 
 			measurement->identifier = NULL;
 		}

@@ -118,10 +118,10 @@
 
 // Define sized integers and floats. These are useful when defining tighly packed structures that represent various parts of cache
 // database file formats.
-typedef __int8 s8;
-typedef __int16 s16;
-typedef __int32 s32;
-typedef __int64 s64;
+typedef signed __int8 s8;
+typedef signed __int16 s16;
+typedef signed __int32 s32;
+typedef signed __int64 s64;
 
 typedef unsigned __int8 u8;
 typedef unsigned __int16 u16;
@@ -152,27 +152,30 @@ enum Cache_Type
 };
 
 // An array that maps the previous values to full and short names.
-const TCHAR* const CACHE_TYPE_TO_FULL_NAME[NUM_CACHE_TYPES] =
+const TCHAR* const CACHE_TYPE_TO_FULL_NAME[] =
 {
 	T("Unknown"), T("All"), T("Explore"),
 	T("Internet Explorer"), T("Mozilla"),
 	T("Flash Player"), T("Shockwave Player"), T("Java Plugin"), T("Unity Web Player")
 };
+_STATIC_ASSERT(_countof(CACHE_TYPE_TO_FULL_NAME) == NUM_CACHE_TYPES);
 
-const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[NUM_CACHE_TYPES] =
+const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[] =
 {
 	T("unknown"), T("all"), T("explore"),
 	T("ie"), T("mozilla"),
 	T("flash"), T("shockwave"), T("java"), T("unity")
 };
+_STATIC_ASSERT(_countof(CACHE_TYPE_TO_SHORT_NAME) == NUM_CACHE_TYPES);
 
 // Whether a given cache type belongs to a web plugin or not (i.e. a web browser).
-const bool IS_CACHE_TYPE_PLUGIN[NUM_CACHE_TYPES] =
+const bool IS_CACHE_TYPE_PLUGIN[] =
 {
 	false, false, false,
 	false, false,
 	true, true, true, true
 };
+_STATIC_ASSERT(_countof(IS_CACHE_TYPE_PLUGIN) == NUM_CACHE_TYPES);
 
 #include "memory_and_file_io.h"
 
@@ -213,15 +216,18 @@ struct Exporter
 
 	// The optional command line arguments.
 	bool should_copy_files;
-	bool should_create_csv;
+	bool should_create_csvs;
 	bool should_overwrite_previous_output;
-	bool should_filter_by_groups;
 	bool should_show_full_paths;
 	bool should_group_by_request_origin;
-	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
+	bool should_decompress_files;
+	bool should_delete_previous_temporary_directories;
 
+	bool should_filter_by_groups;
 	String_Array<TCHAR>* group_files_for_filtering;
-
+	
+	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
+	
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
@@ -308,6 +314,8 @@ struct Exporter
 	
 	// - The currently open CSV file.
 	HANDLE csv_file_handle;
+	// - Whether we tried to export at least one file since the exporter was initialized.
+	bool exported_at_least_one_file;
 
 	// - The identifier that's used to name the output directory.
 	// - Each cache exporter may use one or more identifiers.
@@ -315,7 +323,7 @@ struct Exporter
 	// - The types of each column as an array of length 'num_csv_columns'.
 	Csv_Type* csv_column_types;
 	// - The number of columns in the CSV file.
-	size_t num_csv_columns;
+	int num_csv_columns;
 
 	// - The number of components in the relative path containing composed of the current cache exporter's identifier and subdirectories.
 	int num_output_components;
@@ -357,7 +365,7 @@ struct Exporter_Params
 	Traversal_Object_Info* file_info;
 };
 
-void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, size_t num_columns);
+void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, int num_columns);
 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
 
@@ -365,6 +373,8 @@ void tchar_add_exporter_warning_message(Exporter* exporter, const TCHAR* string_
 #define add_exporter_warning_message(exporter, string_format, ...) tchar_add_exporter_warning_message(exporter, T(string_format), __VA_ARGS__)
 
 void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params);
+
+void reset_temporary_exporter_members(Exporter* exporter);
 
 void terminate_cache_exporter(Exporter* exporter);
 
@@ -375,7 +385,7 @@ const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 #undef _TEMPORARY_NAME_PREFIX
 #undef _TEMPORARY_NAME_SEARCH_QUERY
 
-bool create_empty_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename = NULL);
+bool create_placeholder_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename = NULL);
 bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, HANDLE* result_file_handle);
 void clear_temporary_exporter_directory(Exporter* exporter);
 void delete_all_temporary_exporter_directories(Exporter* exporter);

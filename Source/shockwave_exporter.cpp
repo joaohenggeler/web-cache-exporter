@@ -13,10 +13,24 @@
 	- 2000, XP 				C:\Documents and Settings\<Username>\Local Settings\Temp
 	- Vista, 7, 8.1, 10	 	C:\Users\<Username>\AppData\Local\Temp
 
-	The names of these cached files start with "mp", followed by at least six more characters (e.g. mpb02684.w3d).
+	The names of these cached files start with "mp", followed by at least six more characters (e.g. mpb02684.w3d). The exporter
+	will also copy any Xtras (.x32 files) in the Temporary Files directory and its subdirectories.
 
-	This exporter will also copy any Xtras (.x32 files) in the Temporary Files directory, AppData, LocalLow AppData, and their
-	subdirectories.
+	There are some other locations in the AppData and Local Low AppData directories that should be checked for cached files
+	and Xtras:
+	- 98, ME 				<AppData or Local Low AppData>\<Macromedia or Adobe>\<Shockwave Version>\<Cache Type>
+	- 2000, XP 				<AppData or Local Low AppData>\<Macromedia or Adobe>\<Shockwave Version>\<Cache Type>
+	- Vista, 7, 8.1, 10	 	<AppData or Local Low AppData>\<Macromedia or Adobe>\<Shockwave Version>\<Cache Type>
+
+	The first two identifiers represent directory names as is (e.g. C:\Users\<Username>\AppData\LocalLow\Adobe), but the other two
+	require some additional explanation:
+	- <Shockwave Version> is the directory used for the Shockwave Player version that cached the files. The actual names
+	depend on some factors (e.g. downloading compatibility component Xtras), but here are some observed names: "Shockwave Player",
+	"Shockwave Player 11", "Shockwave Player 12".
+	- <Cache Type> can be either "DswMedia" (cached files), "Prefs" (text files that could be used to store	user data locally,
+	similarly to Flash cookies), or "Xtras".
+
+	For this last cache location, we'll export everything in "DswMedia", "Xtras", and any of their subdirectories.
 
 	@SupportsCustomCacheLocations:
 	- Same Machine: Unknown if this location can be changed by the user.
@@ -44,7 +58,7 @@ static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
 	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_DIRECTOR_FILE_TYPE, CSV_XTRA_DESCRIPTION, CSV_XTRA_VERSION,
+	CSV_DIRECTOR_FILE_TYPE, CSV_XTRA_DESCRIPTION, CSV_XTRA_VERSION, CSV_XTRA_COPYRIGHT,
 	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
 	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
 };
@@ -187,8 +201,8 @@ static TCHAR* get_director_file_type_from_file_signature(const TCHAR* file_path)
 struct Find_Shockwave_Files_Params
 {
 	Exporter* exporter;
-	bool is_xtra;
-	TCHAR* location_identifier;
+	bool is_appdata_cache;
+	const TCHAR* location_identifier;
 };
 
 // Entry point for the Shockwave Player's cache exporter. This function will determine where to look for the cache before
@@ -202,6 +216,8 @@ struct Find_Shockwave_Files_Params
 static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback);
 void export_default_or_specific_shockwave_cache(Exporter* exporter)
 {
+	Arena* arena = &(exporter->temporary_arena);
+
 	console_print("Exporting the Shockwave Player's cache...");
 
 	initialize_cache_exporter(exporter, CACHE_SHOCKWAVE, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
@@ -215,35 +231,56 @@ void export_default_or_specific_shockwave_cache(Exporter* exporter)
 
 		Find_Shockwave_Files_Params file_params = {};
 		file_params.exporter = exporter;
+		file_params.is_appdata_cache = false;
 		file_params.location_identifier = T("<Temporary>");
 
-		file_params.is_xtra = false;
 		set_exporter_output_copy_subdirectory(exporter, T("Cache"));
 		traverse_directory_objects(exporter->cache_path, T("mp*"), TRAVERSE_FILES, false, find_shockwave_files_callback, &file_params);
 		
-		file_params.is_xtra = true;
 		set_exporter_output_copy_subdirectory(exporter, T("Xtras"));
 		traverse_directory_objects(exporter->cache_path, T("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);
 
 		if(exporter->is_exporting_from_default_locations)
 		{
-			#define TRAVERSE_APPDATA_XTRA_FILES(path, identifier)\
-			do\
-			{\
-				file_params.location_identifier = identifier;\
-				log_info("Shockwave Player: Exporting Xtras from '%s'.", path);\
-				\
-				PathCombine(exporter->cache_path, path, T("Macromedia"));\
-				traverse_directory_objects(exporter->cache_path, T("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);\
-				\
-				PathCombine(exporter->cache_path, path, T("Adobe"));\
-				traverse_directory_objects(exporter->cache_path, T("*.x32"), TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);\
-			} while(false, false)
+			const TCHAR* base_paths[] = {exporter->appdata_path, exporter->local_low_appdata_path};
+			const TCHAR* base_identifiers[] = {T("<AppData>"), T("<Local Low AppData>")};
+			_STATIC_ASSERT(_countof(base_paths) == _countof(base_identifiers));
 
-			TRAVERSE_APPDATA_XTRA_FILES(exporter->appdata_path, T("<AppData>"));
-			TRAVERSE_APPDATA_XTRA_FILES(exporter->local_low_appdata_path, T("<Local Low AppData>"));
+			const TCHAR* vendor_directories[] = {T("Macromedia"), T("Adobe")};
 
-			#undef TRAVERSE_APPDATA_XTRA_FILES
+			for(int i = 0; i < _countof(base_paths); ++i)
+			{
+				const TCHAR* base_path = base_paths[i];
+				if(strings_are_equal(base_path, PATH_NOT_FOUND)) continue;
+				// Local Low AppData is skipped for Windows 98 through XP.
+			
+				file_params.is_appdata_cache = true;
+				file_params.location_identifier = base_identifiers[i];
+			
+				for(int j = 0; j < _countof(vendor_directories); ++j)
+				{
+					TCHAR vendor_directory_path[MAX_PATH_CHARS] = T("");
+					PathCombine(vendor_directory_path, base_path, vendor_directories[j]);
+					Traversal_Result* version_directories = find_objects_in_directory(arena, vendor_directory_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false);
+					lock_arena(arena);
+
+					log_info("Shockwave Player: Exporting additional cached files and Xtras from '%s'.", vendor_directory_path);
+					for(int k = 0; k < version_directories->num_objects; ++k)
+					{
+						Traversal_Object_Info directory_info = version_directories->object_info[k];
+						
+						set_exporter_output_copy_subdirectory(exporter, T("Cache"));
+						PathCombine(exporter->cache_path, directory_info.object_path, T("DswMedia"));
+						traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);
+
+						set_exporter_output_copy_subdirectory(exporter, T("Xtras"));
+						PathCombine(exporter->cache_path, directory_info.object_path, T("Xtras"));
+						traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, find_shockwave_files_callback, &file_params);
+					}
+
+					unlock_arena(arena);
+				}
+			}
 		}
 
 		log_info("Shockwave Player: Finished exporting the cache.");	
@@ -268,17 +305,15 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	TCHAR full_location_on_cache[MAX_PATH_CHARS] = T("");
 	PathCombine(full_location_on_cache, callback_info->directory_path, filename);
 
-	TCHAR* director_file_type = (file_params->is_xtra) ? (T("Xtra")) : (get_director_file_type_from_file_signature(full_location_on_cache));
+	bool is_xtra = filename_ends_with(filename, T(".x32"));
+	TCHAR* director_file_type = (is_xtra) ? (T("Xtra")) : (get_director_file_type_from_file_signature(full_location_on_cache));
 
-	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
 	TCHAR* xtra_description = NULL;
 	TCHAR* xtra_version = NULL;
+	TCHAR* xtra_copyright = NULL;
 
-	if(file_params->is_xtra)
+	if(is_xtra)
 	{
-		PathCombine(short_location_on_cache, file_params->location_identifier, T("[...]"));
-		PathAppend(short_location_on_cache, skip_to_last_path_components(full_location_on_cache, 3));
-
 		if(!get_file_info(arena, full_location_on_cache, INFO_FILE_DESCRIPTION, &xtra_description))
 		{
 			log_warning("Shockwave Player: No file description found for the Xtra '%s'.", filename);
@@ -288,6 +323,18 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 		{
 			log_warning("Shockwave Player: No product version found for the Xtra '%s'.", filename);
 		}
+
+		if(!get_file_info(arena, full_location_on_cache, INFO_LEGAL_COPYRIGHT, &xtra_copyright))
+		{
+			log_warning("Shockwave Player: No copyright found for the Xtra '%s'.", filename);
+		}		
+	}
+
+	TCHAR short_location_on_cache[MAX_PATH_CHARS] = T("");
+
+	if(file_params->is_appdata_cache)
+	{
+		PathCombine(short_location_on_cache, file_params->location_identifier, skip_to_last_path_components(full_location_on_cache, 3));
 	}
 	else
 	{
@@ -298,7 +345,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_shockwave_files_callback)
 	{
 		{/* Filename */}, {/* File Extension */}, {/* File Size */},
 		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
-		{director_file_type}, {xtra_description}, {xtra_version},
+		{director_file_type}, {xtra_description}, {xtra_version}, {xtra_copyright},
 		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
 		{/* Custom File Group */}, {/* SHA-256 */}
 	};

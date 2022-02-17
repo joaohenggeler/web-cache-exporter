@@ -61,8 +61,8 @@ void export_default_or_specific_unity_cache(Exporter* exporter)
 		if(exporter->is_exporting_from_default_locations)
 		{
 			TCHAR* unity_appdata_path = exporter->local_low_appdata_path;
-			if(string_is_empty(unity_appdata_path)) unity_appdata_path = exporter->local_appdata_path;
-			// This will be an empty string in Windows 98 and ME.
+			if(strings_are_equal(unity_appdata_path, PATH_NOT_FOUND)) unity_appdata_path = exporter->local_appdata_path;
+			// This path does not exist in Windows 98 and ME.
 
 			PathCombine(exporter->cache_path, unity_appdata_path, T("Unity\\WebPlayer\\Cache"));
 		}

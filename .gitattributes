@@ -1,20 +1,4 @@
 * text=auto
 
-*.cpp text
-*.c text
-*.h text
-
-*.java text
-*.py text
-*.md text
-
 *.bat text eol=crlf
 *.rc text eol=crlf
-*.group text eol=crlf
-version.txt text eol=crlf
-readme_body.txt text eol=crlf
-LICENSE text eol=crlf
-
-*.png binary
-*.ico binary
-*.xcf binary

@@ -1,0 +1,42 @@
+The Web Cache Exporter is written in C-style C++03 and may be compiled
+using the Build.bat batch file. See the comments at the top of this
+file to learn how to use and set each basic build parameter. The batch
+file is executed using the following syntax:
+
+> Build.bat [Optional Compiler Arguments]
+
+For example:
+> Build.bat
+> Build.bat /D EXPORT_EMPTY_FILES
+
+Note that this project does not use semantic versioning.
+
+======================================================================
+
+In order to target Windows 98 and ME, this program is compiled using
+Visual Studio 2005. It's possible to skip building this target and
+use Visual Studio 2015 or later by changing the following batch
+variables:
+
+* Setting VCVARSALL_PATH to the path of the vcvarsall.bat batch file
+that is installed with Visual Studio.
+* Setting USE_VS_2005_OPTIONS to "No".
+
+Note that this application hasn't been thoroughly tested with modern
+versions of Visual Studio.
+
+======================================================================
+
+This batch file can also use the 7-Zip utility to package any releases.
+By default, the Build.bat will try to run the 7-Zip executable located
+in the path specified by the _7ZIP_EXE_PATH variable. This utility is
+not included with the source distribution. If you don't care about
+packaging the compiled application, you may disable this feature by
+setting the PACKAGE_BUILD variable to "No".
+
+======================================================================
+
+To make compiling this program easier, we bundle the necessary third-party
+code with our own source files, provided we are allowed to distribute it.
+See the dependencies list located in "Source/ThirdParty/Dependencies.txt"
+to learn more about any third-party libraries used by this application.

@@ -463,11 +463,11 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 			#define EXPORT_USING_DATABASE_FILE(ese_files_prefix)\
 			do\
 			{\
-				const wchar_t* database_filename = L"WebCache" L##ese_files_prefix L".dat";\
+				const wchar_t* database_filename = T("WebCache") T(ese_files_prefix) T(".dat");\
 				log_newline();\
 				log_info("Internet Explorer 10 to 11: Checking the database file '%ls'.", database_filename);\
 				PathCombineW(exporter->index_path, exporter->cache_path, database_filename);\
-				export_internet_explorer_10_to_11_cache(exporter, L#ese_files_prefix);\
+				export_internet_explorer_10_to_11_cache(exporter, T(ese_files_prefix));\
 			} while(false, false)
 			
 			EXPORT_USING_DATABASE_FILE("V01");
@@ -819,8 +819,8 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 				u8 cache_directory_index = 0;
 
-				TCHAR cached_file_size[MAX_INT64_CHARS] = T("");
-				TCHAR access_count[MAX_INT32_CHARS] = T("");
+				TCHAR cached_file_size[MAX_INT_64_CHARS] = T("");
+				TCHAR access_count[MAX_INT_32_CHARS] = T("");
 
 				#define READ_COMMON()\
 				do\
@@ -1887,7 +1887,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 					}
 
 					// Open each Cache table by building its name ("Container_<s64 id>") using the previously retrieved ID.
-					const size_t NUM_CACHE_TABLE_NAME_CHARS = 10 + MAX_INT64_CHARS;
+					const size_t NUM_CACHE_TABLE_NAME_CHARS = 10 + MAX_INT_64_CHARS;
 					wchar_t cache_table_name[NUM_CACHE_TABLE_NAME_CHARS] = L"";
 					if(SUCCEEDED(StringCchPrintfW(cache_table_name, NUM_CACHE_TABLE_NAME_CHARS, L"Container_%I64d", container_id)))
 					{
@@ -2016,7 +2016,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 
 									url = decode_url(arena, url);
 
-									wchar_t cached_file_size[MAX_INT64_CHARS] = L"";
+									wchar_t cached_file_size[MAX_INT_64_CHARS] = L"";
 									convert_s64_to_string(file_size, cached_file_size);
 
 									wchar_t last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = L"";
@@ -2034,7 +2034,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									Http_Headers cache_headers = {};
 									parse_http_headers(arena, headers, headers_size, &cache_headers);
 
-									wchar_t access_count_string[MAX_INT32_CHARS] = L"";
+									wchar_t access_count_string[MAX_INT_32_CHARS] = L"";
 									convert_u32_to_string(access_count, access_count_string);
 
 									// @Format: The cache directory indexes stored in the database are one based.

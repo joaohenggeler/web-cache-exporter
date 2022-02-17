@@ -117,7 +117,7 @@
 #endif
 
 // Define sized integers and floats. These are useful when defining tighly packed structures that represent various parts of cache
-// database file formats.
+// database file formats. Remember that Visual Studio 2005 didn't include the "stdint.h" header file.
 typedef signed __int8 s8;
 typedef signed __int16 s16;
 typedef signed __int32 s32;
@@ -131,7 +131,7 @@ typedef unsigned __int64 u64;
 typedef float f32;
 typedef double f64;
 
-typedef SSIZE_T ssize_t;
+const size_t MAX_UINT_32 = ULONG_MAX;
 
 // The cache types of the supported web browser and web plugins.
 enum Cache_Type
@@ -148,8 +148,12 @@ enum Cache_Type
 	CACHE_JAVA = 7,
 	CACHE_UNITY = 8,
 	
-	NUM_CACHE_TYPES = 9
+	NUM_CACHE_TYPES = 9,
 };
+
+// Represents a key Windows path that does not exist or could not be determined.
+// This must be the same as the value documented in "ExternalLocations\About External Locations.txt".
+const TCHAR* const PATH_NOT_FOUND = T("<None>");
 
 // An array that maps the previous values to full and short names.
 const TCHAR* const CACHE_TYPE_TO_FULL_NAME[] =
@@ -221,13 +225,15 @@ struct Exporter
 	bool should_show_full_paths;
 	bool should_group_by_request_origin;
 	bool should_decompress_files;
-	bool should_delete_previous_temporary_directories;
+	bool should_clear_temporary_windows_directory;
 
 	bool should_filter_by_groups;
 	String_Array<TCHAR>* group_files_for_filtering;
 	
 	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
 	
+	bool should_use_custom_temporary_directory;
+
 	bool should_use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
@@ -312,31 +318,31 @@ struct Exporter
 
 	// General purpose variables that are freely changed by each cache exporter:
 	
-	// - The currently open CSV file.
+	// The currently open CSV file.
 	HANDLE csv_file_handle;
-	// - Whether we tried to export at least one file since the exporter was initialized.
+	// Whether we tried to export at least one file since the exporter was initialized.
 	bool exported_at_least_one_file;
 
-	// - The identifier that's used to name the output directory.
-	// - Each cache exporter may use one or more identifiers.
+	// The identifier that's used to name the output directory.
+	// Each cache exporter may use one or more identifiers.
 	const TCHAR* cache_identifier;
-	// - The types of each column as an array of length 'num_csv_columns'.
+	// The types of each column as an array of length 'num_csv_columns'.
 	Csv_Type* csv_column_types;
-	// - The number of columns in the CSV file.
+	// The number of columns in the CSV file.
 	int num_csv_columns;
 
-	// - The number of components in the relative path containing composed of the current cache exporter's identifier and subdirectories.
+	// The number of components in the relative path containing composed of the current cache exporter's identifier and subdirectories.
 	int num_output_components;
-	// - The path to the base directory where the cached files will be copied to.
+	// The path to the base directory where the cached files will be copied to.
 	TCHAR output_copy_path[MAX_PATH_CHARS];
-	// - The path to the currently open CSV file.
+	// The path to the currently open CSV file.
 	TCHAR output_csv_path[MAX_PATH_CHARS];
-	// - The path to the index/database file that contains a cached file's metadata.
-	// - The contents of this path vary between different cache types and versions.
+	// The path to the index/database file that contains a cached file's metadata.
+	// The contents of this path vary between different cache types and versions.
 	TCHAR index_path[MAX_PATH_CHARS];
-	// - The current browser name.
+	// The current browser name.
 	TCHAR* browser_name;
-	// - The current browser profile.
+	// The current browser profile.
 	TCHAR* browser_profile;
 
 	// Used to count how many cached files were exported.
@@ -388,7 +394,6 @@ const TCHAR* const TEMPORARY_NAME_SEARCH_QUERY = _TEMPORARY_NAME_SEARCH_QUERY;
 bool create_placeholder_exporter_file(Exporter* exporter, TCHAR* result_file_path, const TCHAR* optional_filename = NULL);
 bool create_temporary_exporter_file(Exporter* exporter, TCHAR* result_file_path, HANDLE* result_file_handle);
 void clear_temporary_exporter_directory(Exporter* exporter);
-void delete_all_temporary_exporter_directories(Exporter* exporter);
 
 bool resolve_exporter_external_locations_path(Exporter* exporter, const TCHAR* path, TCHAR* result_path);
 

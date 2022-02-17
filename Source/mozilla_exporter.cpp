@@ -201,21 +201,21 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 	set_exporter_output_copy_subdirectory(exporter, output_subdirectory_name);
 
 	// We need to check both paths since older versions used to store the cache in AppData.
-	const TCHAR* cache_appdata_path_array[] = {exporter->local_appdata_path, exporter->appdata_path};
-	const TCHAR* CACHE_PROFILES_DIRECTORY_NAME = (optional_use_old_profiles_directory) ? (T("Users50")) : (T("Profiles"));
+	const TCHAR* base_paths[] = {exporter->local_appdata_path, exporter->appdata_path};
+	const TCHAR* profiles_directory = (optional_use_old_profiles_directory) ? (T("Users50")) : (T("Profiles"));
 
-	for(int i = 0; i < _countof(cache_appdata_path_array); ++i)
+	for(int i = 0; i < _countof(base_paths); ++i)
 	{
-		const TCHAR* cache_appdata_path = cache_appdata_path_array[i];
+		const TCHAR* base_path = base_paths[i];
 		// Local AppData is skipped for Windows 98 and ME.
-		if(string_is_empty(cache_appdata_path)) continue;
+		if(strings_are_equal(base_path, PATH_NOT_FOUND)) continue;
 
-		TCHAR cache_profile_path[MAX_PATH_CHARS] = T("");
-		PathCombine(cache_profile_path, cache_appdata_path, vendor_and_browser_subdirectories);
-		PathAppend(cache_profile_path, CACHE_PROFILES_DIRECTORY_NAME);
+		TCHAR profile_path[MAX_PATH_CHARS] = T("");
+		PathCombine(profile_path, base_path, vendor_and_browser_subdirectories);
+		PathAppend(profile_path, profiles_directory);
 
 		Arena* arena = &(exporter->temporary_arena);
-		Traversal_Result* profiles = find_objects_in_directory(arena, cache_profile_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false);
+		Traversal_Result* profiles = find_objects_in_directory(arena, profile_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_DIRECTORIES, false);
 		lock_arena(arena);
 
 		// Look for browser profiles.
@@ -225,9 +225,9 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 			// We only check for custom locations in the prefs.js file when iterating over AppData (which is defined for all Windows versions and
 			// is where this preferences file is located).
-			bool should_check_prefs = (cache_appdata_path == exporter->appdata_path);
+			bool should_check_prefs = (base_path == exporter->appdata_path);
 			TCHAR prefs_file_path[MAX_PATH_CHARS] = T("");
-			PathCombine(prefs_file_path, cache_profile_path, profile_info.object_name);
+			PathCombine(prefs_file_path, profile_path, profile_info.object_name);
 			PathAppend(prefs_file_path, T("prefs.js"));
 
 			TCHAR prefs_cache_path[MAX_PATH_CHARS] = T("");
@@ -273,7 +273,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			{
 				Traversal_Object_Info salt_directory_info = salt_directories->object_info[k];
 
-				PathCombine(prefs_file_path, cache_profile_path, profile_info.object_name);
+				PathCombine(prefs_file_path, profile_path, profile_info.object_name);
 				PathAppend(prefs_file_path, salt_directory_info.object_name);
 				PathAppend(prefs_file_path, T("prefs.js"));
 
@@ -605,7 +605,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 	#undef READ_INTEGER
 	#undef READ_ARRAY
 
-	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT16_CHARS + 1 + MAX_INT16_CHARS;
+	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT_16_CHARS + 1 + MAX_INT_16_CHARS;
 	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = T("");
 	StringCchPrintf(cache_version, MAX_CACHE_VERSION_CHARS, T("%hu.%hu"), header.major_version, header.minor_version);
 
@@ -796,8 +796,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 		#define GET_EXTERNAL_DATA_FILE_PATH(is_metadata, result_path)\
 		do\
 		{\
-			TCHAR hash[MAX_INT32_CHARS] = T("");\
-			StringCchPrintf(hash, MAX_INT32_CHARS, T("%08X"), record.hash_number);\
+			TCHAR hash[MAX_INT_32_CHARS] = T("");\
+			StringCchPrintf(hash, MAX_INT_32_CHARS, T("%08X"), record.hash_number);\
 			const TCHAR* identifier = (is_metadata) ? (T("m")) : (T("d"));\
 			u8 generation = (is_metadata) ? (metadata_generation) : (file_generation);\
 			/* For example: data file (hash 0E0A6E00 and generation 1) -> "0\E0\A6E00d01" */\
@@ -874,8 +874,8 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 			}
 		}
 
-		TCHAR cached_file_size_string[MAX_INT32_CHARS] = T("");
-		TCHAR access_count[MAX_INT32_CHARS] = T("");
+		TCHAR cached_file_size_string[MAX_INT_32_CHARS] = T("");
+		TCHAR access_count[MAX_INT_32_CHARS] = T("");
 
 		TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 		TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
@@ -1038,7 +1038,7 @@ static void export_mozilla_cache_version_1(Exporter* exporter)
 							}
 
 							// Create a pretty version of the location on cache which includes the address and size in the block file.
-							const size_t MAX_LOCATION_IN_FILE_CHARS = MAX_INT32_CHARS * 2 + 2;
+							const size_t MAX_LOCATION_IN_FILE_CHARS = MAX_INT_32_CHARS * 2 + 2;
 							TCHAR location_in_file[MAX_LOCATION_IN_FILE_CHARS] = T("");
 							StringCchPrintf(location_in_file, MAX_LOCATION_IN_FILE_CHARS, T("@%08X") T("#%08X"), offset_in_block_file, read_cached_file_size);
 
@@ -1226,16 +1226,16 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		metadata = NULL;
 	}
 
-	TCHAR cached_file_size[MAX_INT32_CHARS] = T("");
+	TCHAR cached_file_size[MAX_INT_32_CHARS] = T("");
 	convert_u32_to_string(metadata_offset, cached_file_size);
 
-	TCHAR access_count[MAX_INT32_CHARS] = T("");
+	TCHAR access_count[MAX_INT_32_CHARS] = T("");
 
 	TCHAR last_access_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	TCHAR last_modified_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 	TCHAR expiry_time[MAX_FORMATTED_DATE_TIME_CHARS] = T("");
 
-	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT32_CHARS + 3 + MAX_INT32_CHARS;
+	const size_t MAX_CACHE_VERSION_CHARS = MAX_INT_32_CHARS + 3 + MAX_INT_32_CHARS;
 	TCHAR cache_version[MAX_CACHE_VERSION_CHARS] = T("");
 
 	TCHAR* url = NULL;

@@ -9,7 +9,7 @@
 	location where you didn't need to opt-in to use it. This location was divided into two subdirectories: another archive cache
 	(like in Java 1.3), and a file cache that only allowed commonly used file types (.class files, .gif and .jpg images, and .au
 	and .wav sounds). Each cached file had an index file (.idx) associated with it, which contained the requested resource's metadata.
-	Java 6 (2006) joined both of these cache locations, and allowed any type of file to be cached. The index files remained though
+	Java 6 (2006) merged both of these cache locations, and allowed any type of file to be cached. The index files remained though
 	their format was changed slightly in a few subversions. Java 9 (2017) deprecated Java applets and Java Web Start applications,
 	and these were finally removed from the language in Java 11 (2018).
 
@@ -38,8 +38,8 @@
 	1. <Cache Location>\javapi\v1.0
 	2. <Cache Location>\6.0
 
-	Where the first only stores archives (.JAR) in the "jar" subdirectory and specific files (.CLASS, .JPG, .GIF, .AU, .WAV) in
-	the "file" subdirectory. Note that this "jar" location always stores files with the .ZIP file extension. The second sublocation
+	Where the first only stores archives (.jar) in the "jar" subdirectory and specific files (.class, .jpg, .gif, .au, .wav) in
+	the "file" subdirectory. Note that this "jar" location always stores files with the .zip file extension. The second sublocation
 	can contain any type of file, stored in any of the 64 subdirectories, named "0" through "63".
 
 	Note that for Java 1.4, the first sublocation is different:
@@ -125,7 +125,7 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 		if(exporter->is_exporting_from_default_locations)
 		{
 			java_appdata_path = exporter->local_low_appdata_path;
-			if(string_is_empty(java_appdata_path)) java_appdata_path = exporter->appdata_path;
+			if(strings_are_equal(java_appdata_path, PATH_NOT_FOUND)) java_appdata_path = exporter->appdata_path;
 
 			// For Java 1.4 and later (distributed by Sun or Oracle).
 			PathCombine(exporter->cache_path, java_appdata_path, T("Sun\\Java\\Deployment\\cache"));
@@ -138,7 +138,7 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 		if(exporter->is_exporting_from_default_locations)
 		{
 			TCHAR* java_user_home_path = exporter->user_profile_path;
-			if(string_is_empty(java_user_home_path)) java_user_home_path = exporter->windows_path;
+			if(strings_are_equal(java_user_home_path, PATH_NOT_FOUND)) java_user_home_path = exporter->windows_path;
 		
 			// For Java 1.4 and later (distributed by IBM).
 			PathCombine(exporter->cache_path, java_appdata_path, T("IBM\\Java\\Deployment\\cache"));
@@ -423,7 +423,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 	else
 	{
-		content_length = push_arena(arena, MAX_INT32_CHARS * sizeof(TCHAR), TCHAR);
+		content_length = push_arena(arena, MAX_INT_32_CHARS * sizeof(TCHAR), TCHAR);
 		convert_s32_to_string(index.content_length, content_length);
 	}
 
@@ -477,7 +477,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 			if(actual_file_extension == NULL)
 			{
 				actual_file_extension = skip_to_file_extension(filename, true);
-				if(actual_file_extension != NULL && string_begins_with(actual_file_extension, T(".jar"), true))
+				if(actual_file_extension != NULL && filename_begins_with(actual_file_extension, T(".jar")))
 				{
 					actual_file_extension = T(".zip");
 				}
@@ -503,7 +503,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 	
 	TCHAR* cache_version = NULL;
-	TCHAR cache_version_buffer[MAX_INT32_CHARS] = T("");
+	TCHAR cache_version_buffer[MAX_INT_32_CHARS] = T("");
 	if(location_type != LOCATION_ALL)
 	{
 		cache_version = T("1");

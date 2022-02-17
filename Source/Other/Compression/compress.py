@@ -12,7 +12,7 @@
 
 	Dependencies:
 		Brotli: https://github.com/python-hyper/brotlipy/
-		LZW: https://github.com/valgur/ncompress
+		Compress: https://github.com/valgur/ncompress
 """
 
 import bz2
@@ -69,8 +69,8 @@ def brotli_compress(input_path: str) -> str:
 			output_file.write(compressed_data)
 	return output_path
 
-def lzw_compress(input_path: str) -> str:
-	print(f'LZW compressing "{input_path}..."')
+def compress_compress(input_path: str) -> str:
+	print(f'Compress compressing "{input_path}..."')
 	output_path = input_path + '.Z'
 	with open(input_path, 'rb') as input_file:
 		with open(output_path, 'wb') as output_file:
@@ -92,7 +92,7 @@ gzip_compress(file_path)
 zlib_compress(file_path)
 raw_deflate_compress(file_path)
 brotli_compress(file_path)
-lzw_compress(file_path)
+compress_compress(file_path)
 bzip2_compress(file_path)
 
 print()
@@ -102,7 +102,7 @@ all_formats_path = gzip_compress(all_formats_path)
 all_formats_path = zlib_compress(all_formats_path)
 all_formats_path = raw_deflate_compress(all_formats_path)
 all_formats_path = brotli_compress(all_formats_path)
-all_formats_path = lzw_compress(all_formats_path)
+all_formats_path = compress_compress(all_formats_path)
 all_formats_path = bzip2_compress(all_formats_path)
 
 print()

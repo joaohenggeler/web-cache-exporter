@@ -210,16 +210,16 @@ void* aligned_push_arena_64(Arena* arena, u64 push_size, size_t alignment_size)
 	void* result = aligned_push_arena(arena, 0, alignment_size);
 	
 	// This is a silly way to be able to push more than 4 GB even in 32-bit builds but it works for now.
-	for(u64 i = 0; i < push_size / ULONG_MAX; ++i)
+	for(u64 i = 0; i < push_size / MAX_UINT_32; ++i)
 	{
-		if(push_arena(arena, ULONG_MAX, u8) == NULL)
+		if(push_arena(arena, MAX_UINT_32, u8) == NULL)
 		{
 			result = NULL;
 			break;
 		}
 	}	
 	
-	if(push_arena(arena, (u32) (push_size % ULONG_MAX), u8) == NULL) result = NULL;
+	if(push_arena(arena, (u32) (push_size % MAX_UINT_32), u8) == NULL) result = NULL;
 
 	return result;
 }
@@ -274,14 +274,20 @@ f32 get_used_arena_capacity(Arena* arena)
 	return ((f32) arena->used_size) / arena->total_size * 100;
 }
 
+const u32 MIN_GET_ARENA_BUFFER_SIZE = (u32) kilobytes_to_bytes(1) / 2;
+
+#if defined(BUILD_DEBUG) && defined(TINY_FILE_BUFFERS)
+	const u32 DEBUG_GET_ARENA_FILE_BUFFER_SIZE = 101;
+#endif
+
 // Retrieves an appropriate buffer size that may be pushed into the arena for processing a given file.
 //
 // This value has the following properties:
 // - Fits small enough files into memory, avoiding fragmentation when allocating multiple buffers.
 // - Allows reading large files in chunks whose size doesn't cause any problems when calling ReadFile().
-// - Always greater than zero. For empty files or full arenas, a size of one byte is returned. For the
-// first case, calling ReadFile() will let us know we finished reading the file. For the second case,
-// calling push_arena() will return NULL.
+// - Always greater than zero. For empty files or full arenas, a size of MIN_GET_ARENA_BUFFER_SIZE bytes
+// is returned. For the first case, calling ReadFile() will let us know we finished reading the file.
+// For the second case, calling push_arena() will return NULL.
 //
 // @Parameters:
 // 1. arena - The Arena structure whose remaining available size is used to determine the result.
@@ -290,16 +296,20 @@ f32 get_used_arena_capacity(Arena* arena)
 // @Returns: The appropriate file buffer size for the given arena in bytes.
 u32 get_arena_file_buffer_size(Arena* arena, HANDLE file_handle)
 {
-	// This should be kept at around a quarter of the arena's remaining size for operations like
-	// decompressing files, where we have one quarter for the file buffer (worst case), one half
-	// for the decompressed data, and the remaining quarter for a third-party library's requested
-	// memory.
-	size_t remaining_arena_size = arena->total_size - arena->used_size;
-	u32 max_size = (u32) MIN(remaining_arena_size / 4, megabytes_to_bytes(50));
-	u64 file_size = 0;
-	if(!get_file_size(file_handle, &file_size)) file_size = ULONG_MAX;
-	u32 buffer_size = (u32) MIN(file_size, (u64) max_size);
-	return MAX(buffer_size, 1);
+	#if defined(BUILD_DEBUG) && defined(TINY_FILE_BUFFERS)
+		return DEBUG_GET_ARENA_FILE_BUFFER_SIZE;
+	#else
+		// This should be kept at around a quarter of the arena's remaining size for operations like
+		// decompressing files, where we have one quarter for the file buffer (worst case), one quarter
+		// for the decompressed data, and the remaining half for a third-party library's requested
+		// memory.
+		size_t remaining_arena_size = arena->total_size - arena->used_size;
+		u32 max_size = (u32) MIN(remaining_arena_size / 4, megabytes_to_bytes(50));
+		u64 file_size = 0;
+		if(!get_file_size(file_handle, &file_size)) file_size = MAX_UINT_32;
+		u32 buffer_size = (u32) MIN(file_size, (u64) max_size);
+		return MAX(buffer_size, MIN_GET_ARENA_BUFFER_SIZE);		
+	#endif
 }
 
 // Retrieves an appropriate buffer size that may be pushed into the arena for processing a chunk of data.
@@ -315,7 +325,7 @@ u32 get_arena_chunk_buffer_size(Arena* arena, size_t min_size)
 {
 	size_t remaining_arena_size = arena->total_size - arena->used_size;
 	u32 chunk_size = (u32) MAX(remaining_arena_size / 4, min_size);
-	return MAX(chunk_size, 1);
+	return MAX(chunk_size, MIN_GET_ARENA_BUFFER_SIZE);
 }
 
 // Adds a new lock to the arena. A lock marks the currently used size and prevents clear_arena() from clearing any of
@@ -497,45 +507,6 @@ void separate_u32_into_high_and_low_u16s(u32 value, u16* high, u16* low)
 	*high = (u16) (value >> 16);
 }
 
-// Advances a pointer by a given number of bytes.
-//
-// @Parameters:
-// 1. pointer - The pointer to move forward.
-// 2. num_bytes - The number of bytes to move.
-//
-// @Returns: The moved pointer value.
-void* advance_bytes(void* pointer, u16 num_bytes)
-{
-	return ((char*) pointer) + num_bytes;
-}
-
-void* advance_bytes(void* pointer, u32 num_bytes)
-{
-	return ((char*) pointer) + num_bytes;
-}
-
-void* advance_bytes(void* pointer, u64 num_bytes)
-{
-	return ((char*) pointer) + num_bytes;
-}
-
-// Retreats a pointer by a given number of bytes.
-//
-// @Parameters:
-// 1. pointer - The pointer to move backwards.
-// 2. num_bytes - The number of bytes to move.
-//
-// @Returns: The moved pointer value.
-void* retreat_bytes(void* pointer, u32 num_bytes)
-{
-	return ((char*) pointer) - num_bytes;
-}
-
-void* retreat_bytes(void* pointer, u64 num_bytes)
-{
-	return ((char*) pointer) - num_bytes;
-}
-
 // Subtracts two pointers.
 //
 // @Parameters:
@@ -543,7 +514,7 @@ void* retreat_bytes(void* pointer, u64 num_bytes)
 // 2. b - The right pointer operand.
 //
 // @Returns: The subtraction result in bytes.
-ptrdiff_t pointer_difference(void* a, void* b)
+ptrdiff_t pointer_difference(const void* a, const void* b)
 {
 	return ((char*) a) - ((char*) b);
 }
@@ -968,25 +939,25 @@ static const size_t INT_FORMAT_RADIX = 10;
 
 bool convert_u32_to_string(u32 value, TCHAR* result_string)
 {
-	bool success = _ultot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _ultot_s(value, result_string, MAX_INT_32_CHARS, INT_FORMAT_RADIX) == 0;
 	if(!success) *result_string = T('\0');
 	return success;
 }
 bool convert_s32_to_string(s32 value, TCHAR* result_string)
 {
-	bool success = _ltot_s(value, result_string, MAX_INT32_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _ltot_s(value, result_string, MAX_INT_32_CHARS, INT_FORMAT_RADIX) == 0;
 	if(!success) *result_string = T('\0');
 	return success;
 }
 bool convert_u64_to_string(u64 value, TCHAR* result_string)
 {
-	bool success = _ui64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _ui64tot_s(value, result_string, MAX_INT_64_CHARS, INT_FORMAT_RADIX) == 0;
 	if(!success) *result_string = T('\0');
 	return success;
 }
 bool convert_s64_to_string(s64 value, TCHAR* result_string)
 {
-	bool success = _i64tot_s(value, result_string, MAX_INT64_CHARS, INT_FORMAT_RADIX) == 0;
+	bool success = _i64tot_s(value, result_string, MAX_INT_64_CHARS, INT_FORMAT_RADIX) == 0;
 	if(!success) *result_string = T('\0');
 	return success;
 }
@@ -1212,6 +1183,18 @@ TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string)
 	return convert_utf_8_string_to_tchar(arena, arena, utf_8_string);
 }
 
+// Skips to the null character at the end of the string.
+//
+// @Parameters:
+// 1. str - The string.
+//
+// @Returns: The end of the string.
+TCHAR* skip_to_end_of_string(TCHAR* str)
+{
+	while(*str != T('\0')) ++str;
+	return str;
+}
+
 // Skips to the character immediately after the current string's null terminator.
 //
 // @Parameters:
@@ -1277,38 +1260,39 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 //
 // @Parameters:
 // 1. arena - The Arena structure where the resulting URL components and any intermediary strings are stored.
-// 2. original_url - The URL string to be separated into different components.
+// 2. url - The URL string to be separated into different components.
 // 3. url_parts - The Url_Parts structure that receives the pointers to the various URL components that were copied to the
-// memory arena. All these pointers are initially set to NULL.
+// memory arena. All of these pointers are initially set to NULL.
 //
 // @Returns: True if the function succeeds. Otherwise, false. This function fails in the following situations:
 // 1. The supplied URL is NULL or empty.
 // 2. The supplied URL doesn't have a scheme.
 // 3. The supplied URL has an authority identifier but nothing after it (e.g. "http://").
-bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts)
+bool partition_url(Arena* arena, const TCHAR* url, Url_Parts* url_parts)
 {
 	ZeroMemory(url_parts, sizeof(Url_Parts));
+	if(url == NULL || string_is_empty(url)) return false;
 
-	if(original_url == NULL || string_is_empty(original_url)) return false;
+	// Split the scheme from the rest of the URL.
+	// E.g. "http://www.example.com:80/path/file.ext" -> "http" + "//www.example.com:80/path/file.ext".
+	String_Array<TCHAR>* split_scheme = copy_and_split_string(arena, url, T(":"), 1);
 
-	TCHAR* url = push_string_to_arena(arena, original_url);
-	TCHAR* remaining_url = NULL;
-	TCHAR* scheme = _tcstok_s(url, T(":"), &remaining_url);
-
-	if(scheme == NULL || string_is_empty(scheme) || string_is_empty(remaining_url))
+	if(split_scheme->num_strings < 2)
 	{
-		log_warning("Partition Url: Missing the scheme in '%s'.", original_url);
+		log_warning("Partition Url: Missing the scheme in '%s'.", url);
 		return false;
 	}
 
-	url_parts->scheme = push_string_to_arena(arena, scheme);
+	url_parts->scheme = split_scheme->strings[0];
+	TCHAR* remaining_url = split_scheme->strings[1];
+	TCHAR* end_of_url = skip_to_end_of_string(remaining_url);
 
 	// Check if the authority exists.
 	if(*remaining_url == T('/') && *(remaining_url+1) == T('/'))
 	{
 		remaining_url += 2;
 
-		// If the authority is empty (e.g. "file:///C:\Path\File.ext")
+		// If the authority is empty. E.g. "file:///C:\Path\File.ext".
 		if(*remaining_url == T('/'))
 		{
 			url_parts->host = push_string_to_arena(arena, T(""));
@@ -1316,43 +1300,67 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 		}
 		else
 		{
-			// Split the authority from the path. If there's no forward slash or backslash separator (either
-			// a URL path or Windows directory separator), the remaining URL is the host.
-			// For example, "http://www.example.com" results in the host "www.example.com" and an empty path.
-			TCHAR* authority = _tcstok_s(NULL, T("/\\"), &remaining_url);
-			if(authority != NULL)
+			// Split the remaining URL into the authority and path.
+			// E.g. "userinfo@www.example.com:80/path/file.ext" -> "userinfo@www.example.com:80" + "path/file.ext".
+			// If there's no forward slash or backslash separator (either a URL path or Windows directory separator),
+			// the path will be set to an empty string.
+			// E.g. "www.example.com:80" -> "www.example.com:80" + "".
+			String_Array<TCHAR>* split_authority = split_string(arena, remaining_url, T("/\\"), 1);
+
+			if(split_authority->num_strings > 0)
 			{
-				TCHAR* remaining_authority = NULL;
+				TCHAR* authority = split_authority->strings[0];
+				remaining_url = (split_authority->num_strings > 1) ? (split_authority->strings[1]) : (end_of_url);
 				
-				// Split the userinfo from the rest of the authority (host and port) if it exists.
-				// Otherwise, the userinfo would be set to the remaining authority when it didn't exist.
-				bool has_userinfo = _tcschr(authority, T('@')) != NULL;
-				TCHAR* userinfo = (has_userinfo) ? (_tcstok_s(authority, T("@"), &remaining_authority)) : (NULL);
+				TCHAR* remaining_authority = NULL;
+				TCHAR* end_of_authority = skip_to_end_of_string(authority);
 
-				// If the userinfo exists, we'll split the remaining authority into the host and port.
-				// E.g. "userinfo@www.example.com:80" -> "www.example.com:80" -> "www.example.com" + "80"
-				// If it doesn't, we'll split starting at the beginning of the authority.
-				// E.g. "www.example.com:80" -> "www.example.com" + "80"
-				TCHAR* string_to_split = (has_userinfo) ? (NULL) : (authority);
-				TCHAR* host = _tcstok_s(string_to_split, T(":"), &remaining_authority);
-				// If the remaining authority now points to the end of the string, then there's no port.
-				// Otherwise, whatever remains of the authority is the port. We can do this because of that
-				// initial split with the path separator.
-				TCHAR* port = (!string_is_empty(remaining_authority)) ? (remaining_authority) : (NULL);
+				// Split the authority into the userinfo and the rest (host and port).
+				String_Array<TCHAR>* split_userinfo = split_string(arena, authority, T("@"), 1);
+				
+				if(split_userinfo->num_strings == 2)
+				{
+					// If the userinfo exists. E.g. "userinfo@www.example.com:80" -> "userinfo" + "www.example.com:80".
+					url_parts->userinfo = split_userinfo->strings[0];
+					remaining_authority = split_userinfo->strings[1];
+				}
+				else if(split_userinfo->num_strings == 1)
+				{
+					// If the userinfo does not exist. E.g. "www.example.com:80" -> NULL + "www.example.com:80".
+					remaining_authority = split_userinfo->strings[0];
+				}
+				else
+				{
+					// For strange edge cases. E.g. "@" -> NULL + "".
+					remaining_authority = end_of_authority;
+				}
 
-				if(host == NULL) host = T("");
-				url_parts->host = push_string_to_arena(arena, host);
+				// Split the remaining authority into the host and port.
+				String_Array<TCHAR>* split_host = split_string(arena, remaining_authority, T(":"), 1);
 
-				// Leave the userinfo and port set to NULL or copy their actual value if they exist.
-				if(userinfo != NULL) url_parts->userinfo = push_string_to_arena(arena, userinfo);
-				if(port != NULL) url_parts->port = push_string_to_arena(arena, port);
+				if(split_host->num_strings == 2)
+				{
+					// If the port exists. E.g. "www.example.com:80" -> "www.example.com" + "80".
+					url_parts->host = split_host->strings[0];
+					url_parts->port = split_host->strings[1];
+				}
+				else if(split_host->num_strings == 1)
+				{
+					// If the port does not exist. E.g. "www.example.com" -> "www.example.com" + NULL.
+					url_parts->host = split_host->strings[0];
+				}
+				else
+				{
+					// For strange edge cases. E.g. ":" -> "" + NULL.
+					url_parts->host = push_string_to_arena(arena, T(""));
+				}
 
 				_ASSERT(url_parts->host != NULL);
 			}
 			else
 			{
 				// For cases like "scheme://". Note that "scheme:///" is allowed, and results in an empty host and path.
-				log_warning("Partition Url: Found authority identifier but missing the value itself in '%s'.", original_url);
+				log_warning("Partition Url: Found authority identifier but missing the value itself in '%s'.", url);
 				return false;
 			}
 		}
@@ -1362,42 +1370,96 @@ bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts
 	// end of the string (if there's no query).
 	TCHAR* query_in_path = _tcschr(remaining_url, T('?'));
 	TCHAR* fragment_in_path = _tcschr(remaining_url, T('#'));
+	
 	// Check if there's a fragment but no query symbol, or if both exist and the fragment appears before the query.
-	// For example, "http://www.example.com/path#top" or "http://www.example.com/path#top?".
-	bool does_fragment_appear_before_query = 	(fragment_in_path != NULL && query_in_path == NULL)
-											|| 	(fragment_in_path != NULL && query_in_path != NULL && fragment_in_path < query_in_path);
+	// E.g. "http://www.example.com/path#top" or "http://www.example.com/path#top?".
+	bool fragment_appears_before_query = 	(fragment_in_path != NULL && query_in_path == NULL)
+										|| 	(fragment_in_path != NULL && query_in_path != NULL && fragment_in_path < query_in_path);
 
-	TCHAR* path = _tcstok_s(NULL, T("?#"), &remaining_url);
-	// We'll allow empty paths because the cache's index/database file might store some of them like this.
-	// E.g. the resource "http://www.example.com/index.html" might have its URL stored as "http://www.example.com/"
-	// since the server would know to serve the index.html file for that request. URLs with no slash after the
-	// host (e.g. "http://www.example.com") are treated the same way (see the authority above).
-	if(path == NULL) path = T("");
-	url_parts->path = push_string_to_arena(arena, path);
+	// Split the path from the query and/or fragment.
+	// E.g. "path/file.ext" -> "path/file.ext" + NULL.
+	// E.g. "path/file.ext?key=value" -> "path/file.ext" + "key=value".
+	// E.g. "path/file.ext#top" -> "path/file.ext" + "top".
+	// E.g. "path/file.ext?key=value#top" -> "path/file.ext" + "key=value#top".
+	// E.g. "path/file.ext#top?key=value" -> "path/file.ext" + "top?key=value" (assumed to be the fragment only).
+	String_Array<TCHAR>* split_path = split_string(arena, remaining_url, T("?#"), 1);
 
-	// Search for the resource's name starting at the end of the path.
-	TCHAR* last_forward_slash = _tcsrchr(path, T('/'));
-	TCHAR* last_backslash = _tcsrchr(path, T('\\'));
+	if(split_path->num_strings > 0)
+	{
+		url_parts->path = split_path->strings[0];
+	}
+	else
+	{
+		// Allow empty paths because a cache format might store some of them like this.
+		// E.g. the resource "http://www.example.com/index.html" might have its URL stored
+		// as "http://www.example.com/" since the server would know to serve the index.html
+		// file for that request. URLs with no slash after the host (e.g. "http://www.example.com")
+		// are treated the same way (see the authority above).
+		url_parts->path = push_string_to_arena(arena, T(""));
+	}
+
+	// If there's a query or fragment component.
+	if(split_path->num_strings > 1)
+	{
+		remaining_url = split_path->strings[1];
+
+		// If there's a fragment and no query, or if the fragment appears before the query separator.
+		// E.g. "top" -> NULL + "top" or "top?" -> NULL + "top?".
+		if(fragment_appears_before_query)
+		{
+			url_parts->fragment = remaining_url;
+		}
+		else
+		{
+			// Split the last part of the URL into the query and fragment.
+			String_Array<TCHAR>* split_query = split_string(arena, remaining_url, T("#"), 1);
+			_ASSERT(split_query->num_strings > 0);
+
+			// If both exist.
+			// E.g. "param=value#top" -> "param=value" + "top".
+			if(split_query->num_strings == 2)
+			{
+				url_parts->query = split_query->strings[0];
+				url_parts->fragment = split_query->strings[1];
+			}
+			else
+			{
+				url_parts->query = split_query->strings[0];
+			}
+		}
+	}
+
+	url_parts->directory_path = push_string_to_arena(arena, url_parts->path);
+
+	// Search for the resource and directory separator starting at the end of the path.
+	TCHAR* last_forward_slash = _tcsrchr(url_parts->directory_path, T('/'));
+	TCHAR* last_backslash = _tcsrchr(url_parts->directory_path, T('\\'));
 
 	// Use whichever separator appears last in the path. For example:
-	// - "http://www.example.com/path/file.ext" -> "path/file.ext" 		-> "file.ext"
-	// - "file:///C:\Path\File.ext" 			-> "C:\Path\File.ext" 	-> "File.ext"
-	// - "http://www.example.com/" 				-> "" 					-> ""
-	// - "http://www.example.com"				-> "" 					-> ""
-	last_forward_slash = (last_forward_slash != NULL) ? (last_forward_slash + 1) : (path);
-	last_backslash = (last_backslash != NULL) ? (last_backslash + 1) : (path);
-	
-	TCHAR* filename = (last_forward_slash > last_backslash) ? (last_forward_slash) : (last_backslash);
-	url_parts->filename = push_string_to_arena(arena, filename);
+	// - "http://www.example.com/path/file.ext" -> "path/file.ext" 		-> "path" + "file.ext"
+	// - "file:///C:\Path\File.ext" 			-> "C:\Path\File.ext" 	-> "C:\Path" + "File.ext"
+	// - "http://www.example.com/file.ext" 		-> "file.ext" 			-> "" + "file.ext"
+	// - "http://www.example.com/" 				-> "" 					-> "" + ""
+	// - "http://www.example.com"				-> "" 					-> "" + ""
+	last_forward_slash = (last_forward_slash != NULL) ? (last_forward_slash) : (url_parts->directory_path);
+	last_backslash = (last_backslash != NULL) ? (last_backslash) : (url_parts->directory_path);
 
-	TCHAR* query = (does_fragment_appear_before_query) ? (NULL) : (_tcstok_s(NULL, T("#"), &remaining_url));
-	TCHAR* fragment = (!string_is_empty(remaining_url)) ? (remaining_url) : (NULL);
-
-	// Leave the query and fragment set to NULL or copy their actual value if they exist.
-	if(query != NULL) url_parts->query = push_string_to_arena(arena, query);
-	if(fragment != NULL) url_parts->fragment = push_string_to_arena(arena, fragment);
+	TCHAR* path_separator = (last_forward_slash > last_backslash) ? (last_forward_slash) : (last_backslash);
+	if(path_separator != url_parts->directory_path)
+	{
+		// If there is a separator and a path.
+		*path_separator = T('\0');
+		url_parts->filename = path_separator + 1;
+	}
+	else
+	{
+		// If there's only a filename.
+		url_parts->filename = url_parts->directory_path;
+		url_parts->directory_path = push_string_to_arena(arena, T(""));
+	}	
 
 	_ASSERT(url_parts->path != NULL);
+	_ASSERT(url_parts->directory_path != NULL);
 	_ASSERT(url_parts->filename != NULL);
 
 	return true;
@@ -1664,14 +1726,8 @@ bool convert_url_to_path(Arena* arena, const TCHAR* url, TCHAR* result_path)
 			success = success && PathAppend(result_path, url_parts.host);
 		}
 
-		correct_url_path_characters(url_parts.path);
-		success = success && PathAppend(result_path, url_parts.path);
-
-		// Remove the resource's filename so it's not part of the final path.
-		// Because of the replacement above, we know that the path separator is a backslash.
-		TCHAR* last_separator = _tcsrchr(result_path, T('\\'));
-		if(last_separator != NULL) *last_separator = T('\0');
-
+		correct_url_path_characters(url_parts.directory_path);
+		success = success && PathAppend(result_path, url_parts.directory_path);
 		truncate_path_components(result_path);
 		correct_reserved_path_components(result_path);
 	}
@@ -1701,7 +1757,7 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 	if(headers_size == 0) return;
 
 	// The headers aren't necessarily null terminated.
-	char* headers = push_and_copy_to_arena(arena, headers_size + 1, char, original_headers, headers_size);
+	char* headers = push_and_copy_to_arena(arena, headers_size + sizeof(char), char, original_headers, headers_size);
 	char* end_of_string = (char*) advance_bytes(headers, headers_size);
 	*end_of_string = '\0';
 
@@ -1789,6 +1845,19 @@ void parse_http_headers(Arena* arena, const char* original_headers, size_t heade
 bool filenames_are_equal(const TCHAR* filename_1, const TCHAR* filename_2)
 {
 	return strings_are_equal(filename_1, filename_2, true);
+}
+
+// Checks if a filename begins with a given prefix. This comparison is case insensitive as it assumes that the current file
+// system is case insensitive. See filenames_are_equal().
+//
+// @Parameters:
+// 1. filename - The filename to check.
+// 2. prefix - The prefix string to use.
+//
+// @Returns: True if the filename begins with that prefix. Otherwise, false.
+bool filename_begins_with(const TCHAR* filename, const TCHAR* prefix)
+{
+	return string_begins_with(filename, prefix, true);
 }
 
 // Checks if a filename ends with a given suffix (e.g. a file extension). This comparison is case insensitive as it assumes
@@ -1949,7 +2018,7 @@ TCHAR* find_path_component(Arena* arena, const TCHAR* path, int component_index)
 {
 	TCHAR* result = NULL;
 
-	String_Array<TCHAR>* split_path = split_string(arena, path, T("\\"));
+	String_Array<TCHAR>* split_path = copy_and_split_string(arena, path, T("\\"));
 
 	if(component_index < 0)
 	{
@@ -2679,7 +2748,7 @@ bool create_directories(const TCHAR* path_to_create, bool optional_resolve_file_
 			if(optional_resolve_file_naming_collisions)
 			{
 				u32 num_naming_collisions = 0;
-				TCHAR unique_id[MAX_INT32_CHARS + 1] = T("~");
+				TCHAR unique_id[MAX_INT_32_CHARS + 1] = T("~");
 				TCHAR unique_path[MAX_CREATE_DIRECTORY_PATH_CHARS] = T("");
 
 				while(!create_success && GetLastError() == ERROR_ALREADY_EXISTS && does_file_exist(path))
@@ -3300,6 +3369,8 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path)
 	return result;
 }
 
+const u32 MIN_DECOMPRESSION_DESTINATION_BUFFER_SIZE = (u32) kilobytes_to_bytes(1) / 2;
+
 // Custom memory allocation function passed to the Zlib library.
 static voidpf zlib_alloc(voidpf opaque, uInt num_items, uInt item_size)
 {
@@ -3319,7 +3390,7 @@ static void zlib_free(voidpf opaque, voidpf address)
 // @Dependencies: This function calls third-party code from the Zlib library.
 //
 // @Parameters:
-// 1. arena - The Arena structure that is used as the intermediate file buffer.
+// 1. arena - The Arena structure that is used to hold any intermediate data like the source and destination file buffers.
 // 2. source_file_path - The path of the source file to decompress.
 // 3. destination_file_handle - The handle of the destination file where the decompressed data will be written to.
 // 4. result_error_code - The error code generated by Zlib's functions if the file cannot be decompressed.
@@ -3345,7 +3416,7 @@ bool decompress_gzip_zlib_deflate_file(Arena* arena, const TCHAR* source_file_pa
 	u32 source_file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
 	void* source_file_buffer = push_arena(arena, source_file_buffer_size, u8);
 	
-	u32 destination_file_buffer_size = source_file_buffer_size;
+	u32 destination_file_buffer_size = MAX(source_file_buffer_size, MIN_DECOMPRESSION_DESTINATION_BUFFER_SIZE);
 	void* destination_file_buffer = push_arena(arena, destination_file_buffer_size, u8);
 
 	const size_t file_signature_size = 2;
@@ -3462,7 +3533,7 @@ static void brotli_free(void* opaque, void* address)
 // @Dependencies: This function calls third-party code from the Brotli library.
 //
 // @Parameters:
-// 1. arena - The Arena structure that is used as the intermediate file buffer.
+// 1. arena - The Arena structure that is used to hold any intermediate data like the source and destination file buffers.
 // 2. source_file_path - The path of the source file to decompress.
 // 3. destination_file_handle - The handle of the destination file where the decompressed data will be written to.
 // 4. result_error_code - The error code generated by Brotli's functions if the file cannot be decompressed.
@@ -3488,7 +3559,7 @@ bool decompress_brotli_file(Arena* arena, const TCHAR* source_file_path, HANDLE 
 	u32 source_file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
 	u8* source_file_buffer = push_arena(arena, source_file_buffer_size, u8);
 
-	u32 destination_file_buffer_size = source_file_buffer_size;
+	u32 destination_file_buffer_size = MAX(source_file_buffer_size, MIN_DECOMPRESSION_DESTINATION_BUFFER_SIZE);
 	u8* destination_file_buffer = push_arena(arena, destination_file_buffer_size, u8);
 
 	// @Docs: "decode.h File Reference"  - https://brotli.org/decode.html
@@ -3536,7 +3607,6 @@ bool decompress_brotli_file(Arena* arena, const TCHAR* source_file_path, HANDLE 
 				if(decoder_result == BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT)
 				{
 					// Continue reading.
-					log_warning("Decompress Brolit File: More input is required to decompress the file '%s' with a source buffer size of %I32u bytes and after reading %I64u bytes.", source_file_path, source_file_buffer_size, total_bytes_read);
 					goto continue_outer_loop;
 				}
 				else if(decoder_result == BROTLI_DECODER_RESULT_ERROR)
@@ -3580,6 +3650,402 @@ bool decompress_brotli_file(Arena* arena, const TCHAR* source_file_path, HANDLE 
 	*result_error_code = (int) BrotliDecoderGetErrorCode(state);
 	BrotliDecoderDestroyInstance(state);
 	state = NULL;
+
+	clear_arena(arena);
+	unlock_arena(arena);
+
+	safe_close_handle(&source_file_handle);
+
+	return success;
+}
+
+// Decompresses a file using the compress/ncompress Unix utility's compression format.
+//
+// @Parameters:
+// 1. arena - The Arena structure that is used to hold any intermediate data like the source and destination file buffers.
+// 2. source_file_path - The path of the source file to decompress.
+// 3. destination_file_handle - The handle of the destination file where the decompressed data will be written to.
+// 4. result_error_code - The error code obtained if the file cannot be decompressed.
+// 
+// @Returns: True if the file was decompressed successfully. Otherwise, false.
+bool decompress_compress_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code)
+{
+	enum
+	{
+		COMPRESS_SUCCESS = 0,
+		COMPRESS_INVALID_SIGNATURE = -1,
+		COMPRESS_NUM_BITS_OUT_OF_BOUNDS = -2,
+		COMPRESS_CREATE_HANDLE_ERROR = -3,
+		COMPRESS_READ_CHUNK_ERROR = -4,
+		COMPRESS_WRITE_CHUNK_ERROR = -5,
+		COMPRESS_DESTINATION_BUFFER_TOO_SMALL = -6,
+		COMPRESS_INDEX_OUT_OF_BOUNDS = -7,
+		COMPRESS_OUT_OF_MEMORY = -8,
+	};
+
+	// @TemporaryFiles: Used by temporary files, meaning it must share reading, writing, and deletion.
+	HANDLE source_file_handle = create_handle(source_file_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN);
+
+	if(source_file_handle == INVALID_HANDLE_VALUE)
+	{
+		log_error("Decompress Compress File: Failed to get the file handle for '%s' with the error code %lu.", source_file_path, GetLastError());
+		*result_error_code = COMPRESS_CREATE_HANDLE_ERROR;
+		return false;
+	}
+
+	bool success = false;
+	int error_code = COMPRESS_SUCCESS;
+
+	lock_arena(arena);
+
+	// These extra four bytes that are cleared to zero ensure that we don't read garbage if we have fewer than 32 bits
+	// to extract from the window when reading indexes (see the SLICE_BITS() macro below).
+	u32 source_file_buffer_size = get_arena_file_buffer_size(arena, source_file_handle);
+	u8* source_file_buffer = push_arena(arena, source_file_buffer_size + sizeof(u32), u8);
+
+	u32 destination_file_buffer_size = MAX(source_file_buffer_size, MIN_DECOMPRESSION_DESTINATION_BUFFER_SIZE);
+	u8* destination_file_buffer = push_arena(arena, destination_file_buffer_size, u8);
+
+	// @Docs: Below are the main sources used to learn how to parse the compress/ncompress Unix
+	// utility's file format, and how the Lempel–Ziv–Welch (LZW) compression algorithm works.
+	//
+	// - LZW algorithm:
+	// - http://warp.povusers.org/EfficientLZW/part5.html
+	// - https://web.archive.org/web/20120507095719/http://marknelson.us/2011/11/08/lzw-revisited
+	//
+	// - ncompress utility's file format:
+	// - https://github.com/vapier/ncompress/blob/main/compress.c
+	//
+	// - How the ncompress utility adds padding bits when the number of compression bits changes:
+	// - https://github.com/vapier/ncompress/issues/5
+	// - https://github.com/andrew-aladev/lzws/blob/master/doc/output_compatibility.txt
+	// - https://en.wikipedia.org/wiki/Compress#Special_output_format
+	//
+	// The ncompress utility's source code is one of the most important references since we want to
+	// decompress files that were most likely created using this tool. Note also the padding bits
+	// references, where it's explained that this tool adds extra alignment bits to the compressed
+	// bit groups when it generates the compressed data (even though it's not necessary when using
+	// the LZW algorithm). Some references use the terms "code" and "string" but we'll refer to these
+	// as "index" and "data", respectively.
+
+	const size_t file_signature_size = 3;
+	u8 file_signature[file_signature_size] = {};
+	read_first_file_bytes(source_file_handle, file_signature, file_signature_size);
+
+	if(!memory_is_equal(file_signature, "\x1F\x9D", 2))
+	{
+		log_error("Decompress Compress File: Found the invalid file signature 0x%02X%02X in '%s'.", file_signature[0], file_signature[1], source_file_path);
+		error_code = COMPRESS_INVALID_SIGNATURE;
+		goto break_outer_loop;
+	}
+
+	int max_num_compression_bits = file_signature[2] & 0x1F;
+	// Whether or not to reset the dictionary when we see the clear index.
+	bool is_block_mode = (file_signature[2] & 0x80) != 0;
+
+	const int MIN_ALLOWED_NUM_COMPRESSION_BITS = 9;
+	const int MAX_ALLOWED_NUM_COMPRESSION_BITS = 16;
+	if(max_num_compression_bits < MIN_ALLOWED_NUM_COMPRESSION_BITS || max_num_compression_bits > MAX_ALLOWED_NUM_COMPRESSION_BITS)
+	{
+		log_error("Decompress Compress File: The maximum number of compression bits (%d) in '%s' is out of bounds (%d to %d).", max_num_compression_bits, source_file_path, MIN_ALLOWED_NUM_COMPRESSION_BITS, MAX_ALLOWED_NUM_COMPRESSION_BITS);
+		error_code = COMPRESS_NUM_BITS_OUT_OF_BOUNDS;
+		goto break_outer_loop;
+	}
+
+	struct Entry
+	{
+		int prefix_index; // Set to NO_INDEX if there's no prefix, meaning the data is only a single byte.
+		u8 byte_value;
+	};
+	
+	#define MAX_NUM_ENTRIES(num_bits) (1 << (num_bits))
+
+	int current_num_bits = MIN_ALLOWED_NUM_COMPRESSION_BITS;
+	int current_max_num_entries = MAX_NUM_ENTRIES(current_num_bits);
+	
+	const int MAX_ALLOWED_NUM_DICTIONARY_ENTRIES = MAX_NUM_ENTRIES(max_num_compression_bits);
+	const int MIN_ALLOWED_NUM_DICTIONARY_ENTRIES = 256;
+
+	const int INITIAL_NUM_DICTIONARY_ENTRIES = (is_block_mode) ? (MIN_ALLOWED_NUM_DICTIONARY_ENTRIES + 1) : (MIN_ALLOWED_NUM_DICTIONARY_ENTRIES);
+	const int NO_INDEX = -1;
+	const int CLEAR_INDEX = (is_block_mode) ? (INITIAL_NUM_DICTIONARY_ENTRIES - 1) : (NO_INDEX);
+
+	Entry* dictionary = push_arena(arena, INITIAL_NUM_DICTIONARY_ENTRIES * sizeof(Entry), Entry);
+	int num_dictionary_entries = INITIAL_NUM_DICTIONARY_ENTRIES;
+
+	for(int i = 0; i < INITIAL_NUM_DICTIONARY_ENTRIES; ++i)
+	{
+		dictionary[i].prefix_index = NO_INDEX;
+		dictionary[i].byte_value = (is_block_mode && i == CLEAR_INDEX) ? (0) : ((u8) i);
+	}
+
+	int current_index = NO_INDEX;
+	int previous_index = NO_INDEX;
+	int bit_offset = 0;
+	int previous_num_bits = current_num_bits;
+	int num_indexes_found_for_num_bits = 0;
+
+	u64 total_bytes_read = file_signature_size;
+	const u8* next_in = source_file_buffer;
+	size_t available_out = destination_file_buffer_size;
+	u8* next_out = destination_file_buffer;
+
+	// The base dictionary is always the same, but we might want to clear the rest if we see the clear index.
+	lock_arena(arena);
+
+	// For the log messages only.
+	u64 total_bits_processed = 0;
+	while(true, true)
+	{
+		// These macros are used to implement each step of the LZW decoder.
+
+		#define GET_ENTRY_FROM_DICTIONARY(index, result_data_length, result_first_byte)\
+		do\
+		{\
+			_ASSERT(!is_block_mode || index != CLEAR_INDEX);\
+			Entry entry = dictionary[index];\
+			result_data_length = 1;\
+			while(entry.prefix_index != NO_INDEX)\
+			{\
+				entry = dictionary[entry.prefix_index];\
+				++result_data_length;\
+			}\
+			result_first_byte = entry.byte_value;\
+		} while(false, false)
+
+		#define FLUSH_DESTINATION_BUFFER_TO_FILE()\
+		do\
+		{\
+			u32 num_bytes_to_write = destination_file_buffer_size - (u32) available_out;\
+			if(!write_to_file(destination_file_handle, destination_file_buffer, num_bytes_to_write))\
+			{\
+				log_error("Decompress Compress File: Failed to write a decompressed chunk from '%s' to the destination file after processing %I64u bits.", source_file_path, total_bits_processed);\
+				error_code = COMPRESS_WRITE_CHUNK_ERROR;\
+				goto break_outer_loop;\
+			}\
+			available_out = destination_file_buffer_size;\
+			next_out = destination_file_buffer;\
+		} while(false, false)
+
+		#define WRITE_ENTRY_TO_DESTINATION_BUFFER(index, data_length)\
+		do\
+		{\
+			if(data_length > destination_file_buffer_size)\
+			{\
+				log_error("Decompress Compress File: The entry at %d of length %Iu found in '%s' after processing %I64u bits cannot fit in the destination buffer of size %I32u.", index, data_length, source_file_path, total_bits_processed, destination_file_buffer_size);\
+				error_code = COMPRESS_DESTINATION_BUFFER_TOO_SMALL;\
+				_ASSERT(false);\
+				goto break_outer_loop;\
+			}\
+		\
+			if(data_length > available_out) FLUSH_DESTINATION_BUFFER_TO_FILE();\
+		\
+			Entry entry = dictionary[index];\
+			/* The decompressed data has to be written backwards. */\
+			u8* reverse_next_out = next_out + data_length - 1;\
+			*reverse_next_out = entry.byte_value;\
+			--reverse_next_out;\
+		\
+			while(entry.prefix_index != NO_INDEX)\
+			{\
+				entry = dictionary[entry.prefix_index];\
+				*reverse_next_out = entry.byte_value;\
+				--reverse_next_out;\
+			}\
+		\
+			next_out += data_length;\
+			available_out -= data_length;\
+		} while(false, false)
+
+		#define ADD_ENTRY_TO_DICTIONARY(new_prefix_index, new_byte_value)\
+		do\
+		{\
+			/* Do nothing if it's full. */\
+			if(num_dictionary_entries >= MAX_ALLOWED_NUM_DICTIONARY_ENTRIES) break;\
+			_ASSERT(new_prefix_index < MAX_ALLOWED_NUM_DICTIONARY_ENTRIES - 1);\
+			_ASSERT(new_prefix_index != NO_INDEX && new_prefix_index != CLEAR_INDEX);\
+		\
+			Entry* entry = push_arena(arena, sizeof(Entry), Entry);\
+			if(entry == NULL)\
+			{\
+				log_error("Decompress Compress File: Ran out of memory while trying to add entry %d (%d, 0x%02X) in '%s' after processing %I64u bits.", num_dictionary_entries+1, new_prefix_index, new_byte_value, source_file_path, total_bits_processed);\
+				error_code = COMPRESS_OUT_OF_MEMORY;\
+				goto break_outer_loop;\
+			}\
+			_ASSERT(IS_POINTER_ALIGNED_TO_TYPE(entry, Entry));\
+		\
+			entry->prefix_index = new_prefix_index;\
+			entry->byte_value = new_byte_value;\
+			++num_dictionary_entries;\
+		\
+			if(num_dictionary_entries >= current_max_num_entries)\
+			{\
+				current_num_bits = MIN(current_num_bits + 1, max_num_compression_bits);\
+				current_max_num_entries = MAX_NUM_ENTRIES(current_num_bits);\
+			}\
+		} while(false, false)
+
+		u32 num_bytes_read = 0;
+		if(read_file_chunk(source_file_handle, source_file_buffer, source_file_buffer_size, total_bytes_read, true, &num_bytes_read))
+		{
+			// End of file.
+			if(num_bytes_read == 0)
+			{
+				FLUSH_DESTINATION_BUFFER_TO_FILE();
+				success = true;
+				break;
+			}
+
+			next_in = source_file_buffer;
+			total_bytes_read += num_bytes_read;
+		}
+		else
+		{
+			log_error("Decompress Compress File: Failed to read a chunk from '%s' after reading %I64u bytes and processing %I64u bits.", source_file_path, total_bytes_read, total_bits_processed);
+			error_code = COMPRESS_READ_CHUNK_ERROR;
+			break;
+		}
+
+		s64 num_bits_remaining = num_bytes_read * CHAR_BIT;
+		_ASSERT(num_bits_remaining >= current_num_bits);
+
+		bool is_last_chunk = (num_bytes_read < source_file_buffer_size);
+		const u8* first_next_in_over_limit = (const u8*) advance_bytes(next_in, (u32) num_bytes_read);
+		
+		while(true, true)
+		{
+			_ASSERT(current_num_bits > CHAR_BIT);
+			_ASSERT(0 <= bit_offset && bit_offset < CHAR_BIT);
+
+			// This a dumb solution to the fact that we want to read the next index using a four byte window (see below),
+			// but at the same time we want to read below this limit if we're at the end of the compressed data.
+			if(!is_last_chunk && (num_bits_remaining < sizeof(u32) * CHAR_BIT))
+			{
+				// Continue reading and make sure that the source buffer starts at the correct byte (the bit offset is
+				// already correct).
+				total_bytes_read += pointer_difference(next_in, first_next_in_over_limit);
+				break;
+			}
+			else if(is_last_chunk && num_bits_remaining < current_num_bits)
+			{
+				// Terminate the decoder.
+				break;
+			}
+
+			// Skip the extra alignment bits introduced by the ncompress utility as mentioned above. 
+			if(previous_num_bits != current_num_bits)
+			{
+				// All the indexes of a given bit size N are aligned to N*8.
+				int num_padding_bits = ROUND_UP_OFFSET(num_indexes_found_for_num_bits * previous_num_bits, CHAR_BIT * previous_num_bits);				
+				next_in += (bit_offset + num_padding_bits) / CHAR_BIT;
+				bit_offset = (bit_offset + num_padding_bits) % CHAR_BIT;
+				num_bits_remaining -= num_padding_bits;
+				num_indexes_found_for_num_bits = 0;
+				total_bits_processed += num_padding_bits;
+				
+				// @Assert: Due to the alignment, this should start at a byte boundary.
+				_ASSERT(bit_offset == 0);
+
+				previous_num_bits = current_num_bits;
+				continue;
+			}
+
+			previous_num_bits = current_num_bits;
+
+			// Retrieves the value between two inclusive bit indexes in a byte.
+			// E.g. SLICE_BITS(0x0AF0F, 0, 3) = 0x0F, SLICE_BITS(0x0AF0F, 28, 21) = 0x0A.
+			// Adapted from: https://stackoverflow.com/a/4415180
+			#define SLICE_BITS(value, lsb_index, msb_index) ( ((value) >> (lsb_index)) & ~(~0 << ((msb_index) - (lsb_index) + 1)) )
+			
+			// Use four bytes as a window that is always able to hold an index of the maximum possible size (16 bits).
+			u32 next_bits = 0;
+			CopyMemory(&next_bits, next_in, sizeof(next_bits));
+			current_index = SLICE_BITS(next_bits, bit_offset, bit_offset + current_num_bits - 1);
+		
+			#undef SLICE_BITS
+
+			// Locate the index for the next iteration.
+			next_in += (bit_offset + current_num_bits) / CHAR_BIT;
+			bit_offset = (bit_offset + current_num_bits) % CHAR_BIT;
+			num_bits_remaining -= current_num_bits;
+			++num_indexes_found_for_num_bits;
+			total_bits_processed += current_num_bits;
+
+			// One index over the limit is allowed per the LZW decoding algorithm.
+			if(current_index < 0 || current_index > num_dictionary_entries)
+			{
+				log_error("Decompress Compress File: The current index %d is out of bounds (0 to %d) in '%s' after processing %I64u bits.", current_index, num_dictionary_entries, source_file_path, total_bits_processed);
+				error_code = COMPRESS_INDEX_OUT_OF_BOUNDS;
+				_ASSERT(false);
+				goto break_outer_loop;
+			}
+
+			// Initialization step on the first iteration or after we clear the dictionary.
+			if(previous_index == NO_INDEX)
+			{
+				if(current_index > MIN_ALLOWED_NUM_DICTIONARY_ENTRIES - 1)
+				{
+					log_error("Decompress Compress File: The current index %d is out of bounds (0 to %d) when initializing the previous one in '%s' after processing %I64u bits.", current_index, MIN_ALLOWED_NUM_DICTIONARY_ENTRIES - 1, source_file_path, total_bits_processed);
+					error_code = COMPRESS_INDEX_OUT_OF_BOUNDS;
+					_ASSERT(false);
+					goto break_outer_loop;	
+				}
+
+				WRITE_ENTRY_TO_DESTINATION_BUFFER(current_index, 1);
+				previous_index = current_index;
+				continue;
+			}
+
+			// Clear the dictionary.
+			if(is_block_mode && current_index == CLEAR_INDEX)
+			{
+				clear_arena(arena);
+				num_dictionary_entries = INITIAL_NUM_DICTIONARY_ENTRIES;
+				current_num_bits = MIN_ALLOWED_NUM_COMPRESSION_BITS;
+				current_max_num_entries = MAX_NUM_ENTRIES(current_num_bits);
+				previous_index = NO_INDEX;
+				continue;
+			}
+
+			_ASSERT(current_index != NO_INDEX && current_index != CLEAR_INDEX);
+			_ASSERT(previous_index != NO_INDEX && previous_index != CLEAR_INDEX);
+
+			// The steps of the LZW decoding algorithm.
+			if(current_index < num_dictionary_entries)
+			{
+				// If the index exists in the dictionary.
+				size_t current_data_length = 0;
+				u8 current_first_byte = 0;
+				GET_ENTRY_FROM_DICTIONARY(current_index, current_data_length, current_first_byte);
+				WRITE_ENTRY_TO_DESTINATION_BUFFER(current_index, current_data_length);
+				ADD_ENTRY_TO_DICTIONARY(previous_index, current_first_byte);
+			}
+			else
+			{
+				// If the index does not exist in the dictionary (the KwKwK special case).
+				size_t previous_data_length = 0;
+				u8 previous_first_byte = 0;
+				GET_ENTRY_FROM_DICTIONARY(previous_index, previous_data_length, previous_first_byte);
+				ADD_ENTRY_TO_DICTIONARY(previous_index, previous_first_byte);
+				size_t current_data_length = previous_data_length + 1;
+				WRITE_ENTRY_TO_DESTINATION_BUFFER(current_index, current_data_length);
+			}
+
+			previous_index = current_index;
+		}
+
+		#undef GET_ENTRY_FROM_DICTIONARY
+		#undef FLUSH_DESTINATION_BUFFER_TO_FILE
+		#undef WRITE_ENTRY_TO_DESTINATION_BUFFER
+		#undef ADD_ENTRY_TO_DICTIONARY
+	}
+	break_outer_loop:;
+
+	#undef MAX_NUM_ENTRIES
+
+	unlock_arena(arena);
+
+	*result_error_code = error_code;
 
 	clear_arena(arena);
 	unlock_arena(arena);
@@ -3718,7 +4184,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 					{
 						if(file_information_size > 0)
 						{
-							if(code_page != CODE_PAGE_UTF_16_LE)
+							if(code_page != CODE_PAGE_WINDOWS_1252 && code_page != CODE_PAGE_UTF_16_LE)
 							{
 								log_info("Get File Info: Found code page %u in the info for the file '%s' and info type %d.", code_page, full_file_path, info_type);
 							}
@@ -3752,7 +4218,7 @@ bool get_file_info(Arena* arena, const TCHAR* full_file_path, File_Info_Type inf
 			log_error("Get File Info: Failed to get the version info for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
 		}
 	}
-	else
+	else if(GetLastError() != ERROR_RESOURCE_DATA_NOT_FOUND && GetLastError() != ERROR_RESOURCE_TYPE_NOT_FOUND)
 	{
 		log_error("Get File Info: Failed to determine the version info size for the file '%s' and info type %d with the error code %lu.", full_file_path, info_type, GetLastError());
 	}

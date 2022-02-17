@@ -1,12 +1,11 @@
 This document lists any third-party code used by the Web Cache Exporter.
 Each third-party library is contained in a subdirectory next to this
-text file. This file will document why a library was used, who made it,
-where it can be found, and any modifications.
+text file. This file documents why a library was used, who made it,
+where it can be found, and any modifications that were made to it.
 
-To make compiling this program easier, we will bundle the third-party
-library's code with our own source files, provided we are allowed to
-distribute it. Each library's license will also be included in its
-respective subdirectory.
+To make compiling this program easier, we bundle the necessary third-party
+code with our own source files, provided we are allowed to distribute it.
+Each library's license is also included in its respective subdirectory.
 
 ======================================================================
 "Portable C++ Hashing Library" by Stephan Brumme

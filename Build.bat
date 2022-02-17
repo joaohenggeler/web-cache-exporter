@@ -199,11 +199,12 @@ PUSHD "%~dp0"
 	REM The path to the 7-Zip executable.
 	SET "_7ZIP_EXE_PATH=_7za920\7za.exe"
 
-	REM The location of this batch file, the version file, the README body template, and the license.
+	REM The location of any files that should be packaged in the source archive.
 	SET "BATCH_FILE_PATH=%~dpnx0"
 	SET "VERSION_FILE_PATH=%~dp0version.txt"
 	SET "README_BODY_PATH=%~dp0readme_body.txt"
 	SET "LICENSE_FILE_PATH=%~dp0LICENSE"
+	SET "BUILDING_FILE_PATH=%~dp0Building.txt"
 
 	REM The location of the final release README. This file is generated using the version, body template,
 	REM and license files above. These files must only use ASCII characters and use CRLF for newlines.
@@ -727,7 +728,7 @@ PUSHD "%~dp0"
 
 	ECHO [%~nx0] Packaging the source files...
 	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\" -r0 "-x!*.md" "-x!esent.*" "-x!*.class" "-x!*.idx" >NUL
-	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%BATCH_FILE_PATH%" "%VERSION_FILE_PATH%" "%README_BODY_PATH%" "%LICENSE_FILE_PATH%" >NUL
+	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%BATCH_FILE_PATH%" "%VERSION_FILE_PATH%" "%README_BODY_PATH%" "%LICENSE_FILE_PATH%" "%BUILDING_FILE_PATH%" >NUL
 
 	ECHO.
 

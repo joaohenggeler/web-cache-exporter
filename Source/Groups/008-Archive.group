@@ -38,19 +38,44 @@ BEGIN_FILE_GROUP Bzip2
 
 END
 
-BEGIN_FILE_GROUP Cabinet
+; The Microsoft Cabinet file format is in the Plugin group file in order to detect ActiveX controls.
+
+; We'll use this file group as a catch-all for several Unix utility compression formats.
+; See: http://fileformats.archiveteam.org/wiki/Compress_(Unix)#The_0x1f_compression_family
+BEGIN_FILE_GROUP Compress
 
 	BEGIN_FILE_SIGNATURES
-		; "MSCF"
-		4D 53 43 46
+		; Compact
+		1F FF
+		FF 1F
+
+		; Compress
+		1F 9D
+		
+		; Freeze/Melt (old format)
+		1F 9E
+		; Freeze/Melt (new format)
+		1F 9F
+		
+		; Pack
+		1F 1E
+		; Pack (old format)
+		1F 1F
+
+		; Quasijarus Strong Compression
+		1F A1
+
+		; SCO Compress LZH
+		1F A0
 	END
 
 	BEGIN_MIME_TYPES
-		application/vnd.ms-cab-compressed
+		application/x-compress
 	END
 
 	BEGIN_FILE_EXTENSIONS
-		cab
+		; Matches Compress, Pack, Quasijarus Strong Compression, and SCO Compress LZH.
+		Z
 	END
 
 END

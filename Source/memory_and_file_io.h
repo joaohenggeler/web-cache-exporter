@@ -57,6 +57,7 @@ const size_t MAX_SCALAR_ALIGNMENT_SIZE = 16;
 
 #define MIN(a, b) ( ((a) < (b)) ? (a) : (b) )
 #define MAX(a, b) ( ((a) > (b)) ? (a) : (b) )
+#define ABS(a) ( ((a) < 0) ? -(a) : (a) )
 #define IS_POWER_OF_TWO(value) ( ((value) > 0) && (( (value) & ((value) - 1) ) == 0) )
 
 // Aligns a value up given an alignment size. This value is offset so that it is the next multiple of the alignment size.
@@ -70,15 +71,15 @@ const size_t MAX_SCALAR_ALIGNMENT_SIZE = 16;
 #define IS_POINTER_ALIGNED_TO_SIZE(pointer, alignment_size) ( ((uintptr_t) (pointer)) % (alignment_size) == 0 )
 #define IS_POINTER_ALIGNED_TO_TYPE(pointer, Type) IS_POINTER_ALIGNED_TO_SIZE(pointer, __alignof(Type))
 
+#define ROUND_UP(value, multiple) ( ((value) % (multiple) == 0) ? (value) : ((value) + (multiple) - ((value) % (multiple))) )
+#define ROUND_UP_OFFSET(value, multiple) (ROUND_UP(value, multiple) - (value))
+
+#define CEIL_INT_DIV(numerator, denominator) ( (numerator) / (denominator) + ( ((numerator) % (denominator) == 0) ? (0) : (1) ) )
+
 u64 combine_high_and_low_u32s_into_u64(u32 high, u32 low);
 void separate_u64_into_high_and_low_u32s(u64 value, u32* high, u32* low);
 void separate_u32_into_high_and_low_u16s(u32 value, u16* high, u16* low);
-void* advance_bytes(void* pointer, u16 num_bytes);
-void* advance_bytes(void* pointer, u32 num_bytes);
-void* advance_bytes(void* pointer, u64 num_bytes);
-void* retreat_bytes(void* pointer, u32 num_bytes);
-void* retreat_bytes(void* pointer, u64 num_bytes);
-ptrdiff_t pointer_difference(void* a, void* b);
+ptrdiff_t pointer_difference(const void* a, const void* b);
 size_t kilobytes_to_bytes(size_t kilobytes);
 size_t megabytes_to_bytes(size_t megabytes);
 
@@ -161,9 +162,9 @@ wchar_t* skip_leading_whitespace(wchar_t* str);
 // u16 = "0" to "65535", s16 = "-32768" to "32767", MAX = 6 characters.
 // u32 = "0" to "4294967295", s32 = "-2147483648" to "2147483647", MAX = 11 characters.
 // u64 = "0" to "18446744073709551615", s64 = "-9223372036854775808" to "9223372036854775807", MAX = 20 characters.
-const size_t MAX_INT16_CHARS = 6 + 1;
-const size_t MAX_INT32_CHARS = 11 + 1;
-const size_t MAX_INT64_CHARS = 20 + 1; 
+const size_t MAX_INT_16_CHARS = 6 + 1;
+const size_t MAX_INT_32_CHARS = 11 + 1;
+const size_t MAX_INT_64_CHARS = 20 + 1; 
 bool convert_u32_to_string(u32 value, TCHAR* result_string);
 bool convert_s32_to_string(s32 value, TCHAR* result_string);
 bool convert_u64_to_string(u64 value, TCHAR* result_string);
@@ -178,6 +179,7 @@ enum Code_Page
 {
 	CODE_PAGE_UTF_16_LE = 1200,
 	CODE_PAGE_UTF_16_BE = 1201,
+	CODE_PAGE_WINDOWS_1252 = 1252,
 	CODE_PAGE_UTF_32_LE = 12000,
 	CODE_PAGE_UTF_32_BE = 12001,
 };
@@ -189,6 +191,7 @@ TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string
 TCHAR* convert_utf_8_string_to_tchar(Arena* final_arena, Arena* intermediary_arena, const char* utf_8_string);
 TCHAR* convert_utf_8_string_to_tchar(Arena* arena, const char* utf_8_string);
 
+TCHAR* skip_to_end_of_string(TCHAR* str);
 char* skip_to_next_string(char* str);
 wchar_t* skip_to_next_string(wchar_t* str);
 TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings);
@@ -215,10 +218,12 @@ struct Url_Parts
 	TCHAR* query;
 	TCHAR* fragment;
 
+	// Extra ones for convenience.
+	TCHAR* directory_path;
 	TCHAR* filename;
 };
 
-bool partition_url(Arena* arena, const TCHAR* original_url, Url_Parts* url_parts);
+bool partition_url(Arena* arena, const TCHAR* url, Url_Parts* url_parts);
 TCHAR* decode_url(Arena* arena, const TCHAR* url);
 TCHAR* skip_url_scheme(TCHAR* url);
 void correct_url_path_characters(TCHAR* path);
@@ -252,6 +257,7 @@ const size_t MAX_PATH_CHARS = MAX_PATH + 1;
 const size_t MAX_PATH_SIZE = MAX_PATH_CHARS * sizeof(TCHAR);
 
 bool filenames_are_equal(const TCHAR* filename_1, const TCHAR* filename_2);
+bool filename_begins_with(const TCHAR* filename, const TCHAR* prefix);
 bool filename_ends_with(const TCHAR* filename, const TCHAR* suffix);
 TCHAR* skip_to_file_extension(TCHAR* path, bool optional_include_period = false, bool optional_get_first_extension = false);
 TCHAR* skip_to_last_path_components(TCHAR* path, int desired_num_components);
@@ -367,6 +373,7 @@ TCHAR* generate_sha_256_from_file(Arena* arena, const TCHAR* file_path);
 
 bool decompress_gzip_zlib_deflate_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code);
 bool decompress_brotli_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code);
+bool decompress_compress_file(Arena* arena, const TCHAR* source_file_path, HANDLE destination_file_handle, int* result_error_code);
 
 bool tchar_query_registry(HKEY hkey, const TCHAR* key_name, const TCHAR* value_name, TCHAR* value_data, u32 value_data_size);
 #define query_registry(hkey, key_name, value_name, value_data, value_data_size) tchar_query_registry(hkey, T(key_name), T(value_name), value_data, value_data_size)
@@ -547,10 +554,18 @@ enum Csv_Type
 	CSV_DIRECTOR_FILE_TYPE,
 	CSV_XTRA_DESCRIPTION,
 	CSV_XTRA_VERSION,
+	CSV_XTRA_COPYRIGHT,
 
 	// For the Java Plugin:
 	CSV_CODEBASE_IP,
 	CSV_VERSION,
+
+	// When exploring files:
+	CSV_FILE_DESCRIPTION,
+	CSV_FILE_VERSION,
+	CSV_PRODUCT_NAME,
+	CSV_PRODUCT_VERSION,
+	CSV_COPYRIGHT,
 
 	NUM_CSV_TYPES,
 };
@@ -573,8 +588,9 @@ const char* const CSV_TYPE_TO_UTF_8_STRING[] =
 	"Custom File Group", "Custom URL Group", "SHA-256",
 	
 	"Library SHA-256",
-	"Director File Type", "Xtra Description", "Xtra Version",
-	"Codebase IP", "Version"
+	"Director File Type", "Xtra Description", "Xtra Version", "Xtra Copyright",
+	"Codebase IP", "Version",
+	"File Description", "File Version", "Product Name", "Product Version", "Copyright"
 };
 _STATIC_ASSERT(_countof(CSV_TYPE_TO_UTF_8_STRING) == NUM_CSV_TYPES);
 
@@ -664,6 +680,32 @@ struct String_Array
 	int num_strings;
 	Char_Type* strings[ANYSIZE_ARRAY];
 };
+
+// Advances a pointer by a given number of bytes.
+//
+// @Parameters:
+// 1. pointer - The pointer to move forward.
+// 2. num_bytes - The number of bytes to move.
+//
+// @Returns: The moved pointer value.
+template<typename Int_Type>
+void* advance_bytes(const void* pointer, Int_Type num_bytes)
+{
+	return ((char*) pointer) + num_bytes;
+}
+
+// Retreats a pointer by a given number of bytes.
+//
+// @Parameters:
+// 1. pointer - The pointer to move backwards.
+// 2. num_bytes - The number of bytes to move.
+//
+// @Returns: The moved pointer value.
+template<typename Int_Type>
+void* retreat_bytes(const void* pointer, Int_Type num_bytes)
+{
+	return ((char*) pointer) - num_bytes;
+}
 
 // Splits a string into an array of tokens using one or more separators. This function will only consider non-empty tokens.
 //
@@ -756,7 +798,7 @@ String_Array<Char_Type>* split_string(Arena* arena, Char_Type* str, const Char_T
 // 
 // @Returns: See split_string().
 template<typename Char_Type>
-String_Array<Char_Type>* split_string(Arena* arena, const Char_Type* str, const Char_Type* delimiters, int optional_max_splits = -1)
+String_Array<Char_Type>* copy_and_split_string(Arena* arena, const Char_Type* str, const Char_Type* delimiters, int optional_max_splits = -1)
 {
 	TCHAR* str_copy = push_string_to_arena(arena, str);
 	return split_string(arena, str_copy, delimiters, optional_max_splits);

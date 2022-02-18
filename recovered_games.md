@@ -2,6 +2,8 @@
 
 This page lists some browser games whose assets were lost until they were recovered from the web cache.
 
+**If you still have access to an old computer or to its contents, you may be able to recover a previously lost web game.**
+
 ## 3 Point Shootout
 
 A Shockwave game developed by "Skyworks Technologies" and published by "Candystand" on September 14th, 2007. The game was rebranded in 2009 due to a change in ownership of the [Candystand.com](https://web.archive.org/web/20081105135625/http://www.candystand.com/play.do?id=18202) website. Although the game was playable before, the branded assets were found in the web cache.

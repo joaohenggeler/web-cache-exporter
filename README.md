@@ -9,7 +9,9 @@ A command line tool that allows you to more easily view and obtain the contents 
 * The Java Plugin's cache - Java 1.3 to 8.
 * The Unity Web Player's cache.
 
-This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed or played when they were still available. [Here's a list of browser games whose assets were found by searching the web cache](recovered_games.md).
+This tool was developed to aid the [recovery and preservation of lost web media](https://bluemaxima.org/flashpoint/) (games, animations, virtual worlds, etc) whose files might exist in old computers where they were viewed or played when they were still available.
+
+[Here's a list of browser games whose assets were found by searching the web cache](recovered_games.md).
 
 ![A web game being recovered from Internet Explorer's cache.](Images/recovered_game.png)
 
@@ -23,9 +25,11 @@ This tool was developed to aid the [recovery and preservation of lost web media]
 
 * Finds the default and user-defined cache locations of various web browsers.
 
-* Supports labelling cached files based on their file signatures, MIME types, file extensions, and URLs. Files can be grouped and filtered by their format or original domain.
+* Supports labelling cached files based on their file signatures, MIME types, file extensions, and URLs. Files can be grouped and filtered by their format or domain.
 
-<!-- * Decompresses cached files based on the Content-Encoding value (Gzip, Zlib, Raw DEFLATE, Brotli, Compress) in their HTTP headers. -->
+* Supports exporting the cache from external locations (e.g. from the contents of an old computer that won't boot up anymore).
+
+<!-- * Decompresses cached files based on the Content Encoding value in their HTTP headers. The following formats are supported: Gzip, Zlib, Raw DEFLATE, Brotli, Compress. -->
 
 ## Screenshots
 
@@ -41,13 +45,21 @@ This tool was developed to aid the [recovery and preservation of lost web media]
 
 See the [help file](readme_body.txt) to learn how to use this application.
 
+## Group Files
+
+See the ["About Groups" help file](Source/Groups/About%20Groups.txt) to learn how the tool labels cached files based on their file signatures, MIME types, file extensions, and URLs.
+
+## External Locations
+
+See the ["About External Locations" help file](Source/ExternalLocations/About%20External%20Locations.txt) to learn how the tool can export the cache from the contents of an old computer that won't boot up anymore.
+
 ## Building
 
 See the [building instructions](Building.txt) to learn how to compile this application.
 
-## Resources And Tools
+## Tools And Resources
 
-This section lists some useful resources and tools that were used throughout this application's development. This includes learning how to process certain cache formats, validating the application's output, extracting assets from plugin-specific file formats, and other general purpose tools.
+This section lists some useful tools and resources that were used throughout this application's development. This includes learning how to process certain cache formats, validating the application's output, extracting assets from plugin-specific file formats, and other general purpose tools.
 
 ### Internet Explorer
 

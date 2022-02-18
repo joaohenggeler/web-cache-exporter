@@ -47,7 +47,7 @@ See the [help file](readme_body.txt) to learn how to use this application.
 
 ## Group Files
 
-See the ["About Groups" help file](Source/Groups/About%20Groups.txt) to learn how the tool labels cached files based on their file signatures, MIME types, file extensions, and URLs.
+See the ["About Groups" help file](Source/Groups/About%20Groups.txt) to learn how the tool labels cached files based on their file signatures, MIME types, file extensions, and URLs. For example, here's the [Plugin group file](Source/Groups/006-Plugin.group) that matches files used by various web plugins (Flash, Shockwave, Java, etc).
 
 ## External Locations
 

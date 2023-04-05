@@ -85,11 +85,8 @@ For example:
 to 11.
 * Output Name: IE
 
-When exporting Internet Explorer 4 to 9's cache, this tool will also
-create a second output folder and CSV file called "IE-RAW". This is done
-to copy files that might still exist on disk despite not being listed in
-the cache index. Exporting the cache from Internet Explorer 10 and 11
-is only supported in Windows Vista and later.
+Exporting the cache from Internet Explorer 10 and 11 is only supported
+on Windows Vista and later.
 
 ======================================================================
 
@@ -228,7 +225,7 @@ For example:
 * Short Option: -nd
 * Arguments: None.
 * Description: Stops the tool from automatically decompressing each
-cached file according to the Content-Encoding value in their HTTP headers.
+cached file according to the Content-Encoding value in the HTTP headers.
 
 This tool supports the following compression formats and Content-Encoding
 values:
@@ -306,7 +303,7 @@ For example:
 * Description: Replaces the "Location On Cache" and "Location In Output"
 CSV columns with the absolute paths on disk.
 
-The -show-full-paths option does nothing if -files-only is also used.
+Does nothing if -files-only is also used.
 
 For example:
 > WCE.exe -show-full-paths -export-option
@@ -357,20 +354,18 @@ files "006-Plugin.group" and "101-Gaming-Websites.group".
 
 * Long Option: -ignore-filter-for
 * Short Option: -iff
-* Arguments: <Cache Names>
+* Arguments: <Cache Types>
 * Description: Overrides the -filter-by-groups option for specific browsers
 or plugins.
 
-The <Cache Names> argument is mandatory and specifies a list of browser
-or plugin names, separated by forward slashes. The names "browsers" and
-"plugins" can be used to refer to all browsers or plugins, respectively.
-These two categories are mutually exclusive.
-
-Web Browsers: "ie", "mozilla"
-Web Plugins: "flash", "shockwave", "java", "unity"
+The <Cache Types> argument is mandatory and specifies a list of browser
+or plugin types, separated by forward slashes. Use the output names
+defined above for each export option. The names "browsers" and "plugins"
+can be used to refer to all browsers or plugins, respectively. These two
+categories are mutually exclusive.
 
 For example:
-> WCE.exe -fbg "006-Plugin/101-Gaming-Websites" -ignore-filter-for "plugins/mozilla" -export-option
+> WCE.exe -fbg "006-Plugin/101-Gaming-Websites" -ignore-filter-for "plugins/mz" -export-option
 
 This would filter the output based on any loaded groups, except for any
 web plugins or Mozilla-based browsers.
@@ -426,92 +421,6 @@ For example:
 This option can only be used with -export-internet-explorer, and cannot
 be used with -find-and-export-all (as different user profiles would
 have different Local AppData locations).
-
-======================================================================
-CHANGELOG
-======================================================================
-
-This section documents any additions, changes, and fixes between releases.
-This project does not use semantic versioning.
-
-======================================================================
-
-Version: TBD
-Date: TBD
-
-* Added support for decompressing cached files based on the Content Encoding value in their HTTP headers. Supported formats: Gzip, Zlib, Raw DEFLATE, Brotli, Compress.
-* Added "Zlib" (https://zlib.net/) and "Brotli" (https://github.com/google/brotli) as dependencies.
-* Added support for the "DswMedia" cache location in the AppData and Local Low AppData directories when exporting the Shockwave Player's cache.
-* Added the command line options -version, -no-log, and -quiet to print the application version, skip logging to a file, and skip printing to the console, respectively.
-* Added the command line options -no-decompress and -no-clear-default-temporary to skip decompressing cached files and deleting temporary directories from previous executions, respectively.
-* Added -temporary-directory to specify a different temporary directory location.
-* Added a short version for every command line option.
-* Added the CSV columns "File Description", "File Version", "Product Name", "Product Version", and "Copyright" to the Explore Files exporter.
-* Added the CSV column "Xtra Copyright" to the Shockwave Player cache exporter.
-* Added documentation for any macros set by Build.bat.
-* Added a changelog to the README template.
-* Added building instructions to the source package.
-
-* Changed how -filter-by-groups works. This option now takes a list of group files as an argument. The application loads all group files on startup and only keeps cached files if they match at least one file or URL group defined in this list.
-* Removed -load-group-files.
-* Renamed -export-ie, -no-copy-files, and -no-create-csv to -export-internet-explorer, -csvs-only, and -files-only, respectively.
-* Changed the sharing mode for CSV files. These can now be opened by other processes while the application is running.
-* Changed how Build.bat handles dependencies.
-* Reverted warning suppression changes in the "Portable C++ Hashing Library" source file.
-* Updated the Archive group file.
-
-======================================================================
-
-Version: 1.1.0
-Date: 2021-06-10
-
-* Added support for the Mozilla cache format. This includes finding and exporting the cache from the following Mozilla-based browsers: Mozilla Firefox, SeaMonkey, Pale Moon, Basilisk, Waterfox, K-Meleon, Netscape Navigator (6.1 to 9), the Mozilla Suite, Mozilla Firebird, and Phoenix.
-* Added support for the Unity Web Player cache format.
-* Added the command line option "-ignore-filter-for <Cache Names>" to ignore the group file filter for specific cache types.
-* Added the command line option "-group-by-origin" to group the output directories by each cached file's request origin.
-* Added the "DEFAULT_FILE_EXTENSION" field to file groups. This defines a file extension that is added to the end of any cached file without a name.
-* Added the CSV column "Exporter Warning" to the Internet Explorer and Mozilla cache exporters.
-* Added the CSV column "Content Range" to any exporter whose cache format stores HTTP headers.
-* Added the CSV column "Last Modified Time" to the Flash Player cache exporter.
-* Added the directory "Scripts" with two scripts to the release package.
-
-* Updated the Text, Plugin, Binary, Lost Media Websites, and Other Websites group files.
-* Updated the group files and external locations help files
-* Renamed all cache exporter source files.
-* Stopped exporting HEU metadata files from the Flash Player's cache.
-
-* Fixed running out of memory when exporting the Internet Explorer 10 and 11 cache format in specific situations.
-
-======================================================================
-
-Version: 1.0.8
-Date: 2021-02-07
-
-* Fixed not automatically setting the value of the "File Size", "Last Write Time", "Creation Time", and "Last Access Time" CSV columns properly for the Flash Player, Shockwave Player, Raw Internet Explorer, and Explore Files cache exporters.
-
-======================================================================
-
-Version: 1.0.7
-Date: 2021-02-06
-
-* Added the CSV columns "Location In Output", "Copy Error", and "SHA-256" to all cache exporters.
-* Added the CSV columns "Xtra Description" and "Xtra Version" to the Shockwave Player cache exporter.
-* Added the CSV columns "Hits" and "Library SHA-256" to the Flash Player cache exporter.
-* Added the CSV column "File Size" to the Java Plugin cache exporter.
-
-* Changed how dependencies are included after adding the "Portable C++ Hashing Library" (https://github.com/stbrumme/hash-library) to the project.
-* Updated the Plugin and Gaming Websites group files.
-* The names of the files processed by the raw Internet Explorer cache exporter ("IE-RAW") are now undecorated.
-
-* Fixed naming collisions between directories and files not being handled properly when exporting files.
-* Fixed the CSV column "Location On Cache" not showing a file's name and directory in the Flash Player and Shockwave Player cache exporters.
-
-======================================================================
-
-Version: 1.0.0
-Date: 2020-11-26
-
-Initial release.
 
 ======================================================================
 SPECIAL THANKS

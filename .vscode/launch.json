@@ -1,0 +1,89 @@
+{
+	"version": "0.2.0",
+	"configurations":
+	[
+		{
+			"name": "Debug Launch (9x, 32-bit)",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\Builds\\Debug\\9x-x86\\WCE9x32.exe",
+			"args": ["-o", "-faea", "WCE9x32"],
+			"cwd": "${workspaceFolder}",
+			"logging":
+			{
+				"exceptions": false,
+				"moduleLoad": false
+			}
+		},
+
+		{
+			"name": "Debug Launch (NT, 32-bit)",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\Builds\\Debug\\NT-x86\\WCE32.exe",
+			"args": ["-o", "-faea", "WCE32"],
+			"cwd": "${workspaceFolder}",
+			"logging":
+			{
+				"exceptions": false,
+				"moduleLoad": false
+			}
+		},
+
+		{
+			"name": "Debug Launch (NT, 64-bit)",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\Builds\\Debug\\NT-x64\\WCE64.exe",
+			"args": ["-o", "-faea", "WCE64"],
+			"cwd": "${workspaceFolder}",
+			"logging":
+			{
+				"exceptions": false,
+				"moduleLoad": false
+			}
+		},
+
+		{
+			"name": "Release Launch (9x, 32-bit)",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\Builds\\Release\\WCE9x32.exe",
+			"args": ["-o", "-faea", "WCE9x32"],
+			"cwd": "${workspaceFolder}",
+			"logging":
+			{
+				"exceptions": false,
+				"moduleLoad": false
+			}
+		},
+
+		{
+			"name": "Release Launch (NT, 32-bit)",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\Builds\\Release\\WCE32.exe",
+			"args": ["-o", "-faea", "WCE32"],
+			"cwd": "${workspaceFolder}",
+			"logging":
+			{
+				"exceptions": false,
+				"moduleLoad": false
+			}
+		},
+
+		{
+			"name": "Release Launch (NT, 64-bit)",
+			"type": "cppvsdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}\\Builds\\Release\\WCE64.exe",
+			"args": ["-o", "-faea", "WCE64"],
+			"cwd": "${workspaceFolder}",
+			"logging":
+			{
+				"exceptions": false,
+				"moduleLoad": false
+			}
+		}
+	]
+}

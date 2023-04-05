@@ -16,12 +16,13 @@
 	Where the <Cache Subdirectory> may be "Cache" or "cache2" depending on the cache version.
 	
 	And where <Vendor and Browser> depends on the browser:
-	- Mozilla Firefox 				"Mozilla\Firefox"
-	- SeaMonkey 					"Mozilla\SeaMonkey"
-	- Pale Moon 					"Moonchild Productions\Pale Moon"
+	- Mozilla Firefox				"Mozilla\Firefox"
+	- SeaMonkey						"Mozilla\SeaMonkey"
+	- Pale Moon						"Moonchild Productions\Pale Moon"
 	- Basilisk						"Moonchild Productions\Basilisk"
 	- Waterfox						"Waterfox"
 	- K-Meleon						"K-Meleon"
+	- Comodo IceDragon				"Comodo\IceDragon"
 	- Netscape Navigator			"Netscape\Navigator" (for 9.x)
 									"Netscape\NSB" (for 8.x)
 	
@@ -85,8 +86,6 @@
 	--> https://www.nirsoft.net/utils/mozilla_cache_viewer.html
 	--> Used to validate the output of this application.
 */
-
-static const TCHAR* OUTPUT_NAME = T("MZ");
 
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
@@ -159,7 +158,7 @@ static bool find_cache_parent_directory_in_mozilla_prefs(Exporter* exporter, con
 						TCHAR* cache_directory_path = convert_utf_8_string_to_tchar(arena, value);
 						string_unescape(cache_directory_path);
 
-						if(exporter->should_load_external_locations)
+						if(exporter->load_external_locations)
 						{
 							success = resolve_exporter_external_locations_path(exporter, cache_directory_path, result_cache_path);
 						}
@@ -225,13 +224,13 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 			// We only check for custom locations in the prefs.js file when iterating over AppData (which is defined for all Windows versions and
 			// is where this preferences file is located).
-			bool should_check_prefs = (base_path == exporter->appdata_path);
+			bool check_prefs = (base_path == exporter->appdata_path);
 			TCHAR prefs_file_path[MAX_PATH_CHARS] = T("");
 			PathCombine(prefs_file_path, profile_path, profile_info.object_name);
 			PathAppend(prefs_file_path, T("prefs.js"));
 
 			TCHAR prefs_cache_path[MAX_PATH_CHARS] = T("");
-			if(should_check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
+			if(check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
 			{
 				log_info("Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
 			
@@ -252,7 +251,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 			// By default, we try to append the possible cache subdirectory names to the current profile path we're iterating over, so we need
 			// to be careful and avoid exporting the cache twice from the same location. If this prefs location doesn't exist, we always export
 			// normally below.
-			if(!do_paths_refer_to_the_same_directory(prefs_cache_path, parent_cache_path))
+			if(!paths_refer_to_same_object(prefs_cache_path, parent_cache_path))
 			{
 				PathCombine(exporter->cache_path, parent_cache_path, T("Cache"));
 				export_mozilla_cache_version_1(exporter);
@@ -277,7 +276,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 				PathAppend(prefs_file_path, salt_directory_info.object_name);
 				PathAppend(prefs_file_path, T("prefs.js"));
 
-				if(should_check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
+				if(check_prefs && find_cache_parent_directory_in_mozilla_prefs(exporter, prefs_file_path, prefs_cache_path))
 				{
 					log_info("Default Mozilla Cache Exporter: Checking the cache directory '%s' found in the prefs file '%s'.", prefs_cache_path, prefs_file_path);
 				
@@ -293,7 +292,7 @@ static void export_default_mozilla_cache(	Exporter* exporter, const TCHAR* vendo
 
 				parent_cache_path = salt_directory_info.object_path;
 
-				if(!do_paths_refer_to_the_same_directory(prefs_cache_path, parent_cache_path))
+				if(!paths_refer_to_same_object(prefs_cache_path, parent_cache_path))
 				{
 					PathCombine(exporter->cache_path, parent_cache_path, T("Cache"));
 					export_mozilla_cache_version_1(exporter);
@@ -329,22 +328,23 @@ void export_default_or_specific_mozilla_cache(Exporter* exporter)
 
 	DEBUG_BEGIN_MEASURE_TIME("Export Mozilla's Cache");
 
-	initialize_cache_exporter(exporter, CACHE_MOZILLA, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_MOZILLA, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{
-			export_default_mozilla_cache(exporter, T("Mozilla\\Firefox"), 					T("FF"));
-			export_default_mozilla_cache(exporter, T("Mozilla\\SeaMonkey"), 				T("SM"));
-			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Pale Moon"), 	T("PM"));
-			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Basilisk"), 	T("BS"));
-			export_default_mozilla_cache(exporter, T("Waterfox"), 							T("WF"));
-			export_default_mozilla_cache(exporter, T("K-Meleon"), 							T("KM"));
-			export_default_mozilla_cache(exporter, T("Netscape\\Navigator"), 				T("NS"));
-			export_default_mozilla_cache(exporter, T("Netscape\\NSB"), 						T("NS"));
+			export_default_mozilla_cache(exporter, T("Mozilla\\Firefox"),					T("FF"));
+			export_default_mozilla_cache(exporter, T("Mozilla\\SeaMonkey"),					T("SM"));
+			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Pale Moon"),	T("PM"));
+			export_default_mozilla_cache(exporter, T("Moonchild Productions\\Basilisk"),	T("BK"));
+			export_default_mozilla_cache(exporter, T("Waterfox"),							T("WF"));
+			export_default_mozilla_cache(exporter, T("K-Meleon"),							T("KM"));
+			export_default_mozilla_cache(exporter, T("Comodo\\IceDragon"),					T("CI"));
+			export_default_mozilla_cache(exporter, T("Netscape\\Navigator"),				T("NS"));
+			export_default_mozilla_cache(exporter, T("Netscape\\NSB"),						T("NS"));
 
-			export_default_mozilla_cache(exporter, T("Phoenix"), 							T("PH-FB"));
-			export_default_mozilla_cache(exporter, T("Mozilla"), 							T("MS-NS"), false);
-			export_default_mozilla_cache(exporter, T("Mozilla"), 							T("MS-NS"), true);
+			export_default_mozilla_cache(exporter, T("Phoenix"),							T("PH-FB"));
+			export_default_mozilla_cache(exporter, T("Mozilla"),							T("MS-NS"), false);
+			export_default_mozilla_cache(exporter, T("Mozilla"),							T("MS-NS"), true);
 		}
 		else
 		{
@@ -1114,13 +1114,10 @@ struct Mozilla_2_Index_Header
 	u32 version;
 	u32 last_write_time;
 	u32 dirty_flag;
-
-	// This last member didn't exist in the oldest header version, and since we only use two of the members above
-	// there's no need to add it to the total header struct size.
-	#if 0
-	u32 used_cache_size; // In kilobytes.
-	#endif
+	u32 used_cache_size; // @Format: In kilobytes. This field did not exist in the oldest header version.
 };
+
+const u32 MZ2_MAX_INDEX_VERSION = 10;
 
 // @Format: CacheFileMetadataHeader in https://hg.mozilla.org/mozilla-central/file/tip/netwerk/cache2/CacheFileMetadata.h
 // The version is defined in https://hg.mozilla.org/mozilla-central/log/tip/netwerk/cache2/CacheFileMetadata.h?patch=&linerange=37:37
@@ -1153,7 +1150,7 @@ struct Mozilla_2_Metadata_Header_Version_3
 
 #pragma pack(pop)
 
-_STATIC_ASSERT(sizeof(Mozilla_2_Index_Header) == 12);
+_STATIC_ASSERT(sizeof(Mozilla_2_Index_Header) == 16);
 _STATIC_ASSERT(sizeof(Mozilla_2_Metadata_Header_Version_1_And_2) == 24);
 _STATIC_ASSERT(sizeof(Mozilla_2_Metadata_Header_Version_3) == 32);
 
@@ -1299,6 +1296,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 		{
 			is_version_supported = false;
 			log_warning("Mozilla Cache Version 2: Skipping the unsupported metadata version %I32u in the file '%s'.", metadata_header.version, cached_filename);
+			_ASSERT(false);
 		}
 
 		#undef READ_INTEGER
@@ -1382,7 +1380,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_mozilla_cache_version_2_files_callback)
 											TCHAR* host = url_parts->strings[1];
 
 											size_t num_partition_key_chars = string_length(scheme) + 3 + string_length(host) + 1;
-											partition_key = push_arena(arena, num_partition_key_chars * sizeof(TCHAR), TCHAR);
+											partition_key = push_array_to_arena(arena, num_partition_key_chars, TCHAR);
 
 											StringCchPrintf(partition_key, num_partition_key_chars, T("%s://%s"), scheme, host);
 										}
@@ -1512,6 +1510,13 @@ static void export_mozilla_cache_version_2(Exporter* exporter)
 		BIG_ENDIAN_TO_HOST(index_header.version);
 		BIG_ENDIAN_TO_HOST(index_header.last_write_time);
 		BIG_ENDIAN_TO_HOST(index_header.dirty_flag);
+		BIG_ENDIAN_TO_HOST(index_header.used_cache_size);
+
+		if(index_header.version > MZ2_MAX_INDEX_VERSION)
+		{
+			log_warning("Mozilla Cache Version 2: Found the unsupported version %I32u in the index file '%s'.", index_header.version, exporter->index_path);
+			_ASSERT(false);
+		}
 
 		if(index_header.dirty_flag != 0)
 		{

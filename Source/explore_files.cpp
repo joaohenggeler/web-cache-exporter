@@ -8,8 +8,6 @@
 	combined with group files, which allow you to potentially identify file formats based on file signatures.
 */
 
-static const TCHAR* OUTPUT_NAME = T("EXPLORE");
-
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
@@ -83,7 +81,7 @@ void export_explored_files(Exporter* exporter)
 {
 	console_print("Exploring the files in '%s'...", exporter->cache_path);
 
-	initialize_cache_exporter(exporter, CACHE_EXPLORE, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_EXPLORE, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		log_info("Explore Files: Exploring the files in '%s'.", exporter->cache_path);
 		traverse_directory_objects(exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true, explore_files_callback, exporter);

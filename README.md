@@ -29,7 +29,7 @@ This tool was developed to aid the [recovery and preservation of lost web media]
 
 * Supports exporting the cache from external locations (e.g. from the contents of an old computer that won't boot up anymore).
 
-<!-- * Decompresses cached files based on the Content Encoding value in their HTTP headers. The following formats are supported: Gzip, Zlib, Raw DEFLATE, Brotli, Compress. -->
+* Decompresses cached files based on the Content Encoding in the HTTP headers. Supported formats: Gzip, Zlib, Raw DEFLATE, Brotli, Compress.
 
 ## Screenshots
 

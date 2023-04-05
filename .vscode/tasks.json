@@ -1,0 +1,60 @@
+{
+	"version": "2.0.0",
+	"tasks":
+	[
+		{
+			"group": "build",
+			"label": "Debug Build",
+			"type": "shell",
+			"command": "${workspaceFolder}\\Build.bat",
+			"args": ["debug"],
+			"presentation":
+			{
+				"clear": true
+			}
+		},
+
+		{
+			"group": "build",
+			"label": "Debug Build (Empty Export)",
+			"type": "shell",
+			"command": "${workspaceFolder}\\Build.bat",
+			"args": ["debug", "/D", "WCE_EMPTY_EXPORT"],
+			"presentation":
+			{
+				"clear": true
+			}
+		},
+
+		{
+			"group": "build",
+			"label": "Release Build",
+			"type": "shell",
+			"command": "${workspaceFolder}\\Build.bat",
+			"args": ["release"],
+			"presentation":
+			{
+				"clear": true
+			}
+		},
+
+		{
+			"group": "build",
+			"label": "Release Build (Debug Symbols)",
+			"type": "shell",
+			"command": "${workspaceFolder}\\Build.bat",
+			"args": ["release", "/Zi"],
+			"presentation":
+			{
+				"clear": true
+			}
+		},
+
+		{
+			"group": "build",
+			"label": "Package Build",
+			"dependsOn": ["Debug Build", "Release Build"],
+			"dependsOrder": "sequence"
+		}
+	]
+}

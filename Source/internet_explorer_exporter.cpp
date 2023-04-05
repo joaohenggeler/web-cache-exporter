@@ -1,7 +1,7 @@
 #include "web_cache_exporter.h"
 #include "internet_explorer_exporter.h"
 
-#ifndef BUILD_9X
+#ifndef WCE_9X
 	// Minimum supported version for the JET Blue / ESE API used by the Internet Explorer 10 and 11's exporter:
 	// 0x0500  - Windows 2000
 	// 0x0501  - Windows XP
@@ -99,39 +99,16 @@
 	--> Used to explore an existing JET Blue / ESE database in order to figure out how to process the cache for IE 10 and 11.
 */
 
-static const TCHAR* OUTPUT_NAME = T("IE");
-
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE,
-	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME, CSV_ACCESS_COUNT,
+	CSV_LAST_MODIFIED_TIME, CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME, CSV_EXPIRY_TIME, CSV_ACCESS_COUNT,
 	CSV_RESPONSE, CSV_SERVER, CSV_CACHE_CONTROL, CSV_PRAGMA, CSV_CONTENT_TYPE, CSV_CONTENT_LENGTH, CSV_CONTENT_RANGE, CSV_CONTENT_ENCODING, 
 	CSV_DECOMPRESSED_FILE_SIZE, CSV_LOCATION_ON_CACHE, CSV_CACHE_VERSION,
 	CSV_MISSING_FILE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR, CSV_EXPORTER_WARNING,
 	CSV_CUSTOM_FILE_GROUP, CSV_CUSTOM_URL_GROUP, CSV_SHA_256
 };
 static const int CSV_NUM_COLUMNS = _countof(CSV_COLUMN_TYPES);
-
-// ----------------------------------------------------------------------------------------------------
-
-// The same values as above but for a "raw" unprocessed export of Internet Explorer 4 to 9's cache. This will copy every file that's
-// stored in the cache directory and its subdirectories, without relying on the index.dat file. This is useful since its been noted
-// that IE 6 and older don't always properly delete some of their cached files, meaning we could potentially recover 
-//
-// @Future: This is hardcoded for now, but in the future there could be an option to also export this raw version for every cache type.
-// However, not every cache type lends itself to this kind of operation (e.g. if we're missing the database file, we might not even
-// be able to find the files themselves). For now, we'll only do this for IE 4 through 9.
-
-static const TCHAR* RAW_OUTPUT_NAME = T("IE-RAW");
-// Notice how we have less information due to not relying on the index/database file. We only know the file's properties.
-static Csv_Type RAW_CSV_COLUMN_TYPES[] =
-{
-	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
-	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
-	CSV_LOCATION_ON_CACHE, CSV_LOCATION_IN_OUTPUT, CSV_COPY_ERROR,
-	CSV_CUSTOM_FILE_GROUP, CSV_SHA_256
-};
-static const size_t RAW_CSV_NUM_COLUMNS = _countof(RAW_CSV_COLUMN_TYPES);
 
 // ----------------------------------------------------------------------------------------------------
 
@@ -176,7 +153,7 @@ enum Ie_Index_Entry_Signature
 // @Format: The header for the index.dat file.
 struct Ie_4_5_Index_Header
 {
-	s8 signature[IE_4_5_NUM_SIGNATURE_CHARS]; // @Used. Includes the null terminator.
+	u8 signature[IE_4_5_NUM_SIGNATURE_CHARS]; // @Used. Includes the null terminator.
 	u32 file_size; // @Used.
 	u32 file_offset_to_first_hash_table_page;
 
@@ -195,7 +172,7 @@ struct Ie_4_5_Index_Header
 	struct
 	{
 		u32 num_files;
-		s8 name[IE_4_5_ESE_NUM_CACHE_DIRECTORY_NAME_CHARS]; // Does *not* include the null terminator.
+		u8 name[IE_4_5_ESE_NUM_CACHE_DIRECTORY_NAME_CHARS]; // Does *not* include the null terminator.
 	} cache_directories[IE_4_5_ESE_MAX_NUM_CACHE_DIRECTORIES]; // @Used.
 
 	u32 header_data[IE_4_5_HEADER_DATA_LENGTH];
@@ -333,7 +310,7 @@ bool find_internet_explorer_version(TCHAR* ie_version, u32 ie_version_size)
 // @Returns: True if it's able to find Internet Explorer's version in the registry. Otherwise, false.
 static void undecorate_path(TCHAR* path)
 {
-	#if defined(BUILD_DEBUG) && !defined(BUILD_9X)
+	#if defined(WCE_DEBUG) && !defined(WCE_9X)
 		wchar_t actual_undecorated_path[MAX_PATH_CHARS] = L"";
 		StringCchCopyW(actual_undecorated_path, MAX_PATH_CHARS, path);
 		PathUndecorateW(actual_undecorated_path);
@@ -395,7 +372,7 @@ static void undecorate_path(TCHAR* path)
 		MoveMemory(decoration_begin, remaining_path, string_size(remaining_path));
 	}
 
-	#if defined(BUILD_DEBUG) && !defined(BUILD_9X)
+	#if defined(WCE_DEBUG) && !defined(WCE_9X)
 		// @Assert: Guarantee that our result matches PathUndecorate()'s.
 		_ASSERT(strings_are_equal(path, actual_undecorated_path));
 	#endif
@@ -411,9 +388,9 @@ static void undecorate_path(TCHAR* path)
 //
 // @Returns: Nothing.
 
-static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback);
 static void export_internet_explorer_4_to_9_cache(Exporter* exporter);
 static void export_internet_explorer_10_to_11_cache(Exporter* exporter, const wchar_t* ese_files_prefix);
+static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback);
 
 void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 {
@@ -421,8 +398,10 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 	
 	bool ie_4_to_9_cache_exists = false;
 
-	initialize_cache_exporter(exporter, CACHE_INTERNET_EXPLORER, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_INTERNET_EXPLORER, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
+		set_exporter_output_copy_subdirectory(exporter, T("Cache"));
+
 		if(exporter->is_exporting_from_default_locations)
 		{
 			StringCchCopy(exporter->cache_path, MAX_PATH_CHARS, exporter->wininet_cache_path);
@@ -450,7 +429,7 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 		log_newline();
 		log_info("Internet Explorer 4 to 9: Finished exporting the cache.");
 
-		#ifndef BUILD_9X
+		#ifndef WCE_9X
 
 			if(exporter->is_exporting_from_default_locations)
 			{
@@ -479,12 +458,8 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 			log_info("Internet Explorer 10 to 11: Finished exporting the cache.");
 
 		#endif
-	}
-	terminate_cache_exporter(exporter);
 
-	if(ie_4_to_9_cache_exists)
-	{
-		initialize_cache_exporter(exporter, CACHE_INTERNET_EXPLORER, RAW_OUTPUT_NAME, RAW_CSV_COLUMN_TYPES, RAW_CSV_NUM_COLUMNS);
+		if(ie_4_to_9_cache_exists)
 		{
 			if(exporter->is_exporting_from_default_locations)
 			{
@@ -494,41 +469,44 @@ void export_default_or_specific_internet_explorer_cache(Exporter* exporter)
 			log_newline();
 			log_info("Raw Internet Explorer 4 to 9: Exporting the raw cache from '%s'.", exporter->cache_path);
 
+			set_exporter_output_copy_subdirectory(exporter, T("Raw"));
 			traverse_directory_objects(	exporter->cache_path, ALL_OBJECTS_SEARCH_QUERY, TRAVERSE_FILES, true,
-										find_internet_explorer_4_to_9_cache_files_callback, exporter);
+										find_internet_explorer_4_to_9_cache_files_callback, exporter);		
 		}
-		terminate_cache_exporter(exporter);		
 	}
+	terminate_cache_exporter(exporter);
 }
 
-// Called every time a file is found in Internet Explorer 4 to 9's cache directory. Used to perform a "raw" export, were the files are copied
-// and the CSV is created without relying on the metadata in the index.dat file.
+// Called every time a file is found in Internet Explorer 4 to 9's cache directory. Used to perform
+// a raw export where the files are copied without relying on the metadata in the index.dat file.
 //
 // @Parameters: See the TRAVERSE_DIRECTORY_CALLBACK macro.
 //
 // @Returns: True.
 static TRAVERSE_DIRECTORY_CALLBACK(find_internet_explorer_4_to_9_cache_files_callback)
 {
-	TCHAR* filename = callback_info->object_name;
 	// Skip the index.dat file itself. We only want the cached files.
+	TCHAR* filename = callback_info->object_name;
 	if(filenames_are_equal(filename, T("index.dat")) || filenames_are_equal(filename, T("desktop.ini"))) return true;
 
 	TCHAR* full_location_on_cache = callback_info->object_path;
-
-	// Despite not using the index.dat file, we can find out where we're located on the cache.
 	TCHAR* short_location_on_cache = skip_to_last_path_components(full_location_on_cache, 2);
+	TCHAR* cache_version = T("Raw");
 
-	// And we can also remove the filename's decoration to obtain the original name.
+	// We can remove the filename's decoration to obtain the original name.
 	undecorate_path(filename);
 
 	Csv_Entry csv_row[] =
 	{
-		{/* Filename */}, {/* File Extension */}, {/* File Size */},
-		{/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */},
-		{/* Location On Cache */}, {/* Location In Output */}, {/* Copy Error */},
-		{/* Custom File Group */}, {/* SHA-256 */}
+		{/* Filename */}, {/* URL */}, {/* File Extension */}, {/* File Size */},
+		{/* Last Modified Time */}, {/* Creation Time */}, {/* Last Write Time */}, {/* Last Access Time */}, {/* Expiry Time */}, {/* Access Count */},
+		{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
+		{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
+		{/* Decompressed File Size */}, {/* Location On Cache */}, {cache_version},
+		{/* Missing File */}, {/* Location In Output */}, {/* Copy Error */}, {/* Exporter Warning */},
+		{/* Custom File Group */}, {/* Custom URL Group */}, {/* SHA-256 */}
 	};
-	_STATIC_ASSERT(_countof(csv_row) == RAW_CSV_NUM_COLUMNS);
+	_STATIC_ASSERT(_countof(csv_row) == CSV_NUM_COLUMNS);
 
 	Exporter* exporter = (Exporter*) callback_info->user_data;
 
@@ -1006,7 +984,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 				Csv_Entry csv_row[] =
 				{
 					{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
-					{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time}, {access_count},
+					{last_modified_time}, {creation_time}, {/* Last Write Time */}, {last_access_time}, {expiry_time}, {access_count},
 					{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 					{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 					{/* Decompressed File Size */}, {/* Location On Cache */}, {cache_version},
@@ -1105,7 +1083,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		log_info("Internet Explorer 4 to 9: Stopped processing the index file with %I64u of %I64u bytes remaining.", index_file_size - total_bytes_read, index_file_size);
 	}
 
-	log_info("Internet Explorer 4 to 9: Found the following entries: URL = %d, Leak = %d, Redirect = %d, Hash = %d, Updated = %d, Deleted = %d, Newly Allocated = %d, Deallocated = %d, Unknown = %d.",
+	log_info("Internet Explorer 4 to 9: Found the following entries: Url = %d, Leak = %d, Redirect = %d, Hash = %d, Updated = %d, Deleted = %d, Newly Allocated = %d, Deallocated = %d, Unknown = %d.",
 						num_url_entries, num_leak_entries, num_redirect_entries, num_hash_entries, num_updated_entries, num_deleted_entries, num_newly_allocated_entries, num_deallocated_entries, num_unknown_entries);
 
 	safe_close_handle(&index_handle);
@@ -1118,7 +1096,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 // ----------------------------------------------------------------------
 
 // Define the export process for Internet Explorer 10 and 11. Only available on the Windows 2000 through 10 builds.
-#ifndef BUILD_9X
+#ifndef WCE_9X
 
 	// Define the stub versions of the functions we want to dynamically load, and the variables that will either contain the pointer to
 	// these loaded functions or to the stub versions (if we can't load the real ones).
@@ -1776,7 +1754,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 		// set to "<Local AppData>\Microsoft\Windows\WebCache" (using either of the previously mentioned methods).
 		bool is_original_database_path_set = false;
 		wchar_t original_database_path[MAX_PATH_CHARS] = L"";
-		if(!exporter->is_exporting_from_default_locations && exporter->should_use_ie_hint)
+		if(!exporter->is_exporting_from_default_locations && exporter->use_ie_hint)
 		{
 			is_original_database_path_set = true;
 			PathCombineW(original_database_path, exporter->ie_hint_path, L"Microsoft\\Windows\\WebCache");
@@ -2078,7 +2056,7 @@ static void export_internet_explorer_4_to_9_cache(Exporter* exporter)
 									Csv_Entry csv_row[] =
 									{
 										{/* Filename */}, {/* URL */}, {/* File Extension */}, {cached_file_size},
-										{last_modified_time}, {creation_time}, {last_access_time}, {expiry_time}, {access_count_string},
+										{last_modified_time}, {creation_time}, {/* Last Write Time */}, {last_access_time}, {expiry_time}, {access_count_string},
 										{/* Response */}, {/* Server */}, {/* Cache Control */}, {/* Pragma */},
 										{/* Content Type */}, {/* Content Length */}, {/* Content Range */}, {/* Content Encoding */},
 										{/* Decompressed File Size */}, {/* Location On Cache */}, {cache_version},

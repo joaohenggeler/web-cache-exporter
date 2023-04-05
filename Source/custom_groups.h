@@ -113,8 +113,8 @@ struct Matchable_Cache_Entry
 	TCHAR* file_extension_to_match;
 	TCHAR* url_to_match;
 	
-	bool should_match_file_group;
-	bool should_match_url_group;
+	bool match_file_group;
+	bool match_url_group;
 
 	// Output
 

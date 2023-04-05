@@ -3,11 +3,16 @@ using the Build.bat batch file. See the comments at the top of this
 file to learn how to use and set each basic build parameter. The batch
 file is executed using the following syntax:
 
-> Build.bat [Optional Compiler Arguments]
+> Build.bat <Mandatory Build Mode> [Optional Compiler Arguments]
 
 For example:
-> Build.bat
-> Build.bat /D EXPORT_EMPTY_FILES
+> Build.bat release
+> Build.bat release /Zi
+> Build.bat debug
+> Build.bat debug /D WCE_EMPTY_EXPORT
+
+You can also build and run the project using Visual Studio Code provided
+the batch file points to a valid Visual Studio installation.
 
 Note that this project does not use semantic versioning.
 
@@ -20,6 +25,7 @@ variables:
 
 * Setting VCVARSALL_PATH to the path of the vcvarsall.bat batch file
 that is installed with Visual Studio.
+
 * Setting USE_VS_2005_OPTIONS to "No".
 
 Note that this application hasn't been thoroughly tested with modern
@@ -33,6 +39,17 @@ in the path specified by the _7ZIP_EXE_PATH variable. This utility is
 not included with the source distribution. If you don't care about
 packaging the compiled application, you may disable this feature by
 setting the PACKAGE_BUILD variable to "No".
+
+7-Zip Command Line Version 9.20 (7za9209) is used to package the official
+releases. This version was chosen since it's the last one that's compatible
+with Windows 9x.
+
+Download: https://sourceforge.net/projects/sevenzip/files/7-Zip/9.20/
+
+The batch will also use the SFX module "7z.sfx" to create a self-extracting
+archive. If you're using the standalone version (7za9209), you'll have to
+copy that file from the main 7-Zip 9.20 install (7z920.exe) and place it
+next to the standalone 7-Zip executable.
 
 ======================================================================
 

@@ -4,7 +4,7 @@
 // Define the minimum supported target version. Using functions that are not supported on older systems will result in a compile time
 // error. This application targets Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10. See "Using the Windows Headers" in the Win32 API
 // Reference.
-#ifdef BUILD_9X
+#ifdef WCE_9X
 	// Target Windows 98 and ME (9x, ANSI).
 	// Minimum Windows Version: Windows 98 (release version 4.10 -> 0x0410).
 	// Minimum Internet Explorer Version: IE 4.01 (0x0401, which corresponds to version 4.72 of both Shell32.dll and Shlwapi.dll).
@@ -26,10 +26,10 @@
 	#define _WIN32_IE 0x0401
 
 	// Windows 95 for future reference:
-	//#define WINVER          0x0400
-	//#define _WIN32_WINDOWS  0x0400
-	//#define _WIN32_WINNT    0
-	//#define _WIN32_IE       0x0300
+	// #define WINVER          0x0400
+	// #define _WIN32_WINDOWS  0x0400
+	// #define _WIN32_WINNT    0
+	// #define _WIN32_IE       0x0300
 #else
 	// Target Windows 2000, XP, Vista, 7, 8.1, and 10 (NT, Unicode).
 	// Minimum Windows Version: Windows 2000 (release version NT 5.0 -> 0x0500).
@@ -71,48 +71,51 @@
 #undef WIN32_NO_STATUS
 
 #include <ntstatus.h> // For the NTSTATUS error code constants.
-#include <winternl.h> // For NtQuerySystemInformation()'s definition and any necessary structs and constants that are used by it.
-#include <stierr.h> // For the NT_SUCCESS() macro.
+#include <stierr.h> // For the NT_SUCCESS().
+#include <winternl.h> // For NtQuerySystemInformation() and any structs and constants used by it.
 
-#include <tchar.h>
-#include <strsafe.h>
-#include <stdarg.h>
-
-#include <shlobj.h>
+#include <shlobj.h> // For the SH*() functions.
 // Disable the deprecation warnings for the following functions: StrNCatA(), StrNCatW(), StrCatW(), and StrCpyW(). We won't use these.
 #pragma warning(push)
 #pragma warning(disable : 4995)
-	#include <shlwapi.h>
+	#include <shlwapi.h> // For the Path*() functions.
 #pragma warning(pop)
 
-#include <time.h> // For _gmtime64_s() and _tcsftime().
+#include <tchar.h> // For the generic-text mappings.
+#include <strsafe.h> // For the StringCch*() and StringCb*() functions. Must appear after tchar.h.
+
 #include <crtdbg.h> // For _ASSERT() and _STATIC_ASSERT().
+#include <stdarg.h> // For va_list, va_start, and va_end.
+#include <time.h> // For _gmtime64_s() and _tcsftime().
 
 // A handy shorthand for the TEXT() macro. See the comment at the top of "web_cache_exporter.cpp" for more details.
 #define T(char_or_string) TEXT(char_or_string)
 
+#define ASSERT(expression, message) _ASSERT_EXPR((expression), T(message))
+
 // Information about the current build that is passed by the Build.bat batch file.
-#ifdef BUILD_TARGET
-	const char* const EXPORTER_BUILD_TARGET = BUILD_TARGET;
+#ifdef WCE_TARGET
+	const char* const EXPORTER_BUILD_TARGET = WCE_TARGET;
 #else
 	const char* const EXPORTER_BUILD_TARGET = "?";
 #endif
 
-#ifdef BUILD_VERSION
-	const char* const EXPORTER_BUILD_VERSION = BUILD_VERSION;
+#ifdef WCE_VERSION
+	const char* const EXPORTER_BUILD_VERSION = WCE_VERSION;
 #else
 	const char* const EXPORTER_BUILD_VERSION = "0.0.0";
 #endif
 
-#ifdef BUILD_DEBUG
+#ifdef WCE_DEBUG
 	const char* const EXPORTER_BUILD_MODE = "debug";
 #else
 	const char* const EXPORTER_BUILD_MODE = "release";
 #endif
 
-// Prevent the use of the /J compiler option where the default 'char' type is changed from 'signed char' to 'unsigned char'.
-// We want the range of 'char' to match '__int8' (-128 to 127). See "Data Type Ranges" in the Win32 API Reference.
-#ifdef _CHAR_UNSIGNED
+// Require the use of the /J compiler option so that the default char type is unsigned.
+// This is useful for handling character data since it makes char behave like the char8_t type added in C++20.
+// See: https://learn.microsoft.com/en-us/cpp/cpp/char-wchar-t-char16-t-char32-t?view=msvc-170
+#ifndef _CHAR_UNSIGNED
 	_STATIC_ASSERT(false);
 #endif
 
@@ -166,9 +169,9 @@ _STATIC_ASSERT(_countof(CACHE_TYPE_TO_FULL_NAME) == NUM_CACHE_TYPES);
 
 const TCHAR* const CACHE_TYPE_TO_SHORT_NAME[] =
 {
-	T("unknown"), T("all"), T("explore"),
-	T("ie"), T("mozilla"),
-	T("flash"), T("shockwave"), T("java"), T("unity")
+	T("UNKNOWN"), T("ALL"), T("EXPLORE"),
+	T("IE"), T("MZ"),
+	T("FL"), T("SW"), T("JV"), T("UN")
 };
 _STATIC_ASSERT(_countof(CACHE_TYPE_TO_SHORT_NAME) == NUM_CACHE_TYPES);
 
@@ -219,27 +222,27 @@ struct Exporter
 	// Where <Export Argument> is: <Export Option> [Optional Cache path] [Optional Output Path]
 
 	// The optional command line arguments.
-	bool should_copy_files;
-	bool should_create_csvs;
-	bool should_overwrite_previous_output;
-	bool should_show_full_paths;
-	bool should_group_by_request_origin;
-	bool should_decompress_files;
-	bool should_clear_temporary_windows_directory;
+	bool copy_files;
+	bool create_csvs;
+	bool overwrite_previous_output;
+	bool show_full_paths;
+	bool group_by_request_origin;
+	bool decompress_files;
+	bool clear_temporary_windows_directory;
 
-	bool should_filter_by_groups;
+	bool filter_by_groups;
 	String_Array<TCHAR>* group_files_for_filtering;
 	
-	bool should_ignore_filter_for_cache_type[NUM_CACHE_TYPES];
+	bool ignore_filter_for_cache_type[NUM_CACHE_TYPES];
 	
-	bool should_use_custom_temporary_directory;
+	bool use_custom_temporary_directory;
 
-	bool should_use_ie_hint;
+	bool use_ie_hint;
 	TCHAR ie_hint_path[MAX_PATH_CHARS];
 
 	// Whether or not the path to the external locations file was specified in the CACHE_ALL export option,
 	// along with the path itself.
-	bool should_load_external_locations;
+	bool load_external_locations;
 	TCHAR external_locations_file_path[MAX_PATH_CHARS];
 	// The name of the profile whose cache is current being exported. 
 	TCHAR* current_profile_name;
@@ -323,9 +326,6 @@ struct Exporter
 	// Whether we tried to export at least one file since the exporter was initialized.
 	bool exported_at_least_one_file;
 
-	// The identifier that's used to name the output directory.
-	// Each cache exporter may use one or more identifiers.
-	const TCHAR* cache_identifier;
 	// The types of each column as an array of length 'num_csv_columns'.
 	Csv_Type* csv_column_types;
 	// The number of columns in the CSV file.
@@ -371,7 +371,7 @@ struct Exporter_Params
 	Traversal_Object_Info* file_info;
 };
 
-void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, int num_columns);
+void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, Csv_Type* column_types, int num_columns);
 
 void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subdirectory_name);
 

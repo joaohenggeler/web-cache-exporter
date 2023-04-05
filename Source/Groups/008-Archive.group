@@ -171,7 +171,7 @@ END
 BEGIN_FILE_GROUP Zlib
 
 	BEGIN_FILE_SIGNATURES
-		; Assumes 0x78 as the first byte (DEFLATE with a 32K window).
+		; Assumes 0x78 as the first byte (DEFLATE with a 32K window)
 
 		; No compression (level 0)
 		78 01
@@ -181,6 +181,26 @@ BEGIN_FILE_GROUP Zlib
 		78 9C
 		; Best compression (level 7-9)
 		78 DA
+	END
+
+END
+
+BEGIN_FILE_GROUP Zstandard
+
+	BEGIN_FILE_SIGNATURES
+		; First byte depends on the version
+		__ B5 2F FD
+		; Dictionary
+		37 A4 30 EC
+	END
+
+	BEGIN_MIME_TYPES
+		application/zstd
+		application/zstandard
+	END
+
+	BEGIN_FILE_EXTENSIONS
+		zst
 	END
 
 END

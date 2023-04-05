@@ -31,8 +31,6 @@
 	--> https://github.com/DerPopo/UABE
 */
 
-static const TCHAR* OUTPUT_NAME = T("UN");
-
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_FILE_EXTENSION, CSV_FILE_SIZE, 
@@ -56,7 +54,7 @@ void export_default_or_specific_unity_cache(Exporter* exporter)
 {
 	console_print("Exporting the Unity Web Player's cache...");
 	
-	initialize_cache_exporter(exporter, CACHE_UNITY, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_UNITY, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		if(exporter->is_exporting_from_default_locations)
 		{

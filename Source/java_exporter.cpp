@@ -91,8 +91,6 @@
 	--> Used to decompiled some Java classes to get a better understanding of how the cache works.
 */
 
-static const TCHAR* OUTPUT_NAME = T("JV");
-
 static Csv_Type CSV_COLUMN_TYPES[] =
 {
 	CSV_FILENAME, CSV_URL, CSV_FILE_EXTENSION, CSV_FILE_SIZE,
@@ -119,7 +117,7 @@ void export_default_or_specific_java_cache(Exporter* exporter)
 {
 	console_print("Exporting the Java Plugin's cache...");
 
-	initialize_cache_exporter(exporter, CACHE_JAVA, OUTPUT_NAME, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
+	initialize_cache_exporter(exporter, CACHE_JAVA, CSV_COLUMN_TYPES, CSV_NUM_COLUMNS);
 	{
 		TCHAR* java_appdata_path = NULL;
 		if(exporter->is_exporting_from_default_locations)
@@ -423,7 +421,7 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_java_index_files_callback)
 	}
 	else
 	{
-		content_length = push_arena(arena, MAX_INT_32_CHARS * sizeof(TCHAR), TCHAR);
+		content_length = push_array_to_arena(arena, MAX_INT_32_CHARS, TCHAR);
 		convert_s32_to_string(index.content_length, content_length);
 	}
 
@@ -562,7 +560,7 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 
 	// This UTF-16 string will be the same length or smaller than the modified UTF-8 one. In the worst memory case, all character
 	// groups are represented by one byte, meaning the UTF length matches the actual string length.
-	wchar_t* utf_16_string = push_arena(arena, (utf_length + 1) * sizeof(wchar_t), wchar_t);
+	wchar_t* utf_16_string = push_array_to_arena(arena, utf_length + 1, wchar_t);
 	u16 utf_16_index = 0;
 	
 	for(u16 i = 0; i < utf_length; ++i)
@@ -640,7 +638,7 @@ static TCHAR* convert_modified_utf_8_string_to_tchar(Arena* arena, const char* m
 
 	utf_16_string[utf_16_index] = L'\0';
 
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		return convert_utf_16_string_to_tchar(arena, utf_16_string);
 	#else
 		return utf_16_string;

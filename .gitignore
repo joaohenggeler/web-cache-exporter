@@ -26,8 +26,5 @@ Source/Other/Compression/*
 !Source/Other/Compression/*.py
 !Source/Other/Compression/requirements.txt
 
-# The 7-Zip executable used by the Build.bat to package the releases.
-_7za920
-
 # Other directories with tools and documentation.
-_Misc
+/_*

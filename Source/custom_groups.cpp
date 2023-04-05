@@ -226,7 +226,7 @@ static void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Aren
 				case(LIST_FILE_SIGNATURES):
 				{
 					// Create a file signature array.
-					File_Signature** file_signatures = push_arena(permanent_arena, num_file_signatures * sizeof(File_Signature*), File_Signature*);
+					File_Signature** file_signatures = push_array_to_arena(permanent_arena, num_file_signatures, File_Signature*);
 					
 					for(int j = 0; j < num_file_signatures; ++j)
 					{
@@ -251,8 +251,8 @@ static void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Aren
 							*max_num_file_signature_bytes = num_bytes;
 						}
 
-						u8* bytes = push_arena(permanent_arena, num_bytes * sizeof(u8), u8);
-						bool* is_wildcard = push_arena(permanent_arena, num_bytes * sizeof(bool), bool);
+						u8* bytes = push_array_to_arena(permanent_arena, num_bytes, u8);
+						bool* is_wildcard = push_array_to_arena(permanent_arena, num_bytes, bool);
 						
 						for(int k = 0; k < num_bytes; ++k)
 						{
@@ -316,7 +316,7 @@ static void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Aren
 				case(LIST_DOMAINS):
 				{
 					// Create a domain array.
-					Domain** domains = push_arena(permanent_arena, num_domains * sizeof(Domain*), Domain*);
+					Domain** domains = push_array_to_arena(permanent_arena, num_domains, Domain*);
 					
 					for(int j = 0; j < num_domains; ++j)
 					{
@@ -575,9 +575,9 @@ static void load_group_file(Arena* permanent_arena, Arena* temporary_arena, Aren
 //
 // @Returns: True if the groups in this file should be enabled for filtering. Otherwise, false. This function always returns false
 // if the '-filter-by-groups' command line option is not used.
-static bool should_groups_in_file_be_enabled_for_filtering(Exporter* exporter, TCHAR* filename)
+static bool groups_in_file_are_enabled_for_filtering(Exporter* exporter, TCHAR* filename)
 {
-	if(!exporter->should_filter_by_groups) return false;
+	if(!exporter->filter_by_groups) return false;
 
 	String_Array<TCHAR>* group_files_for_filtering = exporter->group_files_for_filtering;
 
@@ -674,7 +674,7 @@ void load_all_group_files(Exporter* exporter, int num_groups)
 		TCHAR* group_filename = group_filenames_array[i];
 		TCHAR group_file_path[MAX_PATH_CHARS] = T("");
 		PathCombine(group_file_path, exporter->group_files_path, group_filename);
-		bool enabled_for_filtering = should_groups_in_file_be_enabled_for_filtering(exporter, group_filename);
+		bool enabled_for_filtering = groups_in_file_are_enabled_for_filtering(exporter, group_filename);
 
 		load_group_file(permanent_arena, temporary_arena, &(exporter->secondary_temporary_arena),
 						group_file_path, custom_groups->groups, enabled_for_filtering,
@@ -829,8 +829,8 @@ bool match_cache_entry_to_groups(Exporter* exporter, Matchable_Cache_Entry* entr
 	Group* file_group = NULL;
 	Group* url_group = NULL;
 	
-	bool should_match_file_group = entry_to_match->should_match_file_group;
-	bool should_match_url_group = entry_to_match->should_match_url_group;
+	bool match_file_group = entry_to_match->match_file_group;
+	bool match_url_group = entry_to_match->match_url_group;
 
 	TCHAR* full_file_path = entry_to_match->full_file_path;
 	TCHAR* mime_type_to_match = entry_to_match->mime_type_to_match;
@@ -846,14 +846,14 @@ bool match_cache_entry_to_groups(Exporter* exporter, Matchable_Cache_Entry* entr
 																 true, &file_signature_size) && file_signature_size > 0;
 
 	Url_Parts url_parts_to_match = {};
-	bool partioned_url_successfully = should_match_url_group
+	bool partioned_url_successfully = match_url_group
 									&& partition_url(temporary_arena, entry_to_match->url_to_match, &url_parts_to_match);
 
 	for(int i = 0; i < custom_groups->num_groups; ++i)
 	{
 		Group* group = &(custom_groups->groups[i]);
 
-		if(group->type == GROUP_FILE && should_match_file_group)
+		if(group->type == GROUP_FILE && match_file_group)
 		{
 			// Match a file signature by comparing each individual byte while taking into account wildcards, which match any byte.
 			if(file_group == NULL && read_file_signature_successfully)
@@ -896,7 +896,7 @@ bool match_cache_entry_to_groups(Exporter* exporter, Matchable_Cache_Entry* entr
 				}
 			}
 		}
-		else if(group->type == GROUP_URL && should_match_url_group)
+		else if(group->type == GROUP_URL && match_url_group)
 		{
 			// Match a URL by comparing the ending of the host and beginning of the path components (case insensitive).
 			if(url_group == NULL && partioned_url_successfully)
@@ -913,7 +913,7 @@ bool match_cache_entry_to_groups(Exporter* exporter, Matchable_Cache_Entry* entr
 			}
 		}
 
-		bool matched_all_requested_group_types = (!should_match_file_group || file_group != NULL) && (!should_match_url_group || url_group != NULL);
+		bool matched_all_requested_group_types = (!match_file_group || file_group != NULL) && (!match_url_group || url_group != NULL);
 		if(matched_all_requested_group_types)
 		{
 			break;

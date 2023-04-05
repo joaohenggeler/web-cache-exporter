@@ -4,31 +4,56 @@ REM This script is used to build the application on Windows using Visual Studio.
 REM It defines any useful macros (like the version string and the Windows 98/ME build macro), and sets the
 REM correct compiler and linker options. Extra compiler options may be added via the command line.
 REM
-REM Usage: Build.bat [Optional Compiler Arguments]
+REM Usage: Build.bat <Build Mode> [Optional Compiler Arguments]
+REM Where <Build Mode> is either "debug" or "release".
 REM
 REM For example:
-REM - Build.bat
-REM - Build.bat /D EXPORT_EMPTY_FILES
+REM - Build.bat release
+REM - Build.bat debug
+REM - Build.bat debug /D WCE_EMPTY_EXPORT
 REM
 REM Macros that can be used in the debug builds:
-REM - EXPORT_EMPTY_FILES, which tells the application to create empty files instead of copying the real cached files.
-REM This is useful for testing the program without having to wait for Windows to copy each file.
+REM - WCE_EMPTY_EXPORT, forces the application to create empty files instead of exporting the cache. Useful for testing
+REM the application without having to wait for Windows to copy each file.
+REM - WCE_TINY_FILE_BUFFERS, forces the application to use very small buffers when processing files. Useful for ensuring
+REM that the application can read large files in chunks correctly in the release builds.
 REM
 REM Macros that are set by this batch file:
-REM - BUILD_DEBUG, defined when building in debug mode, undefined when building in release mode.
-REM - BUILD_9X, defined when building the Windows 98/ME version, undefined when building the Windows 2000 to 10 version. 
-REM - BUILD_32_BIT, defined when building the 32-bit version, undefined when building the 64-bit version.
-REM - BUILD_VERSION, defined as the application's version string in the form of "MAJOR.MINOR.PATCH". Note that this project
+REM - WCE_DEBUG, defined when building in debug mode, undefined when building in release mode.
+REM - WCE_9X, defined when building the Windows 98/ME version, undefined when building the Windows 2000 to 10 version. 
+REM - WCE_32_BIT, defined when building the 32-bit version, undefined when building the 64-bit version.
+REM - WCE_VERSION, defined as the application's version string in the form of "MAJOR.MINOR.PATCH". Note that this project
 REM does *not* use semantic versioning. Defined as "0.0.0" if the version cannot be read from the "version.txt" file.
-REM - BUILD_TARGET, defined as the application's build target string (9x vs NT, architecture). For example, "NT-x86".
-REM - BUILD_BIG_ENDIAN, defined when targeting a big endian architecture, undefined when targeting a little endian architecture.
+REM - WCE_TARGET, defined as the application's build target string (9x vs NT, architecture). For example, "NT-x86".
+REM - WCE_BIG_ENDIAN, defined when targeting a big endian architecture, undefined when targeting a little endian architecture.
 REM
-REM If BUILD_DEBUG, BUILD_9X, BUILD_32_BIT, and BUILD_BIG_ENDIAN are not defined when compiling the source code, then the release
-REM x64 version is built. If BUILD_VERSION and BUILD_TARGET are not defined, they'll default to "0.0.0" and "?", respectively.
+REM If WCE_DEBUG, WCE_9X, WCE_32_BIT, and WCE_BIG_ENDIAN are not defined when compiling the source code, then the release
+REM x64 version is built. If WCE_VERSION and WCE_TARGET are not defined, they'll default to "0.0.0" and "?", respectively.
 
 SETLOCAL
 PUSHD "%~dp0"
 	
+	REM The build mode argument.
+	REM - debug - turns off optimizations, enables run-time error checks, generates debug information, and defines
+	REM certain macros (like WCE_DEBUG).
+	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
+	REM versions in the same release directory.
+	SET "BUILD_MODE=%~1"
+
+	IF "%BUILD_MODE%"=="" (
+		ECHO Usage: %~nx0 ^<Build Mode^> [Optional Compiler Arguments]
+		ECHO Where ^<Build Mode^> is either "debug" or "release".
+		EXIT /B 1
+	)
+
+	IF "%BUILD_MODE%"=="debug" GOTO VALID_BUILD_MODE
+	IF "%BUILD_MODE%"=="release" GOTO VALID_BUILD_MODE
+
+	ECHO [%~nx0] Unknown build mode "%BUILD_MODE%".
+	EXIT /B 1
+
+	:VALID_BUILD_MODE
+
 	CLS
 
 	REM ------------------------------------------------------------
@@ -41,13 +66,6 @@ PUSHD "%~dp0"
 	REM
 	REM Visual Studio 2019, for example, uses the following:
 	REM - "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat"
-
-	REM The build mode.
-	REM - debug - turns off optimizations, enables run-time error checks, generates debug information, and defines
-	REM certain macros (like BUILD_DEBUG).
-	REM - release - turns on optimizations, disables any debug features and macros, and puts all the different executable
-	REM versions in the same release directory.
-	SET "BUILD_MODE=debug"
 
 	REM Set to "Yes" to delete all the build directories before compiling.
 	SET "CLEAN_BUILD=Yes"
@@ -63,15 +81,17 @@ PUSHD "%~dp0"
 	REM Set to "Yes" to compile and link the resource file. This will add an icon and version information to the executable.
 	SET "COMPILE_RESOURCES=Yes"
 
-	REM Set to "Yes" to use 7-Zip to compress the executables and source code and create two archives.
-	REM Note that this requires that the _7ZIP_EXE_PATH variable (see below) points to the correct executable.
-	REM In our case, we use 7-Zip 9.20 Command Line Version.
+	REM Set to "Yes" to use 7-Zip to package the built executables and source code into compressed archives.
+	REM If enabled, the _7ZIP_EXE_PATH variable below must point to the 7-Zip executable.
 	SET "PACKAGE_BUILD=Yes"
 	
 	REM The absolute path to the vcvarsall.bat batch file that is installed with Visual Studio.
 	REM You can use this to change the compiler version, although this application hasn't been thoroughly tested with more
 	REM modern Visual Studio versions.
 	SET "VCVARSALL_PATH=C:\Program Files (x86)\Microsoft Visual Studio 8\VC\vcvarsall.bat"
+
+	REM The path to the 7-Zip executable that is used to package the built executables and source code.
+	SET "_7ZIP_EXE_PATH=_7za920\7za.exe"
 
 	REM ------------------------------------------------------------
 	REM ------------------------------------------------------------ VCVARSALL.bat Parameters
@@ -115,19 +135,19 @@ PUSHD "%~dp0"
 	REM
 	REM  _ALLOW_RTCc_IN_STL is defined to suppress the warning that shows up when you use /RTCc with later versions
 	REM of Visual Studio (/RTCc rejects conformant code, so it is not supported by the C++ Standard Library).
-	SET "COMPILER_OPTIONS=/W4 /WX /wd4100 /Oi /GR- /EHa- /nologo /I "%THIRD_PARTY_BASE_PATH%" /I "%ESENT_INCLUDE_PATH%" /I "%BROTLI_INCLUDE_PATH%""
+	SET "COMPILER_OPTIONS=/nologo /J /W4 /WX /wd4100 /Oi /GR- /EHa- /I "%THIRD_PARTY_BASE_PATH%" /I "%ESENT_INCLUDE_PATH%" /I "%BROTLI_INCLUDE_PATH%""
 	SET "COMPILER_OPTIONS_RELEASE=/O2 /MT /GL"
-	SET "COMPILER_OPTIONS_DEBUG=/Od /MTd /RTC1 /RTCc /Zi /FC /D BUILD_DEBUG /D _ALLOW_RTCc_IN_STL"
+	SET "COMPILER_OPTIONS_DEBUG=/Od /MTd /RTC1 /RTCc /Zi /FC /D WCE_DEBUG /D _ALLOW_RTCc_IN_STL"
 
 	SET "THIRD_PARTY_LIB_COMPILER_OPTIONS=/c /w /Oi /GR- /EHa- /nologo /I "%BROTLI_INCLUDE_PATH%""
 	SET "THIRD_PARTY_LIB_COMPILER_OPTIONS_RELEASE=/O2 /MT /GL"
 	SET "THIRD_PARTY_LIB_COMPILER_OPTIONS_DEBUG=/Od /MTd /RTC1 /Zi /FC"
 
-	REM The BUILD_BIG_ENDIAN option isn't currently used by any build target, but we'll mention it here if that changes
+	REM The WCE_BIG_ENDIAN macro isn't currently used by any build target, but we'll mention it here if that changes
 	REM in the future. By default, we'll assume that we're targeting a little endian architecture.
-	SET "COMPILER_OPTIONS_9X_X86=/D BUILD_9X /D BUILD_32_BIT /D BUILD_TARGET=\"9x-x86\""
-	SET "COMPILER_OPTIONS_NT_X86=/D BUILD_32_BIT /D BUILD_TARGET=\"NT-x86\""
-	SET "COMPILER_OPTIONS_NT_X64=/D BUILD_TARGET=\"NT-x64\""
+	SET "COMPILER_OPTIONS_9X_X86=/D WCE_9X /D WCE_32_BIT /D WCE_TARGET=\"9x-x86\""
+	SET "COMPILER_OPTIONS_NT_X86=/D WCE_32_BIT /D WCE_TARGET=\"NT-x86\""
+	SET "COMPILER_OPTIONS_NT_X64=/D WCE_TARGET=\"NT-x64\""
 	
 	REM Statically link with the required libraries. Note that we tell the linker not to use any default libraries.
 	SET "LIBRARIES=Kernel32.lib Advapi32.lib Shell32.lib Shlwapi.lib Version.lib"
@@ -159,13 +179,13 @@ PUSHD "%~dp0"
 	SET "COMPILED_RESOURCE_FILENAME=resources.res"
 
 	REM Resource compiler options that only apply to a specific build target.
-	SET "RESOURCE_OPTIONS_9X_X86=/D BUILD_9X /D BUILD_32_BIT"
-	SET "RESOURCE_OPTIONS_NT_X86=/D BUILD_32_BIT"
+	SET "RESOURCE_OPTIONS_9X_X86=/D WCE_9X /D WCE_32_BIT"
+	SET "RESOURCE_OPTIONS_NT_X86=/D WCE_32_BIT"
 	SET "RESOURCE_OPTIONS_NT_X64="
 	
 	REM Modify or add options that depend on the Visual Studio version.
 	
-	IF "%USE_VS_2005_OPTIONS%" NEQ "Yes" (
+	IF /I "%USE_VS_2005_OPTIONS%"=="No" (
 		ECHO [%~nx0] Using compiler and linker options for Visual Studio 2015 or later.
 		ECHO.
 
@@ -186,25 +206,25 @@ PUSHD "%~dp0"
 
 	SET "MAIN_BUILD_PATH=%~dp0Builds"
 
-	SET "RELEASE_BUILD_PATH=%MAIN_BUILD_PATH%\Release"
+	SET "RELEASE_BUILD_DIR=Release"
+	SET "RELEASE_BUILD_PATH=%MAIN_BUILD_PATH%\%RELEASE_BUILD_DIR%"
 
 	SET "DEBUG_BUILD_PATH=%MAIN_BUILD_PATH%\Debug"
-	SET "DEBUG_BUILD_PATH_9X_X86=%DEBUG_BUILD_PATH%\Build-9x-x86"
-	SET "DEBUG_BUILD_PATH_NT_X86=%DEBUG_BUILD_PATH%\Build-NT-x86"
-	SET "DEBUG_BUILD_PATH_NT_X64=%DEBUG_BUILD_PATH%\Build-NT-x64"
+	SET "DEBUG_BUILD_PATH_9X_X86=%DEBUG_BUILD_PATH%\9x-x86"
+	SET "DEBUG_BUILD_PATH_NT_X86=%DEBUG_BUILD_PATH%\NT-x86"
+	SET "DEBUG_BUILD_PATH_NT_X64=%DEBUG_BUILD_PATH%\NT-x64"
 	
 	REM The location of the compressed archives.
 	SET "BUILD_ARCHIVE_DIR=Archives"
 	SET "BUILD_ARCHIVE_PATH=%MAIN_BUILD_PATH%\%BUILD_ARCHIVE_DIR%"
-	REM The path to the 7-Zip executable.
-	SET "_7ZIP_EXE_PATH=_7za920\7za.exe"
 
-	REM The location of any files that should be packaged in the source archive.
+	REM The location of any files and directories that should be packaged in the source archive.
 	SET "BATCH_FILE_PATH=%~dpnx0"
-	SET "VERSION_FILE_PATH=%~dp0version.txt"
-	SET "README_BODY_PATH=%~dp0readme_body.txt"
-	SET "LICENSE_FILE_PATH=%~dp0LICENSE"
 	SET "BUILDING_FILE_PATH=%~dp0Building.txt"
+	SET "LICENSE_FILE_PATH=%~dp0LICENSE"
+	SET "README_BODY_PATH=%~dp0readme_body.txt"
+	SET "VERSION_FILE_PATH=%~dp0version.txt"
+	SET "VS_CODE_PATH=%~dp0.vscode"
 
 	REM The location of the final release README. This file is generated using the version, body template,
 	REM and license files above. These files must only use ASCII characters and use CRLF for newlines.
@@ -236,12 +256,12 @@ PUSHD "%~dp0"
 	)
 
 	REM ...so we can pass them to the resource compiler.
-	SET "RESOURCE_VERSION_OPTIONS=/D MAJOR_VERSION=%MAJOR_VERSION% /D MINOR_VERSION=%MINOR_VERSION% /D PATCH_VERSION=%PATCH_VERSION% /D BUILD_NUMBER=%BUILD_NUMBER%"
+	SET "RESOURCE_VERSION_OPTIONS=/D WCE_MAJOR_VERSION=%MAJOR_VERSION% /D WCE_MINOR_VERSION=%MINOR_VERSION% /D WCE_PATCH_VERSION=%PATCH_VERSION% /D WCE_BUILD_NUMBER=%BUILD_NUMBER%"
 
 	REM Check if the build mode is valid and add the previously specified compiler and linkers options, and static libraries. 
 	IF "%BUILD_MODE%"=="debug" (
 
-		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_DEBUG% /D BUILD_VERSION=\"%BUILD_VERSION%\""
+		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_DEBUG% /D WCE_VERSION=\"%BUILD_VERSION%\""
 		SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_DEBUG%"
 		SET "LIBRARIES=%LIBRARIES% %LIBRARIES_DEBUG%"
 
@@ -254,7 +274,7 @@ PUSHD "%~dp0"
 
 	) ELSE IF "%BUILD_MODE%"=="release" (
 
-		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_RELEASE% /D BUILD_VERSION=\"%BUILD_VERSION%\""
+		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMPILER_OPTIONS_RELEASE% /D WCE_VERSION=\"%BUILD_VERSION%\""
 		SET "LINKER_OPTIONS=%LINKER_OPTIONS% %LINKER_OPTIONS_RELEASE%"
 		SET "LIBRARIES=%LIBRARIES% %LIBRARIES_RELEASE%"
 
@@ -265,13 +285,10 @@ PUSHD "%~dp0"
 		SET "BUILD_PATH_NT_X86=%RELEASE_BUILD_PATH%"
 		SET "BUILD_PATH_NT_X64=%RELEASE_BUILD_PATH%"
 
-	) ELSE (
-		ECHO [%~nx0] Unknown build mode "%BUILD_MODE%".
-		EXIT /B 1
 	)
 
 	REM Delete the previous builds.
-	IF "%CLEAN_BUILD%"=="Yes" (
+	IF /I "%CLEAN_BUILD%"=="Yes" (
 
 		ECHO [%~nx0] Deleting the previous builds in "%MAIN_BUILD_PATH%"...
 		ECHO.
@@ -421,8 +438,14 @@ PUSHD "%~dp0"
 	ECHO.
 
 	REM Add any remaining command line arguments to the compiler options.
-	SET "COMMAND_LINE_COMPILER_OPTIONS=%*"
-	IF "%COMMAND_LINE_COMPILER_OPTIONS%" NEQ "" (
+	SET "COMMAND_LINE_COMPILER_OPTIONS="%*""
+	SET "COMMAND_LINE_COMPILER_OPTIONS=%COMMAND_LINE_COMPILER_OPTIONS:"=%"
+	FOR /F "tokens=1,* delims= " %%A IN ("%COMMAND_LINE_COMPILER_OPTIONS%") DO (
+		SET "COMMAND_LINE_COMPILER_OPTIONS=%%B"
+		REM %%A = BUILD_MODE
+	)
+
+	IF NOT "%COMMAND_LINE_COMPILER_OPTIONS%"=="" (
 		ECHO [%~nx0] Passing extra compiler options from the command line: "%COMMAND_LINE_COMPILER_OPTIONS%"...
 		ECHO.
 		SET "COMPILER_OPTIONS=%COMPILER_OPTIONS% %COMMAND_LINE_COMPILER_OPTIONS%"
@@ -464,7 +487,7 @@ PUSHD "%~dp0"
 			CALL "%VCVARSALL_PATH%" x86
 
 			SET "COMPILED_RESOURCE_PATH="
-			IF "%COMPILE_RESOURCES%" NEQ "Yes" (
+			IF /I "%COMPILE_RESOURCES%"=="No" (
 				GOTO SKIP_RESOURCES_NT_X86
 			)
 
@@ -543,7 +566,7 @@ PUSHD "%~dp0"
 			CALL "%VCVARSALL_PATH%" x64
 
 			SET "COMPILED_RESOURCE_PATH="
-			IF "%COMPILE_RESOURCES%" NEQ "Yes" (
+			IF /I "%COMPILE_RESOURCES%"=="No" (
 				GOTO SKIP_RESOURCES_NT_X64
 			)
 
@@ -590,7 +613,7 @@ PUSHD "%~dp0"
 	REM ------------------------------------------------------------ Windows 9x x86 Build
 	REM ------------------------------------------------------------
 
-	IF "%WIN9X_BUILD%" NEQ "Yes" (
+	IF /I "%WIN9X_BUILD%"=="No" (
 		GOTO SKIP_BUILD_9X
 	)
 
@@ -623,7 +646,7 @@ PUSHD "%~dp0"
 			CALL "%VCVARSALL_PATH%" x86
 
 			SET "COMPILED_RESOURCE_PATH="
-			IF "%COMPILE_RESOURCES%" NEQ "Yes" (
+			IF /I "%COMPILE_RESOURCES%"=="No" (
 				GOTO SKIP_RESOURCES_9X_X86
 			)
 
@@ -684,51 +707,55 @@ PUSHD "%~dp0"
 	ECHO.
 
 	REM Compress the built executables and source code and create two archives.
-	IF "%PACKAGE_BUILD%" NEQ "Yes" (
+	IF /I "%PACKAGE_BUILD%"=="No" (
 		GOTO SKIP_PACKAGE_BUILD
 	)
 
-	SET "BUILD_PATH_TO_ZIP="
+	SET "BUILD_PATH_TO_COMPRESS="
 
 	IF "%BUILD_MODE%"=="debug" (
 
-		SET "BUILD_PATH_TO_ZIP=%DEBUG_BUILD_PATH%"
+		SET "BUILD_PATH_TO_COMPRESS=%DEBUG_BUILD_PATH%"
 
 	) ELSE IF "%BUILD_MODE%"=="release" (
 
-		SET "BUILD_PATH_TO_ZIP=%RELEASE_BUILD_PATH%"
+		SET "BUILD_PATH_TO_COMPRESS=%RELEASE_BUILD_PATH%"
 
-	) ELSE (
-		ECHO [%~nx0] Unknown build mode "%BUILD_MODE%".
-		EXIT /B 1
 	)
 
 	REM Add an identifier to the archive names if we passed any extra command line options to the compiler.
-	REM This will prevent accidentally sending someone a debug build that had the EXPORT_EMPTY_FILES macro defined.
+	REM This will prevent accidentally sending someone a debug build that had the WCE_EMPTY_EXPORT macro defined.
 	SET "EXTRA_ARGS_ID="
-	IF "%~1" NEQ "" (
+	IF NOT "%~2"=="" (
 		SET "EXTRA_ARGS_ID=-extra-args"
 	)
 
-	SET "EXE_ARCHIVE_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-%BUILD_MODE%%EXTRA_ARGS_ID%-%BUILD_VERSION%.zip"
-	SET "SOURCE_ARCHIVE_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-source%EXTRA_ARGS_ID%-%BUILD_VERSION%.zip"
+	SET "BINARY_ZIP_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-%BUILD_VERSION%-%BUILD_MODE%%EXTRA_ARGS_ID%.zip"
+	SET "SOURCE_ZIP_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-%BUILD_VERSION%-source%EXTRA_ARGS_ID%.zip"
+	SET "BINARY_SFX_PATH=%BUILD_ARCHIVE_PATH%\web-cache-exporter-x86-%BUILD_VERSION%-%BUILD_MODE%%EXTRA_ARGS_ID%.exe"
+	SET "BINARY_SFX_MODULE=7z.sfx"
 
-	IF EXIST "%EXE_ARCHIVE_PATH%" (
-		DEL /Q "%EXE_ARCHIVE_PATH%"
+	IF EXIST "%BINARY_ZIP_PATH%" (
+		DEL /Q "%BINARY_ZIP_PATH%"
+	)
+
+	IF EXIST "%BINARY_SFX_PATH%" (
+		DEL /Q "%BINARY_SFX_PATH%"
 	)
 
 	ECHO [%~nx0] Packaging the built executables...
-	"%_7ZIP_EXE_PATH%" a "%EXE_ARCHIVE_PATH%" "%BUILD_PATH_TO_ZIP%\*" -r0 "-x!*.sln" "-x!*.suo" >NUL
+	"%_7ZIP_EXE_PATH%" a "%BINARY_ZIP_PATH%" "%BUILD_PATH_TO_COMPRESS%\*" -r0 "-x!*.sln" "-x!*.suo" >NUL
+	"%_7ZIP_EXE_PATH%" a "%BINARY_SFX_PATH%" "%BUILD_PATH_TO_COMPRESS%\" -sfx%BINARY_SFX_MODULE% -r0 "-x!*.sln" "-x!*.suo" >NUL
 
 	ECHO.
 
-	IF EXIST "%SOURCE_ARCHIVE_PATH%" (
-		DEL /Q "%SOURCE_ARCHIVE_PATH%"
+	IF EXIST "%SOURCE_ZIP_PATH%" (
+		DEL /Q "%SOURCE_ZIP_PATH%"
 	)
 
 	ECHO [%~nx0] Packaging the source files...
-	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%SOURCE_PATH%\" -r0 "-x!*.md" "-x!esent.*" "-x!*.class" "-x!*.idx" >NUL
-	"%_7ZIP_EXE_PATH%" a "%SOURCE_ARCHIVE_PATH%" "%BATCH_FILE_PATH%" "%VERSION_FILE_PATH%" "%README_BODY_PATH%" "%LICENSE_FILE_PATH%" "%BUILDING_FILE_PATH%" >NUL
+	"%_7ZIP_EXE_PATH%" a "%SOURCE_ZIP_PATH%" "%SOURCE_PATH%\" -r0 "-x!*.md" "-x!esent.*" "-x!*.class" "-x!*.idx" >NUL
+	"%_7ZIP_EXE_PATH%" a "%SOURCE_ZIP_PATH%" "%BATCH_FILE_PATH%" "%BUILDING_FILE_PATH%" "%LICENSE_FILE_PATH%" "%README_BODY_PATH%" "%VERSION_FILE_PATH%" "%VS_CODE_PATH%\" >NUL
 
 	ECHO.
 

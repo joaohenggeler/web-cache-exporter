@@ -49,6 +49,11 @@
 
 	@Author: João Henggeler
 	
+	@TODO:
+	- Make raw IE go into an output subdirectory instead of its own thing. This will simplify the IE exporter and allow us to
+	change CACHE_TYPE_TO_SHORT_NAME to two letter names. Then we'll use this new CACHE_TYPE_TO_SHORT_NAME when checking the
+	-ignore-filter-for argument. The readme_body must also be updated.
+	
 	@Future:
 
 	High Priority:
@@ -63,6 +68,8 @@
 	Future Windows API changes could change/break the Internet Explorer cache exporter. Moreover, this should make it easier to
 	lower the complexity of the code while also removing a dependency. See: https://github.com/microsoft/Extensible-Storage-Engine
 	- Make a simple local Python HTTP server to retrieve sample cache formats.
+	- Export NPAPI plugin files from Mozilla-based browsers.
+	- Generalize the concept of raw exports that only copy files that aren't listed in the metadata.
 
 	Low Priority:
 	- Investigate the Flash cache directory for the plugin that was bundled with Chromium before Flash's EOL.
@@ -140,7 +147,7 @@ static Cache_Type get_cache_type_from_short_name(const TCHAR* name)
 
 	for(int i = 0; i < NUM_CACHE_TYPES; ++i)
 	{
-		if(strings_are_equal(name, CACHE_TYPE_TO_SHORT_NAME[i]))
+		if(strings_are_equal(name, CACHE_TYPE_TO_SHORT_NAME[i], true))
 		{
 			result = (Cache_Type) i;
 			break;
@@ -166,10 +173,10 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 	Arena* temporary_arena = &(exporter->temporary_arena);
 	
 	// Set any options that shouldn't be zero, false, or empty strings by default.
-	exporter->should_copy_files = true;
-	exporter->should_create_csvs = true;
-	exporter->should_decompress_files = true;
-	exporter->should_clear_temporary_windows_directory = true;
+	exporter->copy_files = true;
+	exporter->create_csvs = true;
+	exporter->decompress_files = true;
+	exporter->clear_temporary_windows_directory = true;
 
 	#define IS_OPTION(long_option, short_option) (strings_are_equal(option, T(long_option)) || strings_are_equal(option, T(short_option)))
 
@@ -184,35 +191,35 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		}
 		else if(IS_OPTION("-csvs-only", "-co"))
 		{
-			exporter->should_copy_files = false;
+			exporter->copy_files = false;
 		}
 		else if(IS_OPTION("-files-only", "-fo"))
 		{
-			exporter->should_create_csvs = false;
+			exporter->create_csvs = false;
 		}
 		else if(IS_OPTION("-overwrite", "-o"))
 		{
-			exporter->should_overwrite_previous_output = true;
+			exporter->overwrite_previous_output = true;
 		}
 		else if(IS_OPTION("-show-full-paths", "-sfp"))
 		{
-			exporter->should_show_full_paths = true;
+			exporter->show_full_paths = true;
 		}
 		else if(IS_OPTION("-group-by-origin", "-gbo"))
 		{
-			exporter->should_group_by_request_origin = true;
+			exporter->group_by_request_origin = true;
 		}
 		else if(IS_OPTION("-no-decompress", "-nd"))
 		{
-			exporter->should_decompress_files = false;
+			exporter->decompress_files = false;
 		}
 		else if(IS_OPTION("-no-clear-default-temporary", "-ncdt"))
 		{
-			exporter->should_clear_temporary_windows_directory = false;
+			exporter->clear_temporary_windows_directory = false;
 		}
 		else if(IS_OPTION("-filter-by-groups", "-fbg"))
 		{
-			exporter->should_filter_by_groups = true;
+			exporter->filter_by_groups = true;
 			if(i+1 < num_arguments)
 			{
 				const TCHAR* group_file_list = arguments[i+1];
@@ -239,7 +246,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 							log_info("Argument Parsing: Ignoring filter for any plugin cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
 							{
-								if(IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
+								if(IS_CACHE_TYPE_PLUGIN[k]) exporter->ignore_filter_for_cache_type[k] = true;
 							}
 						}
 						else if(strings_are_equal(name, T("browsers")))
@@ -247,7 +254,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 							log_info("Argument Parsing: Ignoring filter for any browser cache types.");
 							for(int k = 0; k < NUM_CACHE_TYPES; ++k)
 							{
-								if(!IS_CACHE_TYPE_PLUGIN[k]) exporter->should_ignore_filter_for_cache_type[k] = true;
+								if(!IS_CACHE_TYPE_PLUGIN[k]) exporter->ignore_filter_for_cache_type[k] = true;
 							}
 						}
 						else
@@ -260,7 +267,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 					else
 					{
 						log_info("Argument Parsing: Ignoring filter for the cache type '%s'.", name);
-						exporter->should_ignore_filter_for_cache_type[type] = true;
+						exporter->ignore_filter_for_cache_type[type] = true;
 					}
 				}
 
@@ -269,7 +276,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		}
 		else if(IS_OPTION("-temporary-directory", "-td"))
 		{
-			exporter->should_use_custom_temporary_directory = true;
+			exporter->use_custom_temporary_directory = true;
 			if(i+1 < num_arguments)
 			{
 				StringCchCopy(exporter->exporter_temporary_path, MAX_PATH_CHARS, arguments[i+1]);
@@ -279,7 +286,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		}
 		else if(IS_OPTION("-hint-ie", "-hie"))
 		{
-			exporter->should_use_ie_hint = true;
+			exporter->use_ie_hint = true;
 			if(i+1 < num_arguments)
 			{
 				StringCchCopy(exporter->ie_hint_path, MAX_PATH_CHARS, arguments[i+1]);
@@ -330,7 +337,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 			if(i+2 < num_arguments)
 			{
 				StringCchCopy(exporter->external_locations_file_path, MAX_PATH_CHARS, arguments[i+2]);
-				exporter->should_load_external_locations = true;
+				exporter->load_external_locations = true;
 			}
 	
 			exporter->is_exporting_from_default_locations = true;
@@ -409,7 +416,7 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		success = false;
 	}
 
-	if(!exporter->should_copy_files && !exporter->should_create_csvs)
+	if(!exporter->copy_files && !exporter->create_csvs)
 	{
 		console_print("The options -csvs-only and -files-only can't be used at the same time.");
 		log_error("Argument Parsing: The options '-csvs-only' and '-files-only' were used at the same time.");
@@ -419,10 +426,10 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 	// These empty string checks may seem overkill but remember that an empty path is used to specify the default
 	// locations for the export command line options. This means that we want to warn the user about this behavior.
 
-	_ASSERT( 	(!exporter->should_load_external_locations)
-			|| 	(exporter->should_load_external_locations && exporter->command_line_cache_type == CACHE_ALL && exporter->is_exporting_from_default_locations));
+	_ASSERT( 	(!exporter->load_external_locations)
+			|| 	(exporter->load_external_locations && exporter->command_line_cache_type == CACHE_ALL && exporter->is_exporting_from_default_locations));
 
-	if(exporter->should_load_external_locations)
+	if(exporter->load_external_locations)
 	{
 		if(string_is_empty(exporter->external_locations_file_path))
 		{
@@ -438,14 +445,14 @@ static bool parse_exporter_arguments(int num_arguments, TCHAR** arguments, Expor
 		}
 	}
 
-	if(exporter->should_use_custom_temporary_directory && string_is_empty(exporter->exporter_temporary_path))
+	if(exporter->use_custom_temporary_directory && string_is_empty(exporter->exporter_temporary_path))
 	{
 		console_print("The -temporary-directory option requires a non-empty path as its argument.");
 		log_error("Argument Parsing: The -temporary-directory option was used but the supplied path was empty.");
 		success = false;
 	}
 
-	if(exporter->should_use_ie_hint)
+	if(exporter->use_ie_hint)
 	{
 		if(exporter->command_line_cache_type != CACHE_INTERNET_EXPLORER)
 		{
@@ -532,7 +539,7 @@ static void clean_up_exporter(Exporter* exporter)
 		}
 	}
 
-	#ifndef BUILD_9X
+	#ifndef WCE_9X
 		if( (exporter->command_line_cache_type == CACHE_INTERNET_EXPLORER) || (exporter->command_line_cache_type == CACHE_ALL) )
 		{
 			free_esent_functions();
@@ -580,7 +587,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter);
 bool GLOBAL_LOG_ENABLED = true;
 bool GLOBAL_CONSOLE_ENABLED = true;
 
-int _tmain(int num_arguments, TCHAR* arguments[])
+int _tmain(int num_arguments, TCHAR** arguments)
 {
 	Exporter exporter = {};
 
@@ -626,17 +633,17 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 
 	console_print("Web Cache Exporter v%hs", EXPORTER_BUILD_VERSION);
 
-	#if defined(BUILD_DEBUG) && defined(EXPORT_EMPTY_FILES)
+	create_log_file(LOG_FILE_NAME);
+
+	#if defined(WCE_DEBUG) && defined(WCE_EMPTY_EXPORT)
 		console_print("Debug: Exporting empty files!");
 		log_debug("Exporting empty files.");
 	#endif
 
-	#if defined(BUILD_DEBUG) && defined(TINY_FILE_BUFFERS)
+	#if defined(WCE_DEBUG) && defined(WCE_TINY_FILE_BUFFERS)
 		console_print("Debug: Using tiny file buffers!");
 		log_debug("Using tiny file buffers.");
 	#endif
-
-	create_log_file(LOG_FILE_NAME);
 
 	log_info("Startup: Running the Web Cache Exporter version %hs compiled with Visual Studio %d in %hs mode for %hs.",
 			 EXPORTER_BUILD_VERSION, _MSC_VER, EXPORTER_BUILD_MODE, EXPORTER_BUILD_TARGET);
@@ -651,7 +658,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 	if(GetVersionEx(&exporter.os_version))
 	#pragma warning(pop)
 	{
-		log_info("Startup: Running Windows version %lu.%lu '%s' build %lu in platform %lu.",
+		log_info("Startup: Using Windows version %lu.%lu '%s' build %lu in platform %lu.",
 								exporter.os_version.dwMajorVersion, exporter.os_version.dwMinorVersion,
 								exporter.os_version.szCSDVersion, exporter.os_version.dwBuildNumber,
 								exporter.os_version.dwPlatformId);
@@ -668,7 +675,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 		TCHAR ie_version[NUM_IE_VERSION_CHARS] = T("");
 		if(find_internet_explorer_version(ie_version, sizeof(ie_version)))
 		{
-			log_info("Startup: Running Internet Explorer version %s.", ie_version);
+			log_info("Startup: Using Internet Explorer version %s.", ie_version);
 		}
 		
 		CPINFOEX code_page_info = {};
@@ -695,7 +702,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 			return 1;
 		}
 
-		#ifdef BUILD_9X
+		#ifdef WCE_9X
 			Arena* secondary_temporary_arena = &(exporter.secondary_temporary_arena);
 
 			// Create a smaller, secondary memory arena for Windows 98 and ME. This will be used when loading group files.
@@ -741,7 +748,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 		int num_profiles = 0;
 		
 		size_t permanent_memory_size = get_total_group_files_size(&exporter, &num_groups);
-		if(exporter.should_load_external_locations)
+		if(exporter.load_external_locations)
 		{
 			permanent_memory_size += get_total_external_locations_size(&exporter, &num_profiles);
 		}
@@ -759,7 +766,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 		log_info("Startup: Loading %d groups.", num_groups);
 		load_all_group_files(&exporter, num_groups);
 
-		if(exporter.should_load_external_locations)
+		if(exporter.load_external_locations)
 		{
 			log_info("Startup: Loading %d profiles from the external locations file '%s'.", num_profiles, exporter.external_locations_file_path);
 			load_external_locations(&exporter, num_profiles);			
@@ -773,7 +780,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 		unlock_arena(temporary_arena);
 	}
 
-	#ifndef BUILD_9X
+	#ifndef WCE_9X
 		if( (exporter.command_line_cache_type == CACHE_INTERNET_EXPLORER) || (exporter.command_line_cache_type == CACHE_ALL) )
 		{
 			log_info("Startup: Dynamically loading any necessary functions.");
@@ -798,7 +805,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 
 	if(GetTempPath(MAX_PATH_CHARS, exporter.windows_temporary_path) != 0)
 	{
-		if(exporter.should_clear_temporary_windows_directory) clear_temporary_windows_directory(&exporter);
+		if(exporter.clear_temporary_windows_directory) clear_temporary_windows_directory(&exporter);
 	}
 	else
 	{
@@ -806,7 +813,7 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 		StringCchCopy(exporter.windows_temporary_path, MAX_PATH_CHARS, PATH_NOT_FOUND);
 	}
 
-	if(exporter.should_use_custom_temporary_directory)
+	if(exporter.use_custom_temporary_directory)
 	{
 		exporter.was_temporary_exporter_directory_created = create_directories(exporter.exporter_temporary_path);
 	}
@@ -865,14 +872,13 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 		log_info("Startup: No cache path specified. Exporting the cache from any existing default directories.");
 	}
 
-	if(exporter.should_overwrite_previous_output)
+	if(exporter.overwrite_previous_output)
 	{
 		TCHAR* directory_name = PathFindFileName(exporter.output_path);
 		console_print("Deleting the previous output directory '%s' before starting...", directory_name);
 
 		if(delete_directory_and_contents(exporter.output_path))
 		{
-			console_print("Deleted the previous output directory successfully.");
 			log_info("Startup: Deleted the previous output directory successfully.");
 		}
 		// We'll do this little check since the error codes from SHFileOperation() (used by the deletion
@@ -894,21 +900,21 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 	log_info("Exporter Options:");
 	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Cache Type: %s", CACHE_TYPE_TO_FULL_NAME[exporter.command_line_cache_type]);
-	log_print(LOG_NONE, "- Should Copy Files: %s", YN(should_copy_files));
-	log_print(LOG_NONE, "- Should Create CSV: %s", YN(should_create_csvs));
-	log_print(LOG_NONE, "- Should Overwrite Previous Output: %s", YN(should_overwrite_previous_output));
-	log_print(LOG_NONE, "- Should Show Full Paths: %s", YN(should_show_full_paths));
-	log_print(LOG_NONE, "- Should Group By Request Origin: %s", YN(should_group_by_request_origin));
-	log_print(LOG_NONE, "- Should Decompress Files: %s", YN(should_decompress_files));
-	log_print(LOG_NONE, "- Should Clear Temporary Windows Directory: %s", YN(should_clear_temporary_windows_directory));
+	log_print(LOG_NONE, "- Should Copy Files: %s", YN(copy_files));
+	log_print(LOG_NONE, "- Should Create CSV: %s", YN(create_csvs));
+	log_print(LOG_NONE, "- Should Overwrite Previous Output: %s", YN(overwrite_previous_output));
+	log_print(LOG_NONE, "- Should Show Full Paths: %s", YN(show_full_paths));
+	log_print(LOG_NONE, "- Should Group By Request Origin: %s", YN(group_by_request_origin));
+	log_print(LOG_NONE, "- Should Decompress Files: %s", YN(decompress_files));
+	log_print(LOG_NONE, "- Should Clear Temporary Windows Directory: %s", YN(clear_temporary_windows_directory));
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_NONE, "- Should Filter By Groups: %s", YN(should_filter_by_groups));
+	log_print(LOG_NONE, "- Should Filter By Groups: %s", YN(filter_by_groups));
 	log_print(LOG_NONE, "- Number Of Group Files Enabled For Filtering: %d", (exporter.group_files_for_filtering != NULL) ? (exporter.group_files_for_filtering->num_strings) : (-1));
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %s", YN(should_use_ie_hint));
+	log_print(LOG_NONE, "- Should Use Internet Explorer's Hint: %s", YN(use_ie_hint));
 	log_print(LOG_NONE, "- Internet Explorer Hint Path: '%s'", exporter.ie_hint_path);
 	log_print(LOG_NONE, "------------------------------------------------------------");
-	log_print(LOG_NONE, "- Should Load External Locations: %s", YN(should_load_external_locations));
+	log_print(LOG_NONE, "- Should Load External Locations: %s", YN(load_external_locations));
 	log_print(LOG_NONE, "- External Locations Path: '%s'", exporter.external_locations_file_path);
 	log_print(LOG_NONE, "------------------------------------------------------------");
 	log_print(LOG_NONE, "- Cache Path: '%s'", exporter.cache_path);
@@ -1028,15 +1034,12 @@ int _tmain(int num_arguments, TCHAR* arguments[])
 //
 // @Parameters:
 // 1. exporter - The Exporter structure where the resolved paths and CSV file's handle will be stored.
-// 2. cache_identifier - The name of the output directory (for copying files) and the CSV file.
-// 3. column_types - The array of column types used to determine the column names for the CSV file.
-// 4. num_columns - The number of elements in this array.
+// 2. column_types - The array of column types used to determine the column names for the CSV file.
+// 3. num_columns - The number of elements in this array.
 // 
 // @Returns: Nothing.
-void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const TCHAR* cache_identifier, Csv_Type* column_types, int num_columns)
+void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, Csv_Type* column_types, int num_columns)
 {
-	_ASSERT(count_path_components(cache_identifier) == 1);
-
 	exporter->csv_file_handle = INVALID_HANDLE_VALUE;
 	exporter->exported_at_least_one_file = false;
 	exporter->index_path[0] = T('\0');
@@ -1047,7 +1050,6 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 	_ASSERT(cache_type != CACHE_UNKNOWN && cache_type != CACHE_ALL);
 
 	exporter->current_cache_type = cache_type;
-	exporter->cache_identifier = cache_identifier;
 	exporter->csv_column_types = column_types;
 	exporter->num_csv_columns = num_columns;
 
@@ -1062,7 +1064,7 @@ void initialize_cache_exporter(Exporter* exporter, Cache_Type cache_type, const 
 
 	Arena* temporary_arena = &(exporter->temporary_arena);
 
-	if(exporter->should_create_csvs)
+	if(exporter->create_csvs)
 	{
 		_ASSERT(exporter->csv_file_handle == INVALID_HANDLE_VALUE);
 
@@ -1109,12 +1111,13 @@ void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subd
 {
 	StringCchCopy(exporter->output_copy_path, MAX_PATH_CHARS, exporter->output_path);
 	
-	if(exporter->should_load_external_locations)
+	if(exporter->load_external_locations)
 	{
 		PathAppend(exporter->output_copy_path, exporter->current_profile_name);
 	}
 
-	PathAppend(exporter->output_copy_path, exporter->cache_identifier);
+	const TCHAR* cache_identifier = CACHE_TYPE_TO_SHORT_NAME[exporter->current_cache_type];
+	PathAppend(exporter->output_copy_path, cache_identifier);
 
 	if(subdirectory_name != NULL)
 	{
@@ -1122,7 +1125,7 @@ void set_exporter_output_copy_subdirectory(Exporter* exporter, const TCHAR* subd
 	}
 
 	// E.g. "SW\Xtras" = 2 components.
-	exporter->num_output_components = count_path_components(exporter->cache_identifier) + count_path_components(subdirectory_name);
+	exporter->num_output_components = count_path_components(cache_identifier) + count_path_components(subdirectory_name);
 	_ASSERT(exporter->num_output_components > 0);
 }
 
@@ -1137,7 +1140,7 @@ static void assign_exporter_short_filename(Exporter* exporter, TCHAR* result_fil
 {
 	++(exporter->num_assigned_filenames);
 	++(exporter->total_assigned_filenames);
-	StringCchPrintf(result_filename, MAX_PATH_CHARS, T("~WCE%d"), exporter->num_assigned_filenames);
+	StringCchPrintf(result_filename, MAX_PATH_CHARS, T("~WCE%04d"), exporter->num_assigned_filenames);
 }
 
 // Adds a formatted string to the current exporter's warning message. Successive messages are separated by spaces.
@@ -1332,7 +1335,7 @@ static bool copy_exporter_file(Exporter* exporter, const TCHAR* source_file_path
 	// copy_file_chunks(), and this function itself.
 	bool copy_success = false;
 
-	#if defined(BUILD_DEBUG) && defined(EXPORT_EMPTY_FILES)
+	#if defined(WCE_DEBUG) && defined(WCE_EMPTY_EXPORT)
 		copy_success = create_empty_file(destination_file_path, false);
 	#else
 		copy_success = CopyFile(source_file_path, destination_file_path, TRUE) != FALSE;
@@ -1461,14 +1464,15 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	// available to us (original and default file extensions), we can use the file extension
 	// in the following ways:
 	//
-	// 1. Filename too long. E.g. "http://www.example.com/<Long Name>.html" -> "~WCE1.html".
-	// 2. No filename. E.g. "http://www.example.com/" -> "~WCE1.html".
+	// 1. Filename too long. E.g. "http://www.example.com/<Long Name>.html" -> "~WCE0001.html".
+	// 2. No filename. E.g. "http://www.example.com/" -> "~WCE0001.html".
 	// 3. Filename missing file extension. E.g. "http://www.example.com/page" -> "page.html".
 	// 
 	// The third case is essencially the same as the second, just without assigning a shorter
 	// filename. Note also that in these last cases we're adding information that wasn't there
-	// before. @Future: This isn't important for the second case, but for the third one we might
-	// want to add an option to disable this behavior.
+	// before.
+	// @Future: This isn't important for the second case, but for the third one we might want
+	// to add an option to disable this behavior.
 
 	TCHAR corrected_filename[MAX_PATH_CHARS] = T("");
 	StringCchCopy(corrected_filename, MAX_PATH_CHARS, filename);
@@ -1478,10 +1482,10 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	
 	if(string_is_empty(file_extension) && default_file_extension != NULL)
 	{
-		_ASSERT(*default_file_extension != TEXT('.'));
+		_ASSERT(*default_file_extension != T('.'));
 		size_t file_extension_size = sizeof(TCHAR) + string_size(default_file_extension);
 		corrected_file_extension = push_arena(temporary_arena, file_extension_size, TCHAR);
-		StringCbCat(corrected_file_extension, file_extension_size, T("."));
+		StringCbCopy(corrected_file_extension, file_extension_size, T("."));
 		StringCbCat(corrected_file_extension, file_extension_size, default_file_extension);
 
 		StringCchCat(corrected_filename, MAX_PATH_CHARS, corrected_file_extension);
@@ -1577,7 +1581,7 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 	{
 		TCHAR* final_destination_path = (num_naming_collisions == 0) ? (full_destination_path) : (full_unique_destination_path);
 
-		if(!exporter->should_show_full_paths)
+		if(!exporter->show_full_paths)
 		{
 			int num_final_components = count_path_components(final_destination_path);
 			int num_short_components = num_final_components - num_base_components + exporter->num_output_components;
@@ -1632,6 +1636,8 @@ static bool copy_exporter_file_using_url_directory_structure(	Exporter* exporter
 // @Returns: Nothing.
 void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_Params* params)
 {
+	#define IS_STRING_EMPTY(string) ( ((string) == NULL) || string_is_empty(string) )
+
 	exporter->exported_at_least_one_file = true;
 
 	Arena* temporary_arena = &(exporter->temporary_arena);
@@ -1644,23 +1650,21 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	Http_Headers entry_headers = params->headers;
 	Traversal_Object_Info* entry_file_info = params->file_info;
 
-	#define IS_STRING_EMPTY(string) ( ((string) == NULL) || string_is_empty(string) )
-
 	TCHAR* location_on_cache = NULL;
 	{
 		TCHAR* short_location_on_cache = params->short_location_on_cache;
 		TCHAR* full_location_on_cache = params->full_location_on_cache;
 		if(IS_STRING_EMPTY(full_location_on_cache)) full_location_on_cache = entry_source_path;
 		
-		location_on_cache = (exporter->should_show_full_paths) ? (full_location_on_cache) : (short_location_on_cache);	
+		location_on_cache = (exporter->show_full_paths) ? (full_location_on_cache) : (short_location_on_cache);	
 	}
  
 	if(IS_STRING_EMPTY(entry_filename) && entry_url != NULL)
 	{
-		Url_Parts url_parts = {};
-		if(partition_url(temporary_arena, entry_url, &url_parts))
+		Url_Parts parts = {};
+		if(partition_url(temporary_arena, entry_url, &parts))
 		{
-			entry_filename = url_parts.filename;
+			entry_filename = parts.filename;
 		}
 	}
 	
@@ -1698,7 +1702,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	HANDLE decompressed_file_handle = INVALID_HANDLE_VALUE;
 	TCHAR decompressed_file_size[MAX_INT_64_CHARS] = T("");
 
-	if(exporter->should_decompress_files && file_exists && entry_headers.content_encoding != NULL)
+	if(exporter->decompress_files && file_exists && entry_headers.content_encoding != NULL)
 	{
 		u64 decompressed_file_size_value = 0;
 		if(decompress_exporter_file(exporter, entry_source_path, entry_headers.content_encoding,
@@ -1918,11 +1922,11 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		column_values[i].value = value;
 	}
 
-	entry_to_match.should_match_file_group = (file_group_index != -1);
-	entry_to_match.should_match_url_group = (url_group_index != -1);
+	entry_to_match.match_file_group = (file_group_index != -1);
+	entry_to_match.match_url_group = (url_group_index != -1);
 
 	// Add the request origin to the beginning of the URL if needed.
-	if(exporter->should_group_by_request_origin && entry_url != NULL && entry_request_origin != NULL)
+	if(exporter->group_by_request_origin && entry_url != NULL && entry_request_origin != NULL)
 	{
 		entry_url = skip_url_scheme(entry_url);
 
@@ -1931,14 +1935,23 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		TCHAR* new_url = push_arena(temporary_arena, new_url_size, TCHAR);
 
 		// Add a generic scheme if the request origin doesn't have one.
-		if(string_is_empty(skip_url_scheme(entry_request_origin)))
-		{
-			StringCbCat(new_url, new_url_size, GENERIC_SCHEME);
-		}
+		Url_Parts parts = {};
+		partition_url(temporary_arena, entry_request_origin, &parts);
 
-		StringCbCat(new_url, new_url_size, entry_request_origin);
-		StringCbCat(new_url, new_url_size, T("/"));
-		StringCbCat(new_url, new_url_size, entry_url);
+		if(parts.scheme == NULL)
+		{
+			StringCbCopy(new_url, new_url_size, GENERIC_SCHEME);
+			StringCbCat(new_url, new_url_size, entry_request_origin);
+			StringCbCat(new_url, new_url_size, T("/"));
+			StringCbCat(new_url, new_url_size, entry_url);
+
+		}
+		else
+		{
+			StringCbCopy(new_url, new_url_size, entry_request_origin);
+			StringCbCat(new_url, new_url_size, T("/"));
+			StringCbCat(new_url, new_url_size, entry_url);
+		}
 
 		entry_url = new_url;
 	}
@@ -1961,14 +1974,14 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 	}
 
 	bool match_allows_for_exporting_entry = true;
-	if(exporter->should_filter_by_groups)
+	if(exporter->filter_by_groups)
 	{
-		match_allows_for_exporting_entry = (matched_group && entry_to_match.match_is_enabled_for_filtering) || exporter->should_ignore_filter_for_cache_type[exporter->current_cache_type];
+		match_allows_for_exporting_entry = (matched_group && entry_to_match.match_is_enabled_for_filtering) || exporter->ignore_filter_for_cache_type[exporter->current_cache_type];
 	}
 
 	TCHAR copy_destination_path[MAX_PATH_CHARS] = T("");
 	TCHAR copy_error_code[MAX_INT_32_CHARS] = T("");
-	if(file_exists && exporter->should_copy_files && match_allows_for_exporting_entry)
+	if(file_exists && exporter->copy_files && match_allows_for_exporting_entry)
 	{
 		if(copy_exporter_file_using_url_directory_structure(exporter,
 															entry_source_path, entry_url,
@@ -2002,7 +2015,7 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 		column_values[i].value = value;
 	}
 
-	if(exporter->should_create_csvs && match_allows_for_exporting_entry)
+	if(exporter->create_csvs && match_allows_for_exporting_entry)
 	{
 		csv_print_row(temporary_arena, exporter->csv_file_handle, column_values, exporter->num_csv_columns);
 	}
@@ -2011,6 +2024,8 @@ void export_cache_entry(Exporter* exporter, Csv_Entry* column_values, Exporter_P
 
 	clear_arena(temporary_arena);
 	exporter->warning_message[0] = T('\0');
+
+	#undef IS_STRING_EMPTY
 }
 
 // Resets any exporter members that are used to hold temporary values that should not persist between multiple cache locations
@@ -2477,7 +2492,7 @@ static void export_all_cache_locations(Exporter* exporter)
 // @Returns: Nothing.
 static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 {
-	if(exporter->should_load_external_locations)
+	if(exporter->load_external_locations)
 	{
 		External_Locations* external_locations = exporter->external_locations;
 		_ASSERT(external_locations != NULL);
@@ -2571,7 +2586,7 @@ static void export_all_default_or_specific_cache_locations(Exporter* exporter)
 // @Returns: True if the path was resolved successfully. Otherwise, false. This function returns false if the given path is not absolute.
 bool resolve_exporter_external_locations_path(Exporter* exporter, const TCHAR* full_path, TCHAR* result_path)
 {
-	_ASSERT(exporter->should_load_external_locations);
+	_ASSERT(exporter->load_external_locations);
 
 	if(PathIsRelative(full_path) != FALSE)
 	{

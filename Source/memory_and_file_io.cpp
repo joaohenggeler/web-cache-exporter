@@ -57,8 +57,8 @@
 // Base addresses that are used by the create_arena() and memory_map_entire_file() functions
 // in the debug builds. These are incremented by a set amount if these functions are called
 // multiple times.
-#ifdef BUILD_DEBUG
-	#ifdef BUILD_9X
+#ifdef WCE_DEBUG
+	#ifdef WCE_9X
 		static void* DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = NULL;
 		static void* DEBUG_MEMORY_MAPPING_BASE_ADDRESS = NULL;
 		static const size_t DEBUG_BASE_ADDRESS_INCREMENT = 0;
@@ -88,7 +88,7 @@
 // Otherwise, it returns false, available_memory is set to NULL, and both size fields are set to zero.
 bool create_arena(Arena* arena, size_t total_size)
 {
-	#ifdef BUILD_DEBUG
+	#ifdef WCE_DEBUG
 		arena->available_memory = VirtualAlloc(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, total_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 		DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = advance_bytes(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 	#else
@@ -106,7 +106,7 @@ bool create_arena(Arena* arena, size_t total_size)
 	arena->total_size = (success) ? (total_size) : (0);
 	arena->num_locks = 0;
 
-	#ifdef BUILD_DEBUG
+	#ifdef WCE_DEBUG
 		if(success)
 		{
 			FillMemory(arena->available_memory, arena->total_size, DEBUG_ARENA_DEALLOCATED_VALUE);
@@ -176,7 +176,7 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 		return NULL;
 	}
 
-	#ifdef BUILD_DEBUG
+	#ifdef WCE_DEBUG
 		ZeroMemory(aligned_address, aligned_push_size);
 	#endif
 
@@ -185,7 +185,7 @@ void* aligned_push_arena(Arena* arena, size_t push_size, size_t alignment_size)
 
 	// Keep track of the maximum used size starting at a certain value. This gives us an idea of how
 	// much memory each cache type and Windows version uses before clearing the arena.
-	#ifdef BUILD_DEBUG
+	#ifdef WCE_DEBUG
 		static size_t max_used_size_marker = kilobytes_to_bytes(256);
 		
 		if(arena->used_size > max_used_size_marker)
@@ -245,23 +245,35 @@ void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alig
 	return copy_address;
 }
 
-// A helper function that copies a string to an arena.
+// Performs a malloc-style allocation in the arena. Used when passing a custom allocator to third-party functions.
 //
 // @Parameters:
-// 1. arena - The Arena structure that will receive the string.
-// 2. string_to_copy - The string to copy.
+// 1. arena - The arena allocator.
+// 2. size - How many bytes to allocate.
 //
-// @Returns: The copied string's address in the arena if it succeeds. Otherwise, this function returns NULL.
-TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy)
+// @Returns: See aligned_push_arena().
+void* push_any_type_to_arena(Arena* arena, size_t size)
 {
-	size_t size = string_size(string_to_copy);
-	return push_and_copy_to_arena(arena, size, TCHAR, string_to_copy, size);
+	return aligned_push_arena(arena, size, MAX_SCALAR_ALIGNMENT_SIZE);
+}
+
+// Copies a string to an arena.
+//
+// @Parameters:
+// 1. arena - The arena allocator.
+// 2. str - The string to copy.
+//
+// @Returns: See aligned_push_arena().
+TCHAR* push_string_to_arena(Arena* arena, const TCHAR* str)
+{
+	size_t size = string_size(str);
+	return push_and_copy_to_arena(arena, size, TCHAR, str, size);
 }
 
 // Retrieves the used capacity of an arena as a percentage (0 through 100).
 //
 // @Parameters:
-// 1. arena - The Arena structure of interest.
+// 1. arena - The arena allocator.
 //
 // @Returns: The used capacity as a percentage. If the arena is uninitialized or destroyed, this function returns zero.
 f32 get_used_arena_capacity(Arena* arena)
@@ -276,7 +288,7 @@ f32 get_used_arena_capacity(Arena* arena)
 
 const u32 MIN_GET_ARENA_BUFFER_SIZE = (u32) kilobytes_to_bytes(1) / 2;
 
-#if defined(BUILD_DEBUG) && defined(TINY_FILE_BUFFERS)
+#if defined(WCE_DEBUG) && defined(WCE_TINY_FILE_BUFFERS)
 	const u32 DEBUG_GET_ARENA_FILE_BUFFER_SIZE = 101;
 #endif
 
@@ -296,7 +308,7 @@ const u32 MIN_GET_ARENA_BUFFER_SIZE = (u32) kilobytes_to_bytes(1) / 2;
 // @Returns: The appropriate file buffer size for the given arena in bytes.
 u32 get_arena_file_buffer_size(Arena* arena, HANDLE file_handle)
 {
-	#if defined(BUILD_DEBUG) && defined(TINY_FILE_BUFFERS)
+	#if defined(WCE_DEBUG) && defined(WCE_TINY_FILE_BUFFERS)
 		return DEBUG_GET_ARENA_FILE_BUFFER_SIZE;
 	#else
 		// This should be kept at around a quarter of the arena's remaining size for operations like
@@ -423,7 +435,7 @@ void clear_arena(Arena* arena)
 	}
 
 	arena->available_memory = retreat_bytes(arena->available_memory, num_bytes_to_clear);
-	#ifdef BUILD_DEBUG
+	#ifdef WCE_DEBUG
 		FillMemory(arena->available_memory, num_bytes_to_clear, DEBUG_ARENA_DEALLOCATED_VALUE);
 	#endif
 	arena->used_size -= num_bytes_to_clear;
@@ -445,7 +457,7 @@ bool destroy_arena(Arena* arena)
 
 	void* base_memory = retreat_bytes(arena->available_memory, arena->used_size);
 	bool success = VirtualFree(base_memory, 0, MEM_RELEASE) != FALSE;
-	#ifdef BUILD_DEBUG
+	#ifdef WCE_DEBUG
 		DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS = retreat_bytes(DEBUG_VIRTUAL_MEMORY_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 	#endif
 	
@@ -1072,14 +1084,13 @@ TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary
 		return NULL;
 	}
 
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		Arena* utf_16_string_arena = intermediary_arena;
 	#else
 		Arena* utf_16_string_arena = final_arena;
 	#endif
 
-	int size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
-	wchar_t* utf_16_string = push_arena(utf_16_string_arena, size_required_utf_16, wchar_t);
+	wchar_t* utf_16_string = push_array_to_arena(utf_16_string_arena, num_chars_required_utf_16, wchar_t);
 
 	if(MultiByteToWideChar(code_page, 0, string, -1, utf_16_string, num_chars_required_utf_16) == 0)
 	{
@@ -1087,7 +1098,7 @@ TCHAR* convert_code_page_string_to_tchar(Arena* final_arena, Arena* intermediary
 		return NULL;
 	}
 
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		return convert_utf_16_string_to_tchar(final_arena, utf_16_string);
 	#else
 		return utf_16_string;
@@ -1114,7 +1125,7 @@ TCHAR* convert_code_page_string_to_tchar(Arena* arena, u32 code_page, const char
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 {
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		return push_string_to_arena(arena, ansi_string);
 	#else
 		return convert_code_page_string_to_tchar(arena, CP_ACP, ansi_string);
@@ -1133,7 +1144,7 @@ TCHAR* convert_ansi_string_to_tchar(Arena* arena, const char* ansi_string)
 // @Returns: The pointer to the TCHAR string on success. Otherwise, it returns NULL.
 TCHAR* convert_utf_16_string_to_tchar(Arena* arena, const wchar_t* utf_16_string)
 {
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		int size_required_ansi = WideCharToMultiByte(CP_ACP, 0, utf_16_string, -1, NULL, 0, NULL, NULL);
 		
 		if(size_required_ansi == 0)
@@ -1224,7 +1235,7 @@ wchar_t* skip_to_next_string(wchar_t* str)
 // @Returns: The array of strings with a length of 'num_strings'.
 TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u32 num_strings)
 {
-	TCHAR** string_array = push_arena(arena, num_strings * sizeof(TCHAR*), TCHAR*);
+	TCHAR** string_array = push_array_to_arena(arena, num_strings, TCHAR*);
 
 	for(u32 i = 0; i < num_strings; ++i)
 	{
@@ -1271,6 +1282,7 @@ TCHAR** build_array_from_contiguous_strings(Arena* arena, TCHAR* first_string, u
 bool partition_url(Arena* arena, const TCHAR* url, Url_Parts* url_parts)
 {
 	ZeroMemory(url_parts, sizeof(Url_Parts));
+	
 	if(url == NULL || string_is_empty(url)) return false;
 
 	// Split the scheme from the rest of the URL.
@@ -1485,7 +1497,7 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 	if(url == NULL) return NULL;
 	
 	const TCHAR* original_url = url;
-	char* utf_8_url = push_arena(arena, (string_length(url) + 1) * sizeof(char), char);
+	char* utf_8_url = push_array_to_arena(arena, string_length(url) + 1, char);
 	size_t utf_8_index = 0;
 
 	while(*url != T('\0'))
@@ -1541,7 +1553,7 @@ TCHAR* decode_url(Arena* arena, const TCHAR* url)
 		// reason, we will want to return NULL and make the error obvious.
 		//
 		// @Future: This is a weird behavior and this function might change in the future.
-		#ifdef BUILD_9X
+		#ifdef WCE_9X
 			tchar_url = utf_8_url;
 		#endif
 	}
@@ -2084,7 +2096,7 @@ bool get_full_path_name(TCHAR* result_full_path)
 // @Returns: True if it succeeds. Otherwise, false.
 bool get_special_folder_path(int csidl, TCHAR* result_path)
 {
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		return SHGetSpecialFolderPathA(NULL, result_path, csidl, FALSE) != FALSE;
 	#else
 		// @Note: Third parameter (hToken): "Microsoft Windows 2000 and earlier: Always set this parameter to NULL."
@@ -2253,7 +2265,7 @@ HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode,
 	// - "FILE_FLAG_BACKUP_SEMANTICS - Windows 95/98/Me: This flag is not supported."
 	// - "Windows 95/98/Me: The hTemplateFile parameter must be NULL. If you supply a handle, the call fails and GetLastError returns ERROR_NOT_SUPPORTED."
 
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		// Remove the unsupported flags for Windows 98/ME so CreateFile() doesn't fail with the error
 		// code 87 (ERROR_INVALID_PARAMETER).
 		shared_mode &= ~FILE_SHARE_DELETE;
@@ -2272,7 +2284,7 @@ HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode,
 // @Parameters: See create_handle().
 // 
 // @Returns: See create_handle().
-#ifndef BUILD_9X
+#ifndef WCE_9X
 	HANDLE create_directory_handle(const wchar_t* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes)
 	{
 		flags_and_attributes |= FILE_FLAG_BACKUP_SEMANTICS;
@@ -2286,58 +2298,67 @@ HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode,
 // 1. handle_1 - The first handle.
 // 2. handle_2 - The second handle.
 // 
-// @Returns: True if the handles refer to the same file or directory. Otherwise, false. This function also returns false if it's unable
-// to retrieve the handles' information, or if either of the handles is invalid.
-bool do_handles_refer_to_the_same_file_or_directory(HANDLE handle_1, HANDLE handle_2)
+// @Returns: True if the handles refer to the same file or directory. Otherwise, false.
+// This function also returns false if it's unable to retrieve the handles' information, or if either of them is invalid.
+bool handles_refer_to_same_object(HANDLE handle_1, HANDLE handle_2)
 {
-	if(handle_1 == INVALID_HANDLE_VALUE || handle_2 == INVALID_HANDLE_VALUE) return false;
+	BY_HANDLE_FILE_INFORMATION info_1 = {};
+	BY_HANDLE_FILE_INFORMATION info_2 = {};
 
-	BY_HANDLE_FILE_INFORMATION handle_1_info = {};
-	BY_HANDLE_FILE_INFORMATION handle_2_info = {};
-
-	// @Docs: "The identifier (low and high parts) and the volume serial number uniquely identify a file on a single computer.
-	// To determine whether two open handles represent the same file, combine the identifier and the volume serial number for
-	// each file and compare them." - Win32 API reference.
-	if(		GetFileInformationByHandle(handle_1, &handle_1_info) != 0
-		&& 	GetFileInformationByHandle(handle_2, &handle_2_info) != 0)
+	if(GetFileInformationByHandle(handle_1, &info_1) != 0 && GetFileInformationByHandle(handle_2, &info_2) != 0)
 	{
-		return 		handle_1_info.nFileIndexHigh == handle_2_info.nFileIndexHigh
-				&&	handle_1_info.nFileIndexLow == handle_2_info.nFileIndexLow
-				&&	handle_1_info.dwVolumeSerialNumber == handle_2_info.dwVolumeSerialNumber;
+		return info_1.nFileIndexHigh == info_2.nFileIndexHigh
+			&& info_1.nFileIndexLow == info_2.nFileIndexLow
+			&& info_1.dwVolumeSerialNumber == info_2.dwVolumeSerialNumber;
 	}
 
 	return false;
 }
 
-// Checks if two paths refer to the same directory. This function is not very robust for Windows 98 and ME.
+// Checks if two paths refer to the same file or directory.
 //
-// For example, the following paths refer to the same directory: "C:\Program Files\Common Files" and "C:\PROGRA~1\..\PROGRA~1\.\COMMON~1".
-//
-// @Returns: True if the paths refer to the same directory. Otherwise, false. This function also returns false if a directory doesn't exist.
-bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path_2)
+// @Parameters:
+// 1. path_1 - The first path.
+// 2. path_2 - The second path.
+// 
+// @Returns: True if the paths refer to the same file or directory. Otherwise, false.
+// This function also returns false if it's unable to retrieve the paths' information, or if either of them does not exist.
+bool paths_refer_to_same_object(const TCHAR* path_1, const TCHAR* path_2)
 {
-	#ifdef BUILD_9X
-		char path_to_compare_1[MAX_PATH_CHARS] = "";
-		char path_to_compare_2[MAX_PATH_CHARS] = "";
-		
-		// Remove the "." and ".." characters, convert any short paths to their long versions,
-		// and perform a case insensitive string comparison. This is meant to make this check
-		// more robust, but it's not a good approach...
-		return 	does_directory_exist(path_1)
-				&& does_directory_exist(path_2)
-				&& (PathCanonicalizeA(path_to_compare_1, path_1) != FALSE)
-				&& (PathCanonicalizeA(path_to_compare_2, path_2) != FALSE)
-				&& (GetLongPathNameA(path_to_compare_1, path_to_compare_1, MAX_PATH_CHARS) != 0)
-				&& (GetLongPathNameA(path_to_compare_2, path_to_compare_2, MAX_PATH_CHARS) != 0)
-				&& filenames_are_equal(path_to_compare_1, path_to_compare_2);
-	#else
-		HANDLE handle_1 = create_directory_handle(path_1, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
-		HANDLE handle_2 = create_directory_handle(path_2, 0, FILE_SHARE_READ, OPEN_EXISTING, 0);
-		bool result = do_handles_refer_to_the_same_file_or_directory(handle_1, handle_2);
+	bool result = false;
+
+	if(does_directory_exist(path_1) && does_directory_exist(path_2))
+	{
+		#ifdef WCE_9X
+			char canonical_path_1[MAX_PATH_CHARS] = "";
+			char canonical_path_2[MAX_PATH_CHARS] = "";
+			
+			// Remove the "." and ".." characters, convert any short paths to their long versions,
+			// and perform a case insensitive string comparison. This is meant to make this check
+			// more robust, but it's not a great approach...
+			result = (PathCanonicalizeA(canonical_path_1, path_1) != FALSE)
+				  && (PathCanonicalizeA(canonical_path_2, path_2) != FALSE)
+				  && (GetLongPathNameA(canonical_path_1, canonical_path_1, MAX_PATH_CHARS) != 0)
+				  && (GetLongPathNameA(canonical_path_2, canonical_path_2, MAX_PATH_CHARS) != 0)
+				  && filenames_are_equal(canonical_path_1, canonical_path_2);
+		#else
+			HANDLE handle_1 = create_directory_handle(path_1, 0, 0, OPEN_EXISTING, 0);
+			HANDLE handle_2 = create_directory_handle(path_2, 0, 0, OPEN_EXISTING, 0);
+			result = handles_refer_to_same_object(handle_1, handle_2);
+			safe_close_handle(&handle_1);
+			safe_close_handle(&handle_2);
+		#endif		
+	}
+	else
+	{
+		HANDLE handle_1 = create_handle(path_1, 0, 0, OPEN_EXISTING, 0);
+		HANDLE handle_2 = create_handle(path_2, 0, 0, OPEN_EXISTING, 0);
+		result = handles_refer_to_same_object(handle_1, handle_2);
 		safe_close_handle(&handle_1);
 		safe_close_handle(&handle_2);
-		return result;
-	#endif
+	}
+
+	return result;
 }
 
 // Determines whether or not a file exists given its path.
@@ -2382,7 +2403,7 @@ bool does_directory_exist(const TCHAR* directory_path)
 bool get_file_size(HANDLE file_handle, u64* result_file_size)
 {
 	*result_file_size = 0;
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		DWORD file_size_high = 0;
 		DWORD file_size_low = GetFileSize(file_handle, &file_size_high);
 		bool success = !( (file_size_low == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR) );
@@ -2479,7 +2500,7 @@ void safe_unmap_view_of_file(void** base_address)
 		DWORD previous_error_code = GetLastError();
 		UnmapViewOfFile(*base_address);
 		*base_address = NULL;
-		#ifdef BUILD_DEBUG
+		#ifdef WCE_DEBUG
 			DEBUG_MEMORY_MAPPING_BASE_ADDRESS = retreat_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 		#endif
 		SetLastError(previous_error_code);
@@ -2503,7 +2524,7 @@ void safe_unmap_view_of_file(void** base_address)
 // - TRAVERSE_FILES, to visit files.
 // - TRAVERSE_DIRECTORIES, to visit directories.
 // - TRAVERSE_FILES | TRAVERSE_DIRECTORIES, to visit both files and directories.
-// 4. should_traverse_subdirectories - True if subdirectories should be traversed too. Otherwise, false. The previous 'search_query'
+// 4. traverse_subdirectories - True if subdirectories should be traversed too. Otherwise, false. The previous 'search_query'
 // still applies.
 // 5. callback_function - The callback function that is called every time a relevant file or directory is found. Whether or not this
 // function is called for a given object depends on the 'traversal_flags'.
@@ -2518,12 +2539,12 @@ void safe_unmap_view_of_file(void** base_address)
 //
 // @Returns: Nothing.
 void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search_query,
-								u32 traversal_flags, bool should_traverse_subdirectories,
+								u32 traversal_flags, bool traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data)
 {
 	if(string_is_empty(directory_path)) return;
 
-	bool should_continue_traversing = true;
+	bool continue_traversing = true;
 
 	/*
 		>>>> Traverse the files and directories that match the search query.
@@ -2542,10 +2563,10 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 		if(!strings_are_equal(filename, T(".")) && !strings_are_equal(filename, T("..")))
 		{
 			bool is_directory = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-			bool should_process_object = 	( (traversal_flags & TRAVERSE_FILES) && !is_directory )
-										|| 	( (traversal_flags & TRAVERSE_DIRECTORIES) && is_directory );
+			bool process_object = ( (traversal_flags & TRAVERSE_FILES) && !is_directory )
+							   || ( (traversal_flags & TRAVERSE_DIRECTORIES) && is_directory );
 
-			if(should_process_object)
+			if(process_object)
 			{
 				TCHAR full_path[MAX_PATH_CHARS] = T("");
 				PathCombine(full_path, directory_path, filename);
@@ -2565,8 +2586,8 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 
 				info.user_data = user_data;
 
-				should_continue_traversing = callback_function(&info);
-				if(!should_continue_traversing) break;
+				continue_traversing = callback_function(&info);
+				if(!continue_traversing) break;
 			}
 		}
 
@@ -2579,7 +2600,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 		>>>> Traverse every subdirectory in this directory. We can't use the same search query here, otherwise we'd exclude directories.
 	*/
 
-	if(should_traverse_subdirectories && should_continue_traversing)
+	if(traverse_subdirectories && continue_traversing)
 	{
 		PathCombine(search_path, directory_path, ALL_OBJECTS_SEARCH_QUERY);
 		search_handle = FindFirstFile(search_path, &find_data);
@@ -2597,7 +2618,7 @@ void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search
 					PathCombine(subdirectory_path, directory_path, filename);
 
 					traverse_directory_objects(	subdirectory_path, search_query,
-												traversal_flags, should_traverse_subdirectories,
+												traversal_flags, traverse_subdirectories,
 												callback_function, user_data);
 				}			
 			}
@@ -2667,11 +2688,11 @@ static TRAVERSE_DIRECTORY_CALLBACK(find_objects_callback)
 //
 // @Returns: An array with information about each object.
 Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory_path, const TCHAR* search_query,
-											u32 traversal_flags, bool should_traverse_subdirectories)
+											u32 traversal_flags, bool traverse_subdirectories)
 {
 	Find_Objects_Params params = {};
 	traverse_directory_objects(	directory_path, search_query,
-								traversal_flags, should_traverse_subdirectories,
+								traversal_flags, traverse_subdirectories,
 								count_objects_callback, &params);
 
 	size_t result_size = sizeof(Traversal_Result) + MAX(params.expected_num_objects - 1, 0) * sizeof(Traversal_Object_Info);
@@ -2681,7 +2702,7 @@ Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory
 	params.arena = arena;
 	params.result = result;
 	traverse_directory_objects(	directory_path, search_query,
-								traversal_flags, should_traverse_subdirectories,
+								traversal_flags, traverse_subdirectories,
 								find_objects_callback, &params);
 
 	if(result->num_objects != params.expected_num_objects)
@@ -2952,7 +2973,7 @@ void* memory_map_entire_file(HANDLE file_handle, u64* result_file_size, bool opt
 					// - MapViewOfFile / MapViewOfFileEx - Win32 API Reference.
 					DWORD desired_access = (optional_read_only) ? (FILE_MAP_READ) : (FILE_MAP_COPY);
 
-					#ifdef BUILD_DEBUG
+					#ifdef WCE_DEBUG
 						mapped_memory = MapViewOfFileEx(mapping_handle, desired_access, 0, 0, 0, DEBUG_MEMORY_MAPPING_BASE_ADDRESS);
 						DEBUG_MEMORY_MAPPING_BASE_ADDRESS = advance_bytes(DEBUG_MEMORY_MAPPING_BASE_ADDRESS, DEBUG_BASE_ADDRESS_INCREMENT);
 					#else
@@ -3375,7 +3396,7 @@ const u32 MIN_DECOMPRESSION_DESTINATION_BUFFER_SIZE = (u32) kilobytes_to_bytes(1
 static voidpf zlib_alloc(voidpf opaque, uInt num_items, uInt item_size)
 {
 	Arena* arena = (Arena*) opaque;
-	void* result = aligned_push_arena(arena, num_items * item_size, MAX_SCALAR_ALIGNMENT_SIZE);
+	void* result = push_any_type_to_arena(arena, num_items * item_size);
 	return (result != NULL) ? (result) : (Z_NULL);
 }
 
@@ -3519,7 +3540,7 @@ bool decompress_gzip_zlib_deflate_file(Arena* arena, const TCHAR* source_file_pa
 static void* brotli_alloc(void* opaque, size_t size)
 {
 	Arena* arena = (Arena*) opaque;
-	return aligned_push_arena(arena, size, MAX_SCALAR_ALIGNMENT_SIZE);
+	return push_any_type_to_arena(arena, size);
 }
 
 // Custom memory deallocation function passed to the Brotli library.
@@ -3770,7 +3791,7 @@ bool decompress_compress_file(Arena* arena, const TCHAR* source_file_path, HANDL
 	const int NO_INDEX = -1;
 	const int CLEAR_INDEX = (is_block_mode) ? (INITIAL_NUM_DICTIONARY_ENTRIES - 1) : (NO_INDEX);
 
-	Entry* dictionary = push_arena(arena, INITIAL_NUM_DICTIONARY_ENTRIES * sizeof(Entry), Entry);
+	Entry* dictionary = push_array_to_arena(arena, INITIAL_NUM_DICTIONARY_ENTRIES, Entry);
 	int num_dictionary_entries = INITIAL_NUM_DICTIONARY_ENTRIES;
 
 	for(int i = 0; i < INITIAL_NUM_DICTIONARY_ENTRIES; ++i)
@@ -4273,7 +4294,7 @@ void close_log_file(void)
 // where string_format is an ANSI string (for convenience).
 //
 // Use log_newline() to add an empty line, and log_debug() to add a line of type LOG_DEBUG. This last function is only
-// called if the BUILD_DEBUG macro is defined.
+// called if the WCE_DEBUG macro is defined.
 //
 // @Parameters:
 // 1. log_type - The type of log line to write. This is used to add a small string identifier to the beginning of the line.
@@ -4316,7 +4337,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...)
 	StringCchCat(log_buffer, MAX_CHARS_PER_LOG_WRITE, T("\r\n"));
 
 	// Convert the log line to UTF-8.
-	#ifdef BUILD_9X
+	#ifdef WCE_9X
 		// For Windows 98 and ME, we'll first convert the ANSI string to UTF-16.
 		wchar_t utf_16_log_buffer[MAX_CHARS_PER_LOG_WRITE] = L"";
 		MultiByteToWideChar(CP_ACP, 0, log_buffer, -1, utf_16_log_buffer, MAX_CHARS_PER_LOG_WRITE);
@@ -4577,14 +4598,13 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		}
 
 		// Convert the values to UTF-16.
-		#ifdef BUILD_9X
+		#ifdef WCE_9X
 			wchar_t* utf_16_value = L"";
 
 			int num_chars_required_utf_16 = MultiByteToWideChar(CP_ACP, 0, value, -1, NULL, 0);
 			if(num_chars_required_utf_16 != 0)
 			{
-				int size_required_utf_16 = num_chars_required_utf_16 * sizeof(wchar_t);
-				utf_16_value = push_arena(arena, size_required_utf_16, wchar_t);
+				utf_16_value = push_array_to_arena(arena, num_chars_required_utf_16, wchar_t);
 				
 				if(MultiByteToWideChar(CP_ACP, 0, value, -1, utf_16_value, num_chars_required_utf_16) == 0)
 				{
@@ -4661,7 +4681,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 	write_to_file(csv_file_handle, csv_row, (u32) csv_row_size);
 }
 
-#ifndef BUILD_9X
+#ifndef WCE_9X
 
 	// Define some undocumented structures and constants for NtQuerySystemInformation().
 	// @Resources:
@@ -4680,7 +4700,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		ULONG GrantedAccess;
 	};
 
-	#ifdef BUILD_32_BIT
+	#ifdef WCE_32_BIT
 		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO) == 0x10);
 	#else
 		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO) == 0x18);
@@ -4692,7 +4712,7 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		SYSTEM_HANDLE_TABLE_ENTRY_INFO Handles[ANYSIZE_ARRAY];
 	};
 
-	#ifdef BUILD_32_BIT
+	#ifdef WCE_32_BIT
 		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_INFORMATION) == 0x14);
 	#else
 		_STATIC_ASSERT(sizeof(SYSTEM_HANDLE_INFORMATION) == 0x20);
@@ -4930,9 +4950,8 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 		// When we iterate over these handles, we'll want to check which one corresponds to the desired file path.
 		// To do this robustly, we'll need another handle for this file. Since the whole point of this function is
 		// getting a handle for a file that's being used by another process, we'll want to avoid asking for any
-		// access rights that result in a sharing violation. Because of this, we'll ask for the right to read the
-		// file's attributes.
-		HANDLE read_attributes_file_handle = create_handle(full_file_path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, OPEN_EXISTING, 0);
+		// access rights that result in a sharing violation.
+		HANDLE read_attributes_file_handle = create_handle(full_file_path, 0, 0, OPEN_EXISTING, 0);
 		if(read_attributes_file_handle == INVALID_HANDLE_VALUE)
 		{
 			log_error("Query File Handle: Failed to get the read attributes files handle for '%ls' with error code %lu.", full_file_path, GetLastError());
@@ -4951,21 +4970,21 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 			DWORD process_id = handle_entry.UniqueProcessId;
 			if(process_id == current_process_id) continue;
 
-			// @Note: The PROCESS_DUP_HANDLE access right is required for DuplicateHandle().
+			// The PROCESS_DUP_HANDLE access right is required for DuplicateHandle().
 			HANDLE process_handle = OpenProcess(PROCESS_DUP_HANDLE, FALSE, process_id);
 			if(process_handle == NULL || process_handle == INVALID_HANDLE_VALUE) continue;
 
 			HANDLE file_handle = (HANDLE) handle_entry.HandleValue;
 			HANDLE duplicated_file_handle = INVALID_HANDLE_VALUE;
 
-			// Duplicate the file handle and give it generic reading access rights.
+			// Duplicate the file handle and give it reading access.
 			if(DuplicateHandle(	process_handle, file_handle,
 								current_process_handle, &duplicated_file_handle,
 								GENERIC_READ, FALSE, 0))
 			{
 				// Check if the handle belongs to a file object and if it refers to the file we're looking for.
 				if(GetFileType(duplicated_file_handle) == FILE_TYPE_DISK
-					&& do_handles_refer_to_the_same_file_or_directory(read_attributes_file_handle, duplicated_file_handle))
+					&& handles_refer_to_same_object(read_attributes_file_handle, duplicated_file_handle))
 				{
 					success = true;
 					*result_file_handle = duplicated_file_handle;
@@ -4984,9 +5003,10 @@ void csv_print_row(Arena* arena, HANDLE csv_file_handle, Csv_Entry* column_value
 
 		clean_up:
 		FREE_IF_USED_VIRTUAL_ALLOC();
-		#undef FREE_IF_USED_VIRTUAL_ALLOC
 		clear_arena(arena);
 		unlock_arena(arena);
+
+		#undef FREE_IF_USED_VIRTUAL_ALLOC
 
 		return success;
 	}
@@ -5208,7 +5228,7 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 		}
 		else if(error_code == ERROR_SHARING_VIOLATION)
 		{
-			#ifndef BUILD_9X
+			#ifndef WCE_9X
 				log_info("Copy Open File: Attempting to forcibly copy the file '%s' since its being used by another process.", copy_source_path);
 				copy_success = force_copy_open_file(arena, copy_source_path, copy_destination_path);
 				if(!copy_success)
@@ -5228,7 +5248,7 @@ bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* co
 	return copy_success;
 }
 
-#ifdef BUILD_DEBUG
+#ifdef WCE_DEBUG
 	
 	// A debug function that measures the time between two calls. The macros DEBUG_BEGIN_MEASURE_TIME() and DEBUG_END_MEASURE_TIME() should
 	// be used to start and stop the measurement.

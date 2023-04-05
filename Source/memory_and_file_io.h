@@ -35,7 +35,9 @@ void* aligned_push_arena_64(Arena* arena, u64 push_size, size_t alignment_size);
 void* aligned_push_and_copy_to_arena(Arena* arena, size_t push_size, size_t alignment_size, const void* data, size_t data_size);
 #define push_arena(arena, push_size, Type) ((Type*) aligned_push_arena(arena, push_size, __alignof(Type)))
 #define push_and_copy_to_arena(arena, push_size, Type, data, data_size) ((Type*) aligned_push_and_copy_to_arena(arena, push_size, __alignof(Type), data, data_size))
-TCHAR* push_string_to_arena(Arena* arena, const TCHAR* string_to_copy);
+#define push_array_to_arena(arena, count, Type) push_arena(arena, (count) * sizeof(Type), Type);
+void* push_any_type_to_arena(Arena* arena, size_t size);
+TCHAR* push_string_to_arena(Arena* arena, const TCHAR* str);
 f32 get_used_arena_capacity(Arena* arena);
 u32 get_arena_file_buffer_size(Arena* arena, HANDLE file_handle);
 u32 get_arena_chunk_buffer_size(Arena* arena, size_t min_size);
@@ -92,7 +94,7 @@ s32 swap_byte_order(s32 value);
 u64 swap_byte_order(u64 value);
 s64 swap_byte_order(s64 value);
 
-#ifdef BUILD_BIG_ENDIAN
+#ifdef WCE_BIG_ENDIAN
 	#define BIG_ENDIAN_TO_HOST(variable)
 	#define LITTLE_ENDIAN_TO_HOST(variable) variable = swap_byte_order(variable)
 #else
@@ -279,14 +281,14 @@ void correct_reserved_path_components(TCHAR* path);
 
 HANDLE create_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
 
-#ifndef BUILD_9X
+#ifndef WCE_9X
 	HANDLE create_directory_handle(const TCHAR* path, DWORD desired_access, DWORD shared_mode, DWORD creation_disposition, DWORD flags_and_attributes);
 #else
 	#define create_directory_handle(...) _STATIC_ASSERT(false)
 #endif
 
-bool do_handles_refer_to_the_same_file_or_directory(HANDLE file_handle_1, HANDLE file_handle_2);
-bool do_paths_refer_to_the_same_directory(const TCHAR* path_1, const TCHAR* path_2);
+bool handles_refer_to_same_object(HANDLE file_handle_1, HANDLE file_handle_2);
+bool paths_refer_to_same_object(const TCHAR* path_1, const TCHAR* path_2);
 bool does_file_exist(const TCHAR* file_path);
 bool does_directory_exist(const TCHAR* directory_path);
 bool get_file_size(HANDLE file_handle, u64* file_size_result);
@@ -325,7 +327,7 @@ const TCHAR* const ALL_OBJECTS_SEARCH_QUERY = T("*");
 #define TRAVERSE_DIRECTORY_CALLBACK(function_name) bool function_name(Traversal_Object_Info* callback_info)
 typedef TRAVERSE_DIRECTORY_CALLBACK(Traverse_Directory_Callback);
 void traverse_directory_objects(const TCHAR* directory_path, const TCHAR* search_query,
-								u32 traversal_flags, bool should_traverse_subdirectories,
+								u32 traversal_flags, bool traverse_subdirectories,
 								Traverse_Directory_Callback* callback_function, void* user_data);
 
 // An array with information about each object.
@@ -337,7 +339,7 @@ struct Traversal_Result
 };
 
 Traversal_Result* find_objects_in_directory(Arena* arena, const TCHAR* directory_path, const TCHAR* search_query,
-											u32 traversal_flags, bool should_traverse_subdirectories);
+											u32 traversal_flags, bool traverse_subdirectories);
 
 bool create_directories(const TCHAR* path_to_create, bool optional_resolve_naming_collisions = false, TCHAR* optional_result_path = NULL);
 bool delete_directory_and_contents(const TCHAR* directory_path);
@@ -440,7 +442,7 @@ void tchar_log_print(Log_Type log_type, const TCHAR* string_format, ...);
 #define log_warning(string_format, ...) log_print(LOG_WARNING, string_format, __VA_ARGS__)
 #define log_error(string_format, ...) log_print(LOG_ERROR, string_format, __VA_ARGS__)
 
-#ifdef BUILD_DEBUG
+#ifdef WCE_DEBUG
 	#define log_debug(string_format, ...) log_print(LOG_DEBUG, string_format, __VA_ARGS__)
 #else
 	#define log_debug(...)
@@ -644,7 +646,7 @@ enum Custom_Error_Code
 	CUSTOM_ERROR_FAILED_TO_GET_FILE_SIZE 					= CUSTOM_WIN32_ERROR_CODE(6),
 };
 
-#ifndef BUILD_9X
+#ifndef WCE_9X
 	void load_ntdll_functions(void);
 	void free_ntdll_functions(void);
 
@@ -661,7 +663,7 @@ enum Custom_Error_Code
 bool copy_open_file(Arena* arena, const TCHAR* copy_source_path, const TCHAR* copy_destination_path);
 
 // For measuring times in the debug builds. Only DEBUG_BEGIN_MEASURE_TIME() and DEBUG_END_MEASURE_TIME() should be used directly.
-#ifdef BUILD_DEBUG
+#ifdef WCE_DEBUG
 	void debug_measure_time(bool is_start, const char* identifier);
 	#define DEBUG_BEGIN_MEASURE_TIME(identifier) debug_measure_time(true, identifier)
 	#define DEBUG_END_MEASURE_TIME() debug_measure_time(false, NULL)

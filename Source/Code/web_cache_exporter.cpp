@@ -31,8 +31,8 @@
 	to implement how they read their respective cache formats in the way that best suits the data, exposing one function called
 	export_default_or_specific_<Name>_cache that takes the Exporter as a parameter.
 
-	- The "memory_and_file_io.cpp" file defines functions for memory management, file I/O, date time formatting, string, path, and
-	URL manipulation, etc. The "custom_groups.cpp" file defines the functions used to load .group files, and match each cache entry
+	- The "common.cpp" file defines functions for memory management, file I/O, date time formatting, string, path, and URL
+	manipulation, etc. The "custom_groups.cpp" file defines the functions used to load .group files, and match each cache entry
 	to a file or URL group. These are simple text files that allow you to label each cache entry based on their MIME types, file
 	extensions, file signatures, and URLs. These are useful to identify files that belong to web plugins like Flash or Shockwave,
 	or that came from certain websites like gaming portals.
@@ -2111,9 +2111,8 @@ bool create_placeholder_exporter_file(Exporter* exporter, TCHAR* result_file_pat
 // - Creating a temporary file without caring about its filename.
 //
 // Note that any future calls to CreateFile() with the resulting file path *must* specify FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
-// for the share mode, and GENERIC_READ for the desired access. The annotation @TemporaryFiles is used in any function defined
-// in memory_and_file_io.cpp that could interface with a temporary file using only its path (e.g. generating the hash of a temporary
-// cached file).
+// for the share mode, and GENERIC_READ for the desired access. The annotation @TemporaryFiles is used in any function defined in
+// common.cpp that could interface with a temporary file using only its path (e.g. generating the hash of a temporary cached file).
 //
 // Note also that you should be careful and remember to close any additional file handles that are opened in the previously mentioned
 // functions marked with @TemporaryFiles. Not doing so will prevent the temporary directory from being deleted (since the temporary file

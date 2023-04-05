@@ -1,5 +1,5 @@
-#ifndef MEMORY_AND_FILE_IO_H
-#define MEMORY_AND_FILE_IO_H
+#ifndef COMMON_H
+#define COMMON_H
 
 /*
 	>>>>>>>>>>>>>>>>>>>>

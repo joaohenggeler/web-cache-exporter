@@ -184,7 +184,7 @@ const bool IS_CACHE_TYPE_PLUGIN[] =
 };
 _STATIC_ASSERT(_countof(IS_CACHE_TYPE_PLUGIN) == NUM_CACHE_TYPES);
 
-#include "memory_and_file_io.h"
+#include "common.h"
 
 struct Exporter;
 #include "custom_groups.h"

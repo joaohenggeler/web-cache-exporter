@@ -1,5 +1,7 @@
 # Web Cache Exporter
 
+**This tool is currently being rewritten from scratch. See the progress so far in the `overhaul` branch.**
+
 A command line tool that allows you to more easily view and obtain the contents of a web browser or web plugin's HTTP cache that's stored on disk. It runs on Windows 98, ME, 2000, XP, Vista, 7, 8.1, and 10, and supports the following cache formats:
 
 * The WinINet cache - Internet Explorer 4 to 11.

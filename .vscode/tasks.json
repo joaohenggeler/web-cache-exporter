@@ -4,10 +4,10 @@
 	[
 		{
 			"group": "build",
-			"label": "Debug Build",
+			"label": "Debug",
 			"type": "shell",
-			"command": "${workspaceFolder}\\Build.bat",
-			"args": ["debug"],
+			"command": "python",
+			"args": ["${workspaceFolder}\\build.py", "-mode", "debug"],
 			"presentation":
 			{
 				"clear": true
@@ -16,10 +16,10 @@
 
 		{
 			"group": "build",
-			"label": "Debug Build (Empty Export)",
+			"label": "Debug + Package",
 			"type": "shell",
-			"command": "${workspaceFolder}\\Build.bat",
-			"args": ["debug", "/D", "WCE_EMPTY_EXPORT"],
+			"command": "python",
+			"args": ["${workspaceFolder}\\build.py", "-mode", "debug", "-package"],
 			"presentation":
 			{
 				"clear": true
@@ -28,10 +28,10 @@
 
 		{
 			"group": "build",
-			"label": "Release Build",
+			"label": "Release",
 			"type": "shell",
-			"command": "${workspaceFolder}\\Build.bat",
-			"args": ["release"],
+			"command": "python",
+			"args": ["${workspaceFolder}\\build.py", "-mode", "release"],
 			"presentation":
 			{
 				"clear": true
@@ -40,10 +40,10 @@
 
 		{
 			"group": "build",
-			"label": "Release Build (Debug Symbols)",
+			"label": "Release + Package",
 			"type": "shell",
-			"command": "${workspaceFolder}\\Build.bat",
-			"args": ["release", "/Zi"],
+			"command": "python",
+			"args": ["${workspaceFolder}\\build.py", "-mode", "release", "-package"],
 			"presentation":
 			{
 				"clear": true
@@ -52,8 +52,15 @@
 
 		{
 			"group": "build",
-			"label": "Package Build",
-			"dependsOn": ["Debug Build", "Release Build"],
+			"label": "Debug + Release",
+			"dependsOn": ["Debug", "Release"],
+			"dependsOrder": "sequence"
+		},
+
+		{
+			"group": "build",
+			"label": "Debug + Release + Package",
+			"dependsOn": ["Debug + Package", "Release + Package"],
 			"dependsOrder": "sequence"
 		}
 	]

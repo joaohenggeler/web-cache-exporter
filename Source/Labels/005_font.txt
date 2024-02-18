@@ -1,0 +1,86 @@
+NAME Font
+
+BEGIN_FILE EOT
+
+	BEGIN_MIME_TYPES
+		application/vnd.ms-fontobject
+	END
+
+	BEGIN_EXTENSIONS
+		eot
+	END
+
+END
+
+BEGIN_FILE OTF
+
+	BEGIN_SIGNATURES
+		# "OTTO"
+		4F 54 54 4F
+	END
+
+	BEGIN_MIME_TYPES
+		font/otf
+	END
+
+	BEGIN_EXTENSIONS
+		otf
+	END
+
+END
+
+BEGIN_FILE TTF
+
+	BEGIN_MIME_TYPES
+		font/ttf
+		application/x-font-ttf
+	END
+
+	BEGIN_EXTENSIONS
+		ttf
+	END
+
+END
+
+BEGIN_FILE WOFF
+
+	BEGIN_SIGNATURES
+		# "wOFF"
+		77 4F 46 46
+	END
+
+	BEGIN_MIME_TYPES
+		font/woff
+		application/font-woff
+	END
+
+	BEGIN_EXTENSIONS
+		woff
+	END
+
+END
+
+BEGIN_FILE WOFF2
+
+	BEGIN_SIGNATURES
+		# "wOF2"
+		77 4F 46 32
+	END
+
+	BEGIN_MIME_TYPES
+		font/woff2
+	END
+
+	BEGIN_EXTENSIONS
+		woff2
+	END
+
+END
+
+BEGIN_FILE Other
+
+	BEGIN_MIME_TYPES
+		font/
+	END
+
+END

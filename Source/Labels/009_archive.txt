@@ -1,0 +1,226 @@
+# This must be loaded after most files because of the ZIP label.
+
+NAME Archive
+
+BEGIN_FILE 7-Zip
+
+	BEGIN_SIGNATURES
+		# "7z¼¯'."
+		37 7A BC AF 27 1C
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-7z-compressed
+	END
+
+	BEGIN_EXTENSIONS
+		7z
+	END
+
+END
+
+BEGIN_FILE Bzip2
+
+	BEGIN_SIGNATURES
+		# "BZh"
+		42 5A 68
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-bzip
+		application/x-bzip2
+	END
+
+	BEGIN_EXTENSIONS
+		bz bz2
+	END
+
+	DEFAULT_EXTENSION bz2
+
+END
+
+BEGIN_FILE Cabinet
+
+	BEGIN_SIGNATURES
+		# "MSCF"
+		4D 53 43 46
+	END
+
+	BEGIN_MIME_TYPES
+		application/vnd.ms-cab-compressed
+	END
+
+	BEGIN_EXTENSIONS
+		cab
+	END
+
+END
+
+# This label is a catch-all for several Unix utility compression formats.
+# See: http://fileformats.archiveteam.org/wiki/Compress_(Unix)#The_0x1f_compression_family
+BEGIN_FILE Compress
+
+	BEGIN_SIGNATURES
+		# Compact
+		1F FF
+		FF 1F
+
+		# Compress
+		1F 9D
+
+		# Freeze/Melt (old format)
+		1F 9E
+		# Freeze/Melt (new format)
+		1F 9F
+
+		# Pack
+		1F 1E
+		# Pack (old format)
+		1F 1F
+
+		# Quasijarus Strong Compression
+		1F A1
+
+		# SCO Compress LZH
+		1F A0
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-compress
+	END
+
+	BEGIN_EXTENSIONS
+		# Compress, Pack, Quasijarus Strong Compression, SCO Compress LZH
+		Z
+	END
+
+END
+
+BEGIN_FILE Gzip
+
+	BEGIN_SIGNATURES
+		1F 8B
+	END
+
+	BEGIN_MIME_TYPES
+		application/gzip
+		application/x-gzip
+	END
+
+	BEGIN_EXTENSIONS
+		gz tgz
+	END
+
+	DEFAULT_EXTENSION gz
+
+END
+
+BEGIN_FILE LHA
+
+	BEGIN_SIGNATURES
+		# "__-lh"
+		__ __ 2D 6C 68
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-lzh-compressed
+	END
+
+	BEGIN_EXTENSIONS
+		lha lzh
+	END
+
+	DEFAULT_EXTENSION lha
+
+END
+
+BEGIN_FILE RAR
+
+	BEGIN_SIGNATURES
+		# "Rar!..." (version 4)
+		52 61 72 21 1A 07 00
+		# "Rar!...." (version 5)
+		52 61 72 21 1A 07 01 00
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-rar-compressed
+		application/vnd.rar
+	END
+
+	BEGIN_EXTENSIONS
+		rar
+	END
+
+END
+
+BEGIN_FILE TAR
+
+	BEGIN_MIME_TYPES
+		application/x-tar
+	END
+
+	BEGIN_EXTENSIONS
+		tar
+	END
+
+END
+
+BEGIN_FILE ZIP
+
+	BEGIN_SIGNATURES
+		# "PK.."
+		50 4B 03 04
+		# Empty archive
+		50 4B 05 06
+		# Split or spanned archive
+		50 4B 07 08
+	END
+
+	BEGIN_MIME_TYPES
+		application/zip
+		application/x-zip-compressed
+	END
+
+	BEGIN_EXTENSIONS
+		zip
+	END
+
+END
+
+BEGIN_FILE Zlib
+
+	BEGIN_SIGNATURES
+		# Assumes 0x78 as the first byte (DEFLATE with a 32K window).
+
+		# No compression (level 0)
+		78 01
+		# Best speed (level 1-5)
+		78 5E
+		# Default compression (level 6)
+		78 9C
+		# Best compression (level 7-9)
+		78 DA
+	END
+
+END
+
+BEGIN_FILE Zstandard
+
+	BEGIN_SIGNATURES
+		# First byte depends on the version
+		__ B5 2F FD
+		# Dictionary
+		37 A4 30 EC
+	END
+
+	BEGIN_MIME_TYPES
+		application/zstd
+		application/zstandard
+	END
+
+	BEGIN_EXTENSIONS
+		zst
+	END
+
+END

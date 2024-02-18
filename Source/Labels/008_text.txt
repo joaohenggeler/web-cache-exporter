@@ -1,0 +1,259 @@
+# This must be loaded after most files because of the XML label.
+
+NAME Text
+
+BEGIN_FILE Channel Definition Format
+
+	BEGIN_EXTENSIONS
+		cdf
+	END
+
+END
+
+BEGIN_FILE Configuration
+
+	BEGIN_EXTENSIONS
+		ini inf
+	END
+
+END
+
+BEGIN_FILE CSS
+
+	BEGIN_MIME_TYPES
+		text/css
+	END
+
+	BEGIN_EXTENSIONS
+		css
+	END
+
+END
+
+BEGIN_FILE CSV
+
+	BEGIN_MIME_TYPES
+		text/csv
+	END
+
+	BEGIN_EXTENSIONS
+		csv
+	END
+
+END
+
+BEGIN_FILE DASH
+
+	BEGIN_MIME_TYPES
+		application/dash
+	END
+
+	BEGIN_EXTENSIONS
+		mpd
+	END
+
+END
+
+BEGIN_FILE HTML
+
+	BEGIN_SIGNATURES
+		# "<html"
+		3C 68 74 6D 6C
+		# "<!DOCTYPE html"
+		3C 21 44 4F 43 54 59 50 45 20 68 74 6D 6C
+		# "<HTML"
+		3C 48 54 4D 4C
+		# "<!DOCTYPE HTML"
+		3C 21 44 4F 43 54 59 50 45 20 48 54 4D 4C
+	END
+
+	BEGIN_MIME_TYPES
+		text/html
+		application/xhtml+xml
+	END
+
+	BEGIN_EXTENSIONS
+		htm html xhtml
+	END
+
+	DEFAULT_EXTENSION html
+
+END
+
+BEGIN_FILE HTML Component
+
+	BEGIN_MIME_TYPES
+		text/x-component
+	END
+
+	BEGIN_EXTENSIONS
+		htc
+	END
+
+END
+
+BEGIN_FILE JavaScript
+
+	BEGIN_MIME_TYPES
+		text/javascript
+
+		application/javascript
+		application/ecmascript
+		application/x-ecmascript
+		application/x-javascript
+
+		text/ecmascript
+		text/jscript
+		text/livescript
+		text/x-ecmascript
+		text/x-javascript
+	END
+
+	BEGIN_EXTENSIONS
+		js
+	END
+
+END
+
+BEGIN_FILE JSON
+
+	BEGIN_MIME_TYPES
+		application/json
+	END
+
+	BEGIN_EXTENSIONS
+		json
+	END
+
+END
+
+BEGIN_FILE M3U8
+
+	BEGIN_MIME_TYPES
+		application/vnd.apple.mpegurl
+		application/mpegurl
+		application/x-mpegurl
+		# audio/mpegurl
+		# audio/x-mpegurl
+	END
+
+	BEGIN_EXTENSIONS
+		m3u m3u8
+	END
+
+END
+
+BEGIN_FILE Plain
+
+	BEGIN_MIME_TYPES
+		text/plain
+	END
+
+	BEGIN_EXTENSIONS
+		txt
+	END
+
+END
+
+BEGIN_FILE PostScript
+
+	BEGIN_SIGNATURES
+		# "%!"
+		25 21
+	END
+
+	BEGIN_MIME_TYPES
+		application/postscript
+	END
+
+	BEGIN_EXTENSIONS
+		ps
+	END
+
+END
+
+BEGIN_FILE Rich Text Format
+
+	BEGIN_SIGNATURES
+		# "{\rtf"
+		7B 5C 72 74 66
+	END
+
+	BEGIN_MIME_TYPES
+		text/rtf
+		application/rtf
+	END
+
+	BEGIN_EXTENSIONS
+		rtf
+	END
+
+END
+
+BEGIN_FILE Server-Side Script
+
+	BEGIN_MIME_TYPES
+		# JavaServer Pages (JSP)
+		application/jsp
+	END
+
+	BEGIN_EXTENSIONS
+		# Active Server Pages (ASP) and ASP.NET
+		asp aspx cshtml vbhtml ashx asmx
+
+		# ColdFusion Markup Language (CFML)
+		cfm cfc
+
+		# Common Gateway Interface (CGI)
+		cgi
+
+		# JavaServer Pages (JSP)
+		jsp jspx jspf do
+		jhtml
+
+		# PHP
+		php phtml php3 php4 php5 php7 phps php-s pht phar
+
+		# Server Side Includes (SSI)
+		shtml shtm stm
+	END
+
+END
+
+BEGIN_FILE VBScript
+
+	BEGIN_MIME_TYPES
+		text/vbscript
+	END
+
+	BEGIN_EXTENSIONS
+		vbs
+	END
+
+END
+
+BEGIN_FILE XML
+
+	BEGIN_SIGNATURES
+		# "<?xml "
+		3C 3F 78 6D 6C 20
+	END
+
+	BEGIN_MIME_TYPES
+		text/xml
+		application/xml
+	END
+
+	BEGIN_EXTENSIONS
+		xml
+	END
+
+END
+
+BEGIN_FILE Other
+
+	BEGIN_MIME_TYPES
+		text/
+	END
+
+END

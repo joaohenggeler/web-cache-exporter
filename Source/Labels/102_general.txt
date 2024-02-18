@@ -1,0 +1,749 @@
+NAME General
+
+BEGIN_URL About.com
+
+	BEGIN_DOMAINS
+		about.com
+	END
+
+END
+
+BEGIN_URL Adobe
+
+	BEGIN_DOMAINS
+		adobe.com
+	END
+
+END
+
+BEGIN_URL AltaVista
+
+	BEGIN_DOMAINS
+		altavista.com
+	END
+
+END
+
+BEGIN_URL Amazon
+
+	BEGIN_DOMAINS
+		amazon.*
+		ssl-images-amazon.com
+	END
+
+END
+
+BEGIN_URL AOL
+
+	BEGIN_DOMAINS
+		aol.com
+	END
+
+END
+
+BEGIN_URL Apple
+
+	BEGIN_DOMAINS
+		apple.com
+	END
+
+END
+
+BEGIN_URL Ask.com
+
+	BEGIN_DOMAINS
+		ask.com
+	END
+
+END
+
+BEGIN_URL Baidu
+
+	BEGIN_DOMAINS
+		baidu.com
+	END
+
+END
+
+BEGIN_URL Bandcamp
+
+	BEGIN_DOMAINS
+		bandcamp.com
+	END
+
+END
+
+BEGIN_URL Bing
+
+	BEGIN_DOMAINS
+		bing.*
+	END
+
+END
+
+BEGIN_URL Blogger
+
+	BEGIN_DOMAINS
+		blogspot.*
+	END
+
+END
+
+BEGIN_URL BrotherSoft
+
+	BEGIN_DOMAINS
+		brothersoft.com
+	END
+
+END
+
+BEGIN_URL Cloudflare
+
+	BEGIN_DOMAINS
+		cloudflare.com
+	END
+
+END
+
+BEGIN_URL CloudFront
+
+	BEGIN_DOMAINS
+		cloudfront.net
+	END
+
+END
+
+BEGIN_URL CNET
+
+	BEGIN_DOMAINS
+		cnet.com
+		download.com
+		download.com.com
+	END
+
+END
+
+BEGIN_URL CompuServe
+
+	BEGIN_DOMAINS
+		compuserve.com
+	END
+
+END
+
+BEGIN_URL Craigslist
+
+	BEGIN_DOMAINS
+		craigslist.org
+	END
+
+END
+
+BEGIN_URL Dailymotion
+
+	BEGIN_DOMAINS
+		dailymotion.com
+	END
+
+END
+
+BEGIN_URL DeviantArt
+
+	BEGIN_DOMAINS
+		deviantart.*
+	END
+
+END
+
+BEGIN_URL Digg
+
+	BEGIN_DOMAINS
+		digg.com
+	END
+
+END
+
+BEGIN_URL DigiCert
+
+	BEGIN_DOMAINS
+		digicert.com
+	END
+
+END
+
+BEGIN_URL Discord
+
+	BEGIN_DOMAINS
+		discordapp.*
+		discord.*
+	END
+
+END
+
+BEGIN_URL Dropbox
+
+	BEGIN_DOMAINS
+		dropbox.*
+		db.tt
+		dropboxapi.com
+		dropboxbusiness.com
+		dropboxcaptcha.com
+		dropboxforums.com
+		dropboxforum.com
+		dropboxinsiders.com
+		dropboxmail.com
+		dropboxpartners.com
+		dropboxstatic.com
+		dropboxteam.com
+		dropbox.zendesk.com
+		getdropbox.com
+	END
+
+END
+
+BEGIN_URL DuckDuckGo
+
+	BEGIN_DOMAINS
+		duckduckgo.com
+	END
+
+END
+
+BEGIN_URL eBaum's World
+
+	BEGIN_DOMAINS
+		ebaumsworld.com
+	END
+
+END
+
+BEGIN_URL eBay
+
+	BEGIN_DOMAINS
+		ebay.com
+		ebaystatic.com
+		ebayimg.com
+		ebayrtm.com
+	END
+
+END
+
+BEGIN_URL Excite
+
+	BEGIN_DOMAINS
+		excite.*
+	END
+
+END
+
+BEGIN_URL Facebook
+
+	BEGIN_DOMAINS
+		facebook.com
+		fbcdn.net
+		fbsbx.com
+	END
+
+END
+
+BEGIN_URL Fandom / Wikia
+
+	BEGIN_DOMAINS
+		fandom.com
+		wikia.*
+	END
+
+END
+
+BEGIN_URL Flickr
+
+	BEGIN_DOMAINS
+		flickr.com
+	END
+
+END
+
+BEGIN_URL GeoCities
+
+	BEGIN_DOMAINS
+		geocities.*
+		geocities.yahoo.*
+	END
+
+END
+
+BEGIN_URL GitHub
+
+	BEGIN_DOMAINS
+		github.*
+		githubusercontent.com
+	END
+
+END
+
+BEGIN_URL Gmail
+
+	BEGIN_DOMAINS
+		gmail.*
+		googlemail.*
+	END
+
+END
+
+BEGIN_URL The Go Network
+
+	BEGIN_DOMAINS
+		go.com
+	END
+
+END
+
+BEGIN_URL GoDaddy
+
+	BEGIN_DOMAINS
+		godaddy.com
+	END
+
+END
+
+BEGIN_URL Google
+
+	BEGIN_DOMAINS
+		google.*
+
+		google-analytics.*
+		googleadservices.*
+		googleanalytics.*
+		googleapis.*
+		googleapps.*
+		googlearth.*
+		googlebot.*
+		googlecode.*
+		googlecommerce.*
+		googledrive.*
+		googleearth.*
+		googlemaps.*
+		googlepagecreator.*
+		googlescholar.*
+		googlesource.*
+		googlesyndication.*
+		googletagmanager.*
+		googletagservices.*
+		googleusercontent.*
+		gstatic.*
+		ggpht.*
+		gmodules.*
+		goo.gl
+		ocsp.pki.goog
+	END
+
+END
+
+BEGIN_URL ImageShack
+
+	BEGIN_DOMAINS
+		imageshack.*
+	END
+
+END
+
+BEGIN_URL Imgur
+
+	BEGIN_DOMAINS
+		imgur.com
+	END
+
+END
+
+BEGIN_URL Infoseek
+
+	BEGIN_DOMAINS
+		infoseek.*
+	END
+
+END
+
+BEGIN_URL Instagram
+
+	BEGIN_DOMAINS
+		instagram.com
+	END
+
+END
+
+BEGIN_URL Internet Archive
+
+	BEGIN_DOMAINS
+		archive.org
+	END
+
+END
+
+BEGIN_URL Java
+
+	BEGIN_DOMAINS
+		java.com
+		javasoft.com
+	END
+
+END
+
+BEGIN_URL Juno
+
+	BEGIN_DOMAINS
+		juno.com
+	END
+
+END
+
+BEGIN_URL Lego
+
+	BEGIN_DOMAINS
+		lego.*
+	END
+
+END
+
+BEGIN_URL LiveJournal
+
+	BEGIN_DOMAINS
+		livejournal.com
+	END
+
+END
+
+BEGIN_URL LiveLeak
+
+	BEGIN_DOMAINS
+		liveleak.com
+	END
+
+END
+
+# Angelfire and Tripod must be loaded before Lycos.
+
+BEGIN_URL Angelfire
+
+	BEGIN_DOMAINS
+		angelfire.*
+		# angelfire.com
+		# angelfire.lycos.com
+	END
+
+END
+
+BEGIN_URL Tripod
+
+	BEGIN_DOMAINS
+		tripod.*
+		# tripod.com
+		# tripod.lycos.com
+	END
+
+END
+
+BEGIN_URL Lycos
+
+	BEGIN_DOMAINS
+		lycos.*
+	END
+
+END
+
+BEGIN_URL Macromedia
+
+	BEGIN_DOMAINS
+		macromedia.com
+	END
+
+END
+
+BEGIN_URL MapQuest
+
+	BEGIN_DOMAINS
+		mapquest.com
+	END
+
+END
+
+BEGIN_URL Metacafe
+
+	BEGIN_DOMAINS
+		metacafe.com
+		mcstatic.com
+	END
+
+END
+
+BEGIN_URL Microsoft
+
+	BEGIN_DOMAINS
+		microsoft.com
+		microsoftonline.com
+		s-microsoft.com
+	END
+
+END
+
+BEGIN_URL Mozilla
+
+	BEGIN_DOMAINS
+		mozilla.*
+	END
+
+END
+
+BEGIN_URL MSN
+
+	BEGIN_DOMAINS
+		msn.com
+	END
+
+END
+
+BEGIN_URL Myspace
+
+	BEGIN_DOMAINS
+		myspace.com
+	END
+
+END
+
+BEGIN_URL Netflix
+
+	BEGIN_DOMAINS
+		netflix.com
+		nflxext.com
+		nflximg.com
+		nflximg.net
+		nflxvideo.net
+	END
+
+END
+
+BEGIN_URL Netscape
+
+	BEGIN_DOMAINS
+		netscape.com
+	END
+
+END
+
+BEGIN_URL Oracle
+
+	BEGIN_DOMAINS
+		oracle.com
+	END
+
+END
+
+BEGIN_URL Photobucket
+
+	BEGIN_DOMAINS
+		photobucket.com
+	END
+
+END
+
+BEGIN_URL Pinterest
+
+	BEGIN_DOMAINS
+		pinterest.com
+		pinimg.com
+	END
+
+END
+
+BEGIN_URL RealNetworks
+
+	BEGIN_DOMAINS
+		real.com
+	END
+
+END
+
+BEGIN_URL Reddit
+
+	BEGIN_DOMAINS
+		reddit.com
+		redditmedia.com
+		redditstatic.com
+		redd.it
+	END
+
+END
+
+BEGIN_URL Slack
+
+	BEGIN_DOMAINS
+		slack.com
+	END
+
+END
+
+BEGIN_URL Snopes
+
+	BEGIN_DOMAINS
+		snopes.com
+	END
+
+END
+
+BEGIN_URL Softonic
+
+	BEGIN_DOMAINS
+		softonic.com
+	END
+
+END
+
+BEGIN_URL Softpedia
+
+	BEGIN_DOMAINS
+		softpedia.com
+		softpedia-static.com
+	END
+
+END
+
+BEGIN_URL SoundCloud
+
+	BEGIN_DOMAINS
+		soundcloud.com
+		sndcdn.com
+	END
+
+END
+
+BEGIN_URL Spotify
+
+	BEGIN_DOMAINS
+		spotify.com
+		scdn.co
+	END
+
+END
+
+BEGIN_URL Sun Microsystems
+
+	BEGIN_DOMAINS
+		sun.com
+	END
+
+END
+
+BEGIN_URL TinyPic
+
+	BEGIN_DOMAINS
+		tinypic.com
+	END
+
+END
+
+BEGIN_URL Tumblr
+
+	BEGIN_DOMAINS
+		tumblr.com
+	END
+
+END
+
+BEGIN_URL Twitch
+
+	BEGIN_DOMAINS
+		justin.tv
+		jtvnw.net
+		twitch.tv
+		twitchcdn.net
+		betterttv.net
+	END
+
+END
+
+BEGIN_URL Twitter
+
+	BEGIN_DOMAINS
+		twitter.com
+		twimg.com
+	END
+
+END
+
+BEGIN_URL Vimeo
+
+	BEGIN_DOMAINS
+		vimeo.com
+		vimeocdn.com
+	END
+
+END
+
+BEGIN_URL Wikipedia
+
+	BEGIN_DOMAINS
+		wikipedia.org
+	END
+
+END
+
+BEGIN_URL Windows Live
+
+	BEGIN_DOMAINS
+		live.com
+	END
+
+END
+
+BEGIN_URL WordPress
+
+	BEGIN_DOMAINS
+		wordpress.com
+	END
+
+END
+
+BEGIN_URL Yahoo
+
+	BEGIN_DOMAINS
+		yahoo.*
+		yahooapis.*
+		yahooligans.*
+		yimg.*
+	END
+
+END
+
+BEGIN_URL Yandex
+
+	BEGIN_DOMAINS
+		yandex.*
+	END
+
+END
+
+BEGIN_URL YouTube
+
+	BEGIN_DOMAINS
+		youtube.com
+		youtu.be
+		yt.be
+		ytimg.com
+	END
+
+END
+
+BEGIN_URL Zombo.com
+
+	BEGIN_DOMAINS
+		zombo.com
+	END
+
+END
+
+BEGIN_URL Zoom
+
+	BEGIN_DOMAINS
+		zoom.us
+	END
+
+END

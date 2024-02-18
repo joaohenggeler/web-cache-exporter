@@ -1,0 +1,170 @@
+# This must be loaded before the Text file because of its catch-all label.
+
+NAME Image
+
+BEGIN_FILE AVIF
+
+	BEGIN_SIGNATURES
+		# "____ftypavif"
+		__ __ __ __ 66 74 79 70 61 76 69 66
+	END
+
+	BEGIN_MIME_TYPES
+		image/avif
+	END
+
+	BEGIN_EXTENSIONS
+		avif avifs
+	END
+
+END
+
+BEGIN_FILE BMP
+
+	BEGIN_SIGNATURES
+		# "BM"
+		42 4D
+	END
+
+	BEGIN_MIME_TYPES
+		image/bmp
+	END
+
+	BEGIN_EXTENSIONS
+		bmp
+	END
+
+END
+
+BEGIN_FILE GIF
+
+	BEGIN_SIGNATURES
+		# "GIF87a"
+		47 49 46 38 37 61
+		# "GIF89a"
+		47 49 46 38 39 61
+	END
+
+	BEGIN_MIME_TYPES
+		image/gif
+	END
+
+	BEGIN_EXTENSIONS
+		gif
+	END
+
+END
+
+BEGIN_FILE Icon
+
+	BEGIN_MIME_TYPES
+		image/vnd.microsoft.icon
+		image/x-icon
+
+		application/ico
+		image/ico
+		image/icon
+		text/ico
+	END
+
+	BEGIN_EXTENSIONS
+		cur ico
+	END
+
+	DEFAULT_EXTENSION ico
+
+END
+
+BEGIN_FILE JPEG
+
+	BEGIN_SIGNATURES
+		FF D8
+	END
+
+	BEGIN_MIME_TYPES
+		image/jpeg
+	END
+
+	BEGIN_EXTENSIONS
+		jpg jpeg jfif pjpeg pjp
+	END
+
+	DEFAULT_EXTENSION jpg
+
+END
+
+BEGIN_FILE PNG
+
+	BEGIN_SIGNATURES
+		# ".PNG...."
+		89 50 4E 47 0D 0A 1A 0A
+	END
+
+	BEGIN_MIME_TYPES
+		image/png
+		image/apng
+	END
+
+	BEGIN_EXTENSIONS
+		png apng
+	END
+
+END
+
+BEGIN_FILE SVG
+
+	BEGIN_MIME_TYPES
+		image/svg+xml
+	END
+
+	BEGIN_EXTENSIONS
+		svg
+	END
+
+END
+
+BEGIN_FILE TIFF
+
+	BEGIN_SIGNATURES
+		# "MM.*" (Big Endian)
+		4D 4D 00 2A
+		# "II*." (Little Endian)
+		49 49 2A 00
+	END
+
+	BEGIN_MIME_TYPES
+		image/tiff
+	END
+
+	BEGIN_EXTENSIONS
+		tif tiff
+	END
+
+	DEFAULT_EXTENSION tif
+
+END
+
+BEGIN_FILE WebP
+
+	BEGIN_SIGNATURES
+		# "RIFF____WEBP"
+		52 49 46 46 __ __ __ __ 57 45 42 50
+	END
+
+	BEGIN_MIME_TYPES
+		image/webp
+	END
+
+	BEGIN_EXTENSIONS
+		webp
+	END
+
+END
+
+BEGIN_FILE Other
+
+	BEGIN_MIME_TYPES
+		image/
+	END
+
+END

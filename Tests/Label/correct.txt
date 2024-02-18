@@ -1,0 +1,122 @@
+# Comment 1
+
+NAME Name 1
+NAME Name 2
+
+BEGIN_FILE File 1
+
+	# Comment 2
+
+	BEGIN_SIGNATURES
+		# Comment 3
+		AA BB CC DD
+		AA BB __ __ CC DD
+	END
+
+	BEGIN_MIME_TYPES
+		# Comment 4
+		abc
+		def
+	END
+
+	BEGIN_EXTENSIONS
+		# Comment 5
+		a
+		b c
+		d e f
+	END
+
+	DEFAULT_EXTENSION abc
+
+END
+
+BEGIN_FILE File 2
+
+	BEGIN_SIGNATURES
+		AA BB CC
+	END
+
+	BEGIN_MIME_TYPES
+		abc
+	END
+
+	BEGIN_EXTENSIONS
+		a b c
+	END
+
+	DEFAULT_EXTENSION abc
+	DEFAULT_EXTENSION def
+
+	BEGIN_EXTENSIONS
+		d e f
+	END
+
+	BEGIN_MIME_TYPES
+		def
+	END
+
+	BEGIN_SIGNATURES
+		DD EE FF
+	END
+
+END
+
+BEGIN_FILE File 3
+
+	BEGIN_SIGNATURES
+
+	END
+
+	BEGIN_MIME_TYPES
+
+	END
+
+	BEGIN_EXTENSIONS
+
+	END
+
+END
+
+BEGIN_FILE File 4
+
+END
+
+BEGIN_URL URL 1
+
+	BEGIN_DOMAINS
+		abc.com
+		abc.*
+		abc.com/path
+		abc.*/path
+	END
+
+END
+
+BEGIN_URL URL 2
+
+	BEGIN_DOMAINS
+		abc.com
+		abc.*
+	END
+
+	BEGIN_DOMAINS
+		abc.com/path
+		abc.*/path
+	END
+
+END
+
+BEGIN_URL URL 3
+
+	BEGIN_DOMAINS
+
+	END
+
+END
+
+BEGIN_URL URL 4
+
+END
+
+NAME Name 3
+NAME Name 4

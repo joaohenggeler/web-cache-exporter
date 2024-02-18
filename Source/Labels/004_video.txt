@@ -1,0 +1,194 @@
+BEGIN_FILE AVI
+
+	BEGIN_SIGNATURES
+		# "RIFF____AVI "
+		52 49 46 46 __ __ __ __ 41 56 49 20
+	END
+
+	BEGIN_MIME_TYPES
+		video/vnd.avi
+		video/avi
+		video/msvideo
+		video/x-msvideo
+	END
+
+	BEGIN_EXTENSIONS
+		avi
+	END
+
+END
+
+BEGIN_FILE F4V
+
+	BEGIN_SIGNATURES
+		# "____ftypf4v "
+		__ __ __ __ 66 74 79 70 66 34 76 20
+	END
+
+	BEGIN_EXTENSIONS
+		f4v
+	END
+
+END
+
+BEGIN_FILE FLV
+
+	BEGIN_SIGNATURES
+		# "FLV."
+		46 4C 56 01
+	END
+
+	BEGIN_MIME_TYPES
+		video/x-flv
+	END
+
+	BEGIN_EXTENSIONS
+		flv
+	END
+
+END
+
+BEGIN_FILE Matroska
+
+	BEGIN_MIME_TYPES
+		video/x-matroska
+	END
+
+	BEGIN_EXTENSIONS
+		mkv
+	END
+
+END
+
+BEGIN_FILE MP4
+
+	BEGIN_SIGNATURES
+		# "____ftypisom"
+		__ __ __ __ 66 74 79 70 69 73 6F 6D
+		# "____ftypMSNV"
+		__ __ __ __ 66 74 79 70 4D 53 4E 56
+		# "____ftypmp41"
+		__ __ __ __ 66 74 79 70 6D 70 34 31
+		# "____ftypmp42"
+		__ __ __ __ 66 74 79 70 6D 70 34 32
+		# "____ftypM4A "
+		__ __ __ __ 66 74 79 70 4D 34 56 20
+	END
+
+	BEGIN_MIME_TYPES
+		video/mp4
+	END
+
+	BEGIN_EXTENSIONS
+		mp4 m4v
+	END
+
+	DEFAULT_EXTENSION mp4
+
+END
+
+BEGIN_FILE MPEG
+
+	BEGIN_MIME_TYPES
+		video/mpeg
+	END
+
+	BEGIN_EXTENSIONS
+		mpg mpeg
+	END
+
+END
+
+BEGIN_FILE Ogg
+
+	BEGIN_MIME_TYPES
+		video/ogg
+	END
+
+	BEGIN_EXTENSIONS
+		ogv
+	END
+
+END
+
+BEGIN_FILE QuickTime
+
+	BEGIN_SIGNATURES
+		# "____ftypqt  "
+		__ __ __ __ 66 74 79 70 71 74 20 20
+	END
+
+	BEGIN_MIME_TYPES
+		video/quicktime
+	END
+
+	BEGIN_EXTENSIONS
+		mov qt
+	END
+
+END
+
+BEGIN_FILE RealMedia
+
+	BEGIN_SIGNATURES
+		# ".RMF"
+		2E 52 4D 46
+	END
+
+	BEGIN_MIME_TYPES
+		application/vnd.rn-realmedia
+		application/vnd.rn-realmedia-vbr
+		video/vnd.rn-realvideo
+	END
+
+	BEGIN_EXTENSIONS
+		rm rmvb
+	END
+
+	DEFAULT_EXTENSION rm
+
+END
+
+BEGIN_FILE TS
+
+	BEGIN_MIME_TYPES
+		video/mp2t
+	END
+
+	BEGIN_EXTENSIONS
+		ts
+	END
+
+END
+
+BEGIN_FILE WebM
+
+	BEGIN_MIME_TYPES
+		video/webm
+	END
+
+	BEGIN_EXTENSIONS
+		webm
+	END
+
+END
+
+BEGIN_FILE WMV
+
+	BEGIN_MIME_TYPES
+		video/x-ms-wmv
+	END
+
+	BEGIN_EXTENSIONS
+		wmv
+	END
+
+END
+
+BEGIN_FILE Other
+
+	BEGIN_MIME_TYPES
+		video/
+	END
+
+END

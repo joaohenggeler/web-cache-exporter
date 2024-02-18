@@ -1,0 +1,10 @@
+NAME Model
+
+BEGIN_FILE Other
+
+	BEGIN_MIME_TYPES
+		model/
+		x-world/
+	END
+
+END

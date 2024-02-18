@@ -1,0 +1,279 @@
+NAME Audio
+
+BEGIN_FILE AIFF
+
+	BEGIN_SIGNATURES
+		# "FORM____AIFF"
+		46 4F 52 4D __ __ __ __ 41 49 46 46
+	END
+
+	BEGIN_MIME_TYPES
+		audio/x-aiff
+		audio/aiff
+	END
+
+	BEGIN_EXTENSIONS
+		aif aiff aifc
+	END
+
+	DEFAULT_EXTENSION aiff
+
+END
+
+BEGIN_FILE AU
+
+	BEGIN_SIGNATURES
+		# ".snd"
+		2E 73 6E 64
+	END
+
+	BEGIN_MIME_TYPES
+		audio/basic
+	END
+
+	BEGIN_EXTENSIONS
+		au snd
+	END
+
+	DEFAULT_EXTENSION au
+
+END
+
+BEGIN_FILE FLAC
+
+	BEGIN_SIGNATURES
+		# "fLaC"
+		66 4C 61 43
+	END
+
+	BEGIN_MIME_TYPES
+		audio/flac
+	END
+
+	BEGIN_EXTENSIONS
+		flac
+	END
+
+END
+
+BEGIN_FILE Matroska
+
+	BEGIN_MIME_TYPES
+		audio/x-matroska
+	END
+
+	BEGIN_EXTENSIONS
+		mka
+	END
+
+END
+
+BEGIN_FILE MIDI
+
+	BEGIN_SIGNATURES
+		# "MThd"
+		4D 54 68 64
+	END
+
+	BEGIN_MIME_TYPES
+		audio/midi
+		audio/x-midi
+	END
+
+	BEGIN_EXTENSIONS
+		mid midi
+	END
+
+	DEFAULT_EXTENSION mid
+
+END
+
+BEGIN_FILE Module
+
+	BEGIN_MIME_TYPES
+		audio/mod
+		audio/x-mod
+		audio/x-zipped-mod
+	END
+
+	BEGIN_EXTENSIONS
+		mod mdz
+	END
+
+END
+
+BEGIN_FILE Module
+
+	BEGIN_SIGNATURES
+		# "SCRM" at offset 0x2C = 44
+		__ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ 53 43 52 4D
+	END
+
+	BEGIN_MIME_TYPES
+		audio/s3m
+		audio/x-s3m
+	END
+
+	BEGIN_EXTENSIONS
+		s3m s3z
+	END
+
+	DEFAULT_EXTENSION s3m
+
+END
+
+BEGIN_FILE Module
+
+	BEGIN_SIGNATURES
+		# "Extended Module: "
+		45 78 74 65 6E 64 65 64 20 4D 6F 64 75 6C 65 3A 20
+	END
+
+	BEGIN_MIME_TYPES
+		audio/xm
+	END
+
+	BEGIN_EXTENSIONS
+		xm xmz
+	END
+
+	DEFAULT_EXTENSION xm
+
+END
+
+BEGIN_FILE Module
+
+	BEGIN_SIGNATURES
+		# "IMPM"
+		49 4D 50 4D
+	END
+
+	BEGIN_MIME_TYPES
+		audio/it
+		audio/x-zipped-it
+	END
+
+	BEGIN_EXTENSIONS
+		it itz mptm
+	END
+
+	DEFAULT_EXTENSION it
+
+END
+
+BEGIN_FILE MP3
+
+	BEGIN_MIME_TYPES
+		audio/mpeg
+		audio/MPA
+		audio/mpa-robust
+	END
+
+	BEGIN_EXTENSIONS
+		mp3
+	END
+
+END
+
+BEGIN_FILE Netscape Packetized Audio
+
+	BEGIN_MIME_TYPES
+		audio/nspaudio
+		audio/x-nspaudio
+	END
+
+	BEGIN_EXTENSIONS
+		la lma
+	END
+
+END
+
+BEGIN_FILE Ogg
+
+	BEGIN_MIME_TYPES
+		audio/ogg
+	END
+
+	BEGIN_EXTENSIONS
+		oga
+	END
+
+END
+
+BEGIN_FILE RealAudio
+
+	BEGIN_SIGNATURES
+		# ".raý"
+		2E 72 61 FD
+	END
+
+	BEGIN_MIME_TYPES
+		audio/vnd.rn-realaudio
+		audio/x-pn-realaudio
+		audio/x-pn-realaudio-plugin
+		audio/x-real-audio
+		audio/x-realaudio
+		application/ram
+	END
+
+	BEGIN_EXTENSIONS
+		ra ram
+	END
+
+	DEFAULT_EXTENSION ra
+
+END
+
+BEGIN_FILE WAV
+
+	BEGIN_SIGNATURES
+		# "RIFF____WAVEfmt "
+		52 49 46 46 __ __ __ __ 57 41 56 45 66 6D 74 20
+	END
+
+	BEGIN_MIME_TYPES
+		audio/vnd.wave
+		audio/wav
+		audio/wave
+		audio/x-wav
+	END
+
+	BEGIN_EXTENSIONS
+		wav wave
+	END
+
+	DEFAULT_EXTENSION wav
+
+END
+
+BEGIN_FILE WebM
+
+	BEGIN_MIME_TYPES
+		audio/webm
+	END
+
+	BEGIN_EXTENSIONS
+		weba
+	END
+
+END
+
+BEGIN_FILE WMA
+
+	BEGIN_MIME_TYPES
+		audio/x-ms-wma
+	END
+
+	BEGIN_EXTENSIONS
+		wma
+	END
+
+END
+
+BEGIN_FILE Other
+
+	BEGIN_MIME_TYPES
+		audio/
+	END
+
+END

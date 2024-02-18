@@ -1,0 +1,25 @@
+# Comment 1
+
+WALK					D:\Documents and Settings\<User>
+WININET					D:\Documents and Settings\<User>\Local Settings\Temporary Internet Files
+MOZILLA					D:\Documents and Settings\<User>\Local Settings\Application Data\Mozilla\Firefox\Profiles\<Profile>\Cache
+FLASH					D:\Documents and Settings\<User>\Application Data\Adobe\Flash Player
+SHOCKWAVE				D:\Documents and Settings\<User>\Application Data\Adobe\Shockwave Player
+JAVA					D:\Documents and Settings\<User>\Application Data\Sun\Java\Deployment\cache
+UNITY					D:\Documents and Settings\<User>\Local Settings\Application Data\Unity\WebPlayer\Cache
+
+BEGIN_PROFILE Profile
+
+	# Comment 2
+	DRIVE				D:\
+	WINDOWS				D:\WINDOWS
+	TEMPORARY			D:\Documents and Settings\<User>\Local Settings\Temp
+	USER				D:\Documents and Settings\<User>
+
+	APPDATA				D:\Documents and Settings\<User>\Application Data
+	LOCAL_APPDATA		D:\Documents and Settings\<User>\Local Settings\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		D:\Documents and Settings\<User>\Local Settings\Temporary Internet Files
+
+END

@@ -1,0 +1,8 @@
+@TODO
+
+https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
+https://www.nationalarchives.gov.uk/PRONOM/Default.aspx
+https://www.loc.gov/preservation/digital/formats/fdd/browse_list.shtml
+http://fileformats.archiveteam.org/wiki/Main_Page
+https://www.garykessler.net/library/file_sigs.html
+https://flashpointarchive.org/datahub/Platforms

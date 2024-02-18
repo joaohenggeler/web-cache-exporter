@@ -1,0 +1,1518 @@
+# This must be loaded before the Image, Video, and Text files because of their catch-all labels.
+
+NAME Plugin
+
+BEGIN_FILE 20-20 3D Viewer
+
+	BEGIN_EXTENSIONS
+		axs
+	END
+
+END
+
+BEGIN_FILE 3D Groove GX
+
+	BEGIN_EXTENSIONS
+		grv
+	END
+
+END
+
+# NeMo Web Player / Virtools Player / 3D Life Player
+BEGIN_FILE 3DVIA
+
+	BEGIN_SIGNATURES
+		# "Nemo Fi"
+		4E 65 6D 6F 20 46 69
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-virtools
+		application/x-nemo
+	END
+
+	BEGIN_EXTENSIONS
+		cmo vmo nmo nms
+	END
+
+END
+
+BEGIN_FILE AboutPeople
+
+	BEGIN_MIME_TYPES
+		text/x-versit
+	END
+
+	BEGIN_EXTENSIONS
+		vcf
+	END
+
+END
+
+BEGIN_FILE AboutTime
+
+	BEGIN_MIME_TYPES
+		text/x-nowevent
+	END
+
+	BEGIN_EXTENSIONS
+		vef
+	END
+
+END
+
+BEGIN_FILE Alambik
+
+	BEGIN_MIME_TYPES
+		application/x-alambik-script
+	END
+
+	BEGIN_EXTENSIONS
+		tv tvs tvd tvv tvb tvl
+	END
+
+END
+
+BEGIN_FILE Alice
+
+	BEGIN_EXTENSIONS
+		ali
+	END
+
+END
+
+BEGIN_FILE AnimaFlex
+
+	BEGIN_MIME_TYPES
+		video/animaflex
+	END
+
+	BEGIN_EXTENSIONS
+		afl
+	END
+
+END
+
+BEGIN_FILE Ambulant
+
+	BEGIN_EXTENSIONS
+		smi smil grins
+	END
+
+END
+
+BEGIN_FILE Animated Widgets
+
+	BEGIN_MIME_TYPES
+		video/animated-widgets
+	END
+
+	BEGIN_EXTENSIONS
+		anm
+	END
+
+END
+
+BEGIN_FILE ASAP
+
+	BEGIN_MIME_TYPES
+		application/x-asap
+	END
+
+	BEGIN_EXTENSIONS
+		# asp
+	END
+
+END
+
+BEGIN_FILE Atmosphere
+
+	BEGIN_MIME_TYPES
+		application/x-aer
+	END
+
+	BEGIN_EXTENSIONS
+		aer atmo
+	END
+
+END
+
+BEGIN_FILE Atomic3D
+
+	BEGIN_MIME_TYPES
+		application/x-atomic3d
+		video/x-atomic3d-feature
+	END
+
+	BEGIN_EXTENSIONS
+		fmf psq agp agt seq scn
+	END
+
+END
+
+BEGIN_FILE Authorware
+
+	BEGIN_MIME_TYPES
+		application/x-authorware-bin
+		application/x-authorware-map
+		application/x-authorware-seg
+	END
+
+	BEGIN_EXTENSIONS
+		aab aam aas
+	END
+
+END
+
+BEGIN_FILE AXEL
+
+	BEGIN_MIME_TYPES
+		application/x-MindAvenueAXELStream
+	END
+
+	BEGIN_EXTENSIONS
+		axs
+	END
+
+END
+
+BEGIN_FILE bioPlayer
+
+	BEGIN_EXTENSIONS
+		bio
+	END
+
+END
+
+BEGIN_FILE BitPlayer
+
+	BEGIN_EXTENSIONS
+		bm
+	END
+
+END
+
+BEGIN_FILE Blender
+
+	BEGIN_MIME_TYPES
+		application/x-blender-plugin
+	END
+
+	BEGIN_EXTENSIONS
+		# blend
+	END
+
+END
+
+BEGIN_FILE Burster
+
+	BEGIN_MIME_TYPES
+		application/x-burster
+	END
+
+	BEGIN_EXTENSIONS
+		# blend
+		blendz
+	END
+
+END
+
+BEGIN_FILE Calendar Quick
+
+	BEGIN_MIME_TYPES
+		application/x-calquick
+	END
+
+	BEGIN_EXTENSIONS
+		cqk
+	END
+
+END
+
+BEGIN_FILE ChemDraw
+
+	BEGIN_MIME_TYPES
+		chemical/x-chemdraw
+		chemical/x-cdx
+	END
+
+	BEGIN_EXTENSIONS
+		# chm
+		cdx
+	END
+
+END
+
+BEGIN_FILE Common Ground
+
+	BEGIN_MIME_TYPES
+		application/commonground
+	END
+
+	BEGIN_EXTENSIONS
+		dp
+	END
+
+END
+
+BEGIN_FILE Cool 360
+
+	BEGIN_MIME_TYPES
+		ulead/vrml
+	END
+
+	BEGIN_EXTENSIONS
+		uvr
+	END
+
+END
+
+BEGIN_FILE Cult3D
+
+	BEGIN_SIGNATURES
+		# "C3DF"
+		43 33 44 46
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-cult3d-object
+	END
+
+	BEGIN_EXTENSIONS
+		co
+	END
+
+END
+
+BEGIN_FILE DeepV
+
+	BEGIN_MIME_TYPES
+		application/x-deepv
+	END
+
+	BEGIN_EXTENSIONS
+		DeepV
+	END
+
+END
+
+BEGIN_FILE DevalVR
+
+	BEGIN_MIME_TYPES
+		application/x-devalvrx
+	END
+
+	BEGIN_EXTENSIONS
+		dvl
+	END
+
+END
+
+BEGIN_FILE DFusion
+
+	BEGIN_MIME_TYPES
+		application/x-dfusion-web2
+	END
+
+	BEGIN_EXTENSIONS
+		dpd
+	END
+
+END
+
+BEGIN_FILE DjVu
+
+	BEGIN_MIME_TYPES
+		image/djvu
+		image/x-dejavu
+		image/x-iw44
+		image/x-djvu
+		image/x.djvu
+		image/vnd.djvu
+	END
+
+	BEGIN_EXTENSIONS
+		djvu djv iw44 iw4
+	END
+
+END
+
+BEGIN_FILE DPGraph
+
+	BEGIN_EXTENSIONS
+		dpg
+	END
+
+END
+
+BEGIN_FILE DX Studio
+
+	BEGIN_EXTENSIONS
+		dxstudio dxmesh
+	END
+
+END
+
+BEGIN_FILE e-animator
+
+	BEGIN_EXTENSIONS
+		nva
+	END
+
+END
+
+BEGIN_FILE EGI
+
+	BEGIN_EXTENSIONS
+		flc fli
+	END
+
+END
+
+BEGIN_FILE Envoy
+
+	BEGIN_MIME_TYPES
+		application/x-envoy
+		application/envoy
+	END
+
+	BEGIN_EXTENSIONS
+		evy
+	END
+
+END
+
+BEGIN_FILE EVA
+
+	BEGIN_MIME_TYPES
+		application/x-eva
+	END
+
+	BEGIN_EXTENSIONS
+		eva
+	END
+
+END
+
+BEGIN_FILE FastBid
+
+	BEGIN_MIME_TYPES
+		image/vnd.fastbidsheet
+	END
+
+	BEGIN_EXTENSIONS
+		fbs
+	END
+
+END
+
+BEGIN_FILE Flash
+
+	BEGIN_SIGNATURES
+		# "FWS" (uncompressed SWF)
+		46 57 53
+		# "CWS" (ZLIB compressed SWF)
+		43 57 53
+		# "ZWS" (LZMA compressed SWF)
+		5A 57 53
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-shockwave-flash
+		application/vnd.adobe.flash-movie
+	END
+
+	BEGIN_EXTENSIONS
+		swf
+	END
+
+END
+
+BEGIN_FILE Flash
+
+	BEGIN_MIME_TYPES
+		application/futuresplash
+		application/x-swz
+	END
+
+	BEGIN_EXTENSIONS
+		fla spl swz swc
+
+		# Local shared object
+		sol
+
+		# Cache metadata
+		heu
+	END
+
+END
+
+BEGIN_FILE Flatland Rover
+
+	BEGIN_MIME_TYPES
+		model/vnd.flatland.3dml
+	END
+
+	BEGIN_EXTENSIONS
+		3dml
+	END
+
+END
+
+BEGIN_FILE Flick
+
+	BEGIN_EXTENSIONS
+		sec cft
+	END
+
+END
+
+BEGIN_FILE Formula One
+
+	BEGIN_MIME_TYPES
+		workbook/formulaone
+	END
+
+	BEGIN_EXTENSIONS
+		vts
+	END
+
+END
+
+BEGIN_FILE fractal eXtreme
+
+	BEGIN_MIME_TYPES
+		video/x-FractaleXtremeZoomMovie
+	END
+
+	BEGIN_EXTENSIONS
+		fxz
+	END
+
+END
+
+BEGIN_FILE Fractal Viewer
+
+	BEGIN_MIME_TYPES
+		image/fif
+	END
+
+	BEGIN_EXTENSIONS
+		fif
+	END
+
+END
+
+BEGIN_FILE FreeHand
+
+	BEGIN_MIME_TYPES
+		image/x-freehand
+		image/x-freehand4
+		image/x-freehand5
+		image/x-freehand7
+	END
+
+	BEGIN_EXTENSIONS
+		fhc fh4 fh5 fh7
+	END
+
+END
+
+# Generic Logic Dynamic Graphics
+BEGIN_FILE GLG
+
+	BEGIN_MIME_TYPES
+		application/x-glg
+	END
+
+	BEGIN_EXTENSIONS
+		glg
+	END
+
+END
+
+BEGIN_FILE GoBit
+
+	BEGIN_MIME_TYPES
+		application/x-gobitgamesplugin
+	END
+
+	BEGIN_EXTENSIONS
+		# cab
+	END
+
+END
+
+BEGIN_FILE Harvard WebShow
+
+	BEGIN_MIME_TYPES
+		application/x-harvard-graphics
+	END
+
+	BEGIN_EXTENSIONS
+		pr4
+	END
+
+END
+
+BEGIN_FILE HotSauce
+
+	BEGIN_MIME_TYPES
+		image/vasa
+	END
+
+	BEGIN_EXTENSIONS
+		mcf
+	END
+
+END
+
+BEGIN_FILE Hyper-G
+
+	BEGIN_EXTENSIONS
+		sdf
+	END
+
+END
+
+# Cow Viewer
+BEGIN_FILE HyperChem
+
+	BEGIN_MIME_TYPES
+		chemical/x-cow
+	END
+
+	BEGIN_EXTENSIONS
+		cow
+	END
+
+END
+
+BEGIN_FILE Hypercosm
+
+	BEGIN_SIGNATURES
+		# "Hypercosm3D"
+		48 79 70 65 72 63 6F 73 6D 33 44
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-hypercosm
+		application/x-hypercosm-3d-applet
+	END
+
+	BEGIN_EXTENSIONS
+		hcvm
+	END
+
+END
+
+BEGIN_FILE Illuminatus
+
+	BEGIN_MIME_TYPES
+		application/x-Illuminatus
+	END
+
+	BEGIN_EXTENSIONS
+		ilm ilz
+	END
+
+END
+
+BEGIN_FILE iPIX
+
+	BEGIN_MIME_TYPES
+		application/x-ipix
+		application/x-ipscript
+		application/photobubble
+		application/pbautomation
+	END
+
+	BEGIN_EXTENSIONS
+		ipx ips bub aut
+	END
+
+END
+
+BEGIN_FILE Jamagic
+
+	BEGIN_EXTENSIONS
+		3dd
+	END
+
+END
+
+# Be careful not to shorten the Java MIME types in a way that includes JavaScript files.
+
+BEGIN_FILE Java
+
+	BEGIN_SIGNATURES
+		CA FE BA BE
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-java-applet
+		application/x-java-vm
+		application/java-vm
+	END
+
+	BEGIN_EXTENSIONS
+		class
+	END
+
+END
+
+BEGIN_FILE Java
+
+	BEGIN_SIGNATURES
+		CA FE D0 0D
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-java-pack200
+	END
+
+	BEGIN_EXTENSIONS
+		pack200
+	END
+
+END
+
+BEGIN_FILE Java
+
+	BEGIN_MIME_TYPES
+		application/x-java-bean
+		application/java-archive
+		application/x-java-jnlp-file
+		application/java-serialized-object
+	END
+
+	BEGIN_EXTENSIONS
+		jar
+		jnlp
+		ser
+
+		# Shockwave movie compiled to Java.
+		# Created using Macromedia Director's Java Export Xtra (removed in Director 8).
+		djr
+	END
+
+END
+
+BEGIN_FILE JCAMP-DX
+
+	BEGIN_MIME_TYPES
+		chemical/x-jcamp-dx
+	END
+
+	BEGIN_EXTENSIONS
+		jdx dx
+	END
+
+END
+
+BEGIN_FILE Jutvision
+
+	BEGIN_MIME_TYPES
+		image/jutvision
+	END
+
+	BEGIN_EXTENSIONS
+		jut
+	END
+
+END
+
+BEGIN_FILE Lightning Strike
+
+	BEGIN_MIME_TYPES
+		image/cis-cod
+	END
+
+	BEGIN_EXTENSIONS
+		cod
+	END
+
+END
+
+BEGIN_FILE LiveMath
+
+	BEGIN_MIME_TYPES
+		plugin/x-theorist
+	END
+
+	BEGIN_EXTENSIONS
+		thp
+	END
+
+END
+
+BEGIN_FILE LivePicture
+
+	BEGIN_MIME_TYPES
+		application/vnd.netfpx
+		image/vnd.fpx
+		i-world/i-vrml
+	END
+
+	BEGIN_EXTENSIONS
+		fpx ivr
+	END
+
+END
+
+BEGIN_FILE MapGuide
+
+	BEGIN_MIME_TYPES
+		application/x-mwf
+	END
+
+	BEGIN_EXTENSIONS
+		mwf
+	END
+
+END
+
+BEGIN_FILE mBed
+
+	BEGIN_MIME_TYPES
+		application/mbedlet
+	END
+
+	BEGIN_EXTENSIONS
+		mbd
+	END
+
+END
+
+BEGIN_FILE MegaView
+
+	BEGIN_MIME_TYPES
+		XGL/Drawing
+		XGL/Movie
+	END
+
+	BEGIN_EXTENSIONS
+		xgz xmz
+	END
+
+END
+
+# View96
+BEGIN_FILE MHSV
+
+	BEGIN_MIME_TYPES
+		x-world/x-d96
+	END
+
+	BEGIN_EXTENSIONS
+		d96 mus
+	END
+
+END
+
+BEGIN_FILE Mirage
+
+	BEGIN_MIME_TYPES
+		mforge/x-mirage
+	END
+
+	BEGIN_EXTENSIONS
+		mfg mfp
+	END
+
+END
+
+BEGIN_FILE MrSID
+
+	BEGIN_MIME_TYPES
+		image/x-mrsid
+		image/x.mrsid
+		image/x-mrsid-image
+	END
+
+	BEGIN_EXTENSIONS
+		sid
+	END
+
+END
+
+BEGIN_FILE NAPLPS
+
+	BEGIN_MIME_TYPES
+		image/naplps
+	END
+
+	BEGIN_EXTENSIONS
+		pdi
+	END
+
+END
+
+BEGIN_FILE NetWriter
+
+	BEGIN_MIME_TYPES
+		application/x-nwr
+	END
+
+	BEGIN_EXTENSIONS
+		nwr
+	END
+
+END
+
+BEGIN_FILE NoteWorthy
+
+	BEGIN_MIME_TYPES
+		application/x-nwc
+	END
+
+	BEGIN_EXTENSIONS
+		nwc
+	END
+
+END
+
+BEGIN_FILE O2C
+
+	BEGIN_MIME_TYPES
+		application/x-o2c-object
+	END
+
+	BEGIN_EXTENSIONS
+		o2c e3d aso aco
+	END
+
+END
+
+BEGIN_FILE Octree
+
+	BEGIN_EXTENSIONS
+		oct
+	END
+
+END
+
+BEGIN_FILE PanoramIX
+
+	BEGIN_MIME_TYPES
+		image/svh
+		application/x-mssurround
+		world/x-panoramix
+	END
+
+	BEGIN_EXTENSIONS
+		svh svj pan
+	END
+
+END
+
+BEGIN_FILE Petz
+
+	BEGIN_MIME_TYPES
+		application/x-PFM Plugin
+	END
+
+	BEGIN_EXTENSIONS
+		ply
+	END
+
+END
+
+BEGIN_FILE Pixound
+
+	BEGIN_MIME_TYPES
+		audio/pixound
+	END
+
+	BEGIN_EXTENSIONS
+		pxd
+	END
+
+END
+
+BEGIN_FILE Play3D
+
+	BEGIN_MIME_TYPES
+		application/x-p3d
+	END
+
+	BEGIN_EXTENSIONS
+		p3d
+	END
+
+END
+
+BEGIN_FILE PointPlus
+
+	BEGIN_MIME_TYPES
+		application/pointplus
+		application/x-pointplus
+	END
+
+	BEGIN_EXTENSIONS
+		# css
+	END
+
+END
+
+BEGIN_FILE PopCap
+
+	BEGIN_MIME_TYPES
+		application/x-popcaploader
+	END
+
+	BEGIN_EXTENSIONS
+		# cab
+	END
+
+END
+
+# Altia
+BEGIN_FILE ProtoPlay
+
+	BEGIN_MIME_TYPES
+		application/x-altiadsn
+	END
+
+	BEGIN_EXTENSIONS
+		dsn rtm
+	END
+
+END
+
+BEGIN_FILE Pulse
+
+	BEGIN_MIME_TYPES
+		application/x-pulse-player
+		application/x-pulse-player-32
+		application/x-pulse-stream
+		application/x-pulse-download
+		application/x-pulse-version
+	END
+
+	BEGIN_EXTENSIONS
+		pwc pw3 pws pwn pwv pwr
+	END
+
+END
+
+# Micrografx
+BEGIN_FILE QuickSilver
+
+	BEGIN_MIME_TYPES
+		image/x-mgx-drw
+		image/x-mgx-ds4
+		image/x-mgx-dsf
+	END
+
+	BEGIN_EXTENSIONS
+		drw ds4 dsf
+	END
+
+END
+
+BEGIN_FILE RealiView
+
+	BEGIN_MIME_TYPES
+		x-world/realibase
+	END
+
+	BEGIN_EXTENSIONS
+		rbs
+	END
+
+END
+
+BEGIN_FILE REBOL
+
+	BEGIN_SIGNATURES
+		# "REBOL"
+		52 45 42 4F 4C
+	END
+
+	BEGIN_EXTENSIONS
+		# r
+	END
+
+	DEFAULT_EXTENSION r
+
+END
+
+BEGIN_FILE Scorch
+
+	BEGIN_MIME_TYPES
+		application/x-sibelius-score
+	END
+
+	BEGIN_EXTENSIONS
+		sib sco
+	END
+
+END
+
+BEGIN_FILE ShiVa3D
+
+	BEGIN_MIME_TYPES
+		application/x-shiva3d
+	END
+
+	BEGIN_EXTENSIONS
+		stk
+	END
+
+END
+
+BEGIN_FILE Shockwave
+
+	BEGIN_SIGNATURES
+		# "RIFX____FGDM" (Shockwave Movie - Big Endian)
+		52 49 46 58 __ __ __ __ 46 47 44 4D
+		# "XFIR____MDGF" (Shockwave Movie - Little Endian)
+		58 46 49 52 __ __ __ __ 4D 44 47 46
+	END
+
+	BEGIN_EXTENSIONS
+		dcr
+	END
+
+END
+
+BEGIN_FILE Shockwave
+
+	BEGIN_SIGNATURES
+		# "RIFX____FGDC" (Shockwave Cast - Big Endian)
+		52 49 46 58 __ __ __ __ 46 47 44 43
+		# "XFIR____CDGF" (Shockwave Cast - Little Endian)
+		58 46 49 52 __ __ __ __ 43 44 47 46
+	END
+
+	BEGIN_EXTENSIONS
+		cct
+	END
+
+END
+
+BEGIN_FILE Shockwave
+
+	BEGIN_SIGNATURES
+		# "IFX." (Shockwave 3D World)
+		49 46 58 00
+	END
+
+	BEGIN_EXTENSIONS
+		w3d
+	END
+
+END
+
+BEGIN_FILE Shockwave
+
+	BEGIN_SIGNATURES
+		# "MACR" at offset 0x24 = 36 (Shockwave Audio)
+		__ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ __ 4D 41 43 52
+	END
+
+	BEGIN_EXTENSIONS
+		swa
+	END
+
+END
+
+BEGIN_FILE Shockwave
+
+	BEGIN_SIGNATURES
+		# "RIFF____PCK2" (Xtra-Package)
+		52 49 46 46 __ __ __ __ 50 43 4B 32
+	END
+
+	BEGIN_EXTENSIONS
+		w32
+	END
+
+END
+
+BEGIN_FILE Show It!
+
+	BEGIN_MIME_TYPES
+		application/x-cprplayer
+		application/cprplayer
+	END
+
+	BEGIN_EXTENSIONS
+		pqf pqi
+	END
+
+END
+
+BEGIN_FILE Shockwave
+
+	BEGIN_SIGNATURES
+		# "RIFX____MV93" (Director Movie or Cast - Big Endian)
+		52 49 46 58 __ __ __ __ 4D 56 39 33
+		# "XFIR____39VM" (Director Movie or Cast - Little Endian)
+		58 46 49 52 __ __ __ __ 33 39 56 4D
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-director
+	END
+
+	BEGIN_EXTENSIONS
+		dir dxr
+		cst cxt
+		x32
+	END
+
+END
+
+BEGIN_FILE Silverlight
+
+	BEGIN_MIME_TYPES
+		application/x-silverlight-app
+		application/x-silverlight
+		application/x-silverlight-2
+	END
+
+	# Screensavers and Silverlight applications share the .scr file extension.
+	BEGIN_EXTENSIONS
+		xap
+		# scr
+	END
+
+END
+
+BEGIN_FILE Sizzler
+
+	BEGIN_MIME_TYPES
+		application/x-sprite
+	END
+
+	BEGIN_EXTENSIONS
+		sprite spr
+	END
+
+END
+
+BEGIN_FILE SmoothMove Panorama
+
+	BEGIN_MIME_TYPES
+		application/x-pan
+	END
+
+	BEGIN_EXTENSIONS
+		pan
+	END
+
+END
+
+BEGIN_FILE Squeak
+
+	BEGIN_MIME_TYPES
+		application/x-squeak-source
+	END
+
+	BEGIN_EXTENSIONS
+		sts
+	END
+
+END
+
+BEGIN_FILE Surround Video
+
+	BEGIN_MIME_TYPES
+		image/SVH
+	END
+
+	BEGIN_EXTENSIONS
+		svh
+	END
+
+END
+
+BEGIN_FILE SVF
+
+	BEGIN_MIME_TYPES
+		image/vnd.svf
+		image/x-svf
+		vector/x-svf
+	END
+
+	BEGIN_EXTENSIONS
+		svf
+	END
+
+END
+
+BEGIN_FILE Tcl
+
+	BEGIN_MIME_TYPES
+		application/x-tcl
+	END
+
+	BEGIN_EXTENSIONS
+		tcl
+	END
+
+END
+
+BEGIN_FILE ThingViewer
+
+	BEGIN_EXTENSIONS
+		tms
+	END
+
+END
+
+BEGIN_FILE TurnTool
+
+	BEGIN_EXTENSIONS
+		tnt
+	END
+
+END
+
+BEGIN_FILE TWF
+
+	BEGIN_MIME_TYPES
+		image/x-twf
+		image/x-twf-zlib-compressed
+	END
+
+	BEGIN_EXTENSIONS
+		twf twfz
+	END
+
+END
+
+BEGIN_FILE Unity
+
+	BEGIN_SIGNATURES
+		# "UnityWeb"
+		55 6E 69 74 79 57 65 62
+	END
+
+	BEGIN_MIME_TYPES
+		application/vnd.unity
+	END
+
+	BEGIN_EXTENSIONS
+		unity3d unityweb
+	END
+
+	DEFAULT_EXTENSION unity3d
+
+END
+
+# Virtue3D
+BEGIN_FILE Virtuoso
+
+	BEGIN_MIME_TYPES
+		model/x-vtu
+		model/vtu
+	END
+
+	BEGIN_EXTENSIONS
+		vtu
+	END
+
+END
+
+BEGIN_FILE Viscape
+
+	BEGIN_SIGNATURES
+		# "SVR"
+		53 56 52
+	END
+
+	BEGIN_MIME_TYPES
+		x-world/x-vrt
+		x-world/x-svr
+		x-world/x-xvr
+		application/vnd.superscape.vislite
+	END
+
+	BEGIN_EXTENSIONS
+		vrt svr xvr
+		ssv
+	END
+
+END
+
+BEGIN_FILE Visual WebMap
+
+	BEGIN_MIME_TYPES
+		image/dgn
+		image/rle
+		image/cit
+		image/vec
+	END
+
+	BEGIN_EXTENSIONS
+		dgn rle cit vec
+	END
+
+END
+
+BEGIN_FILE Visviva
+
+	BEGIN_MIME_TYPES
+		application/x-netscape-vae-plugin-vae
+	END
+
+	BEGIN_EXTENSIONS
+		vobj
+	END
+
+END
+
+BEGIN_FILE Vitalize
+
+	BEGIN_SIGNATURES
+		# "VTZ "
+		56 54 5A 20
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-cnc
+		application/x-tgf
+	END
+
+	BEGIN_EXTENSIONS
+		ccn
+	END
+
+END
+
+BEGIN_FILE VReam
+
+	BEGIN_MIME_TYPES
+		x-world/x-vream
+	END
+
+	BEGIN_EXTENSIONS
+		vrw vre
+	END
+
+END
+
+BEGIN_FILE VRML
+
+	BEGIN_SIGNATURES
+		# "#VRML V" to match "#VRML V1.0 ascii" (VRML 1.0) and "#VRML V2.0 utf8" (VRML97)
+		23 56 52 4D 4C 20 56
+	END
+
+	BEGIN_MIME_TYPES
+		x-world/x-vrml
+		model/vrml
+		application/x-vrml
+
+		# Black Sun / Blaxxun / BS Contact plugin
+		application/x-bscontact
+		application/x-blaxxuncc3d
+		application/x-cc3d
+	END
+
+	BEGIN_EXTENSIONS
+		wrl wrz vrml
+
+		# Black Sun / Blaxxun / BS Contact plugin
+		bswrl bxwrl
+	END
+
+	DEFAULT_EXTENSION wrl
+
+END
+
+BEGIN_FILE WebAnimator
+
+	BEGIN_MIME_TYPES
+		plugin/wanimate
+		plugin/uwanimate
+	END
+
+	BEGIN_EXTENSIONS
+		waf wan
+	END
+
+END
+
+BEGIN_FILE WebGlide
+
+	BEGIN_EXTENSIONS
+		vpg wgs
+	END
+
+END
+
+BEGIN_FILE WebXpresso
+
+	BEGIN_MIME_TYPES
+		text/x-xpg
+	END
+
+	BEGIN_EXTENSIONS
+		xpg
+	END
+
+END
+
+BEGIN_FILE WildTangent
+
+	BEGIN_EXTENSIONS
+		wt wpg
+	END
+
+END
+
+BEGIN_FILE Winds3D
+
+	BEGIN_MIME_TYPES
+		application/x-awingsoft-winds3d
+	END
+
+	BEGIN_EXTENSIONS
+		aw3
+	END
+
+END
+
+BEGIN_FILE X3D
+
+	BEGIN_MIME_TYPES
+		model/x3d+xml
+		model/x3d+binary
+		model/x3d+vrml
+		model/x3d+zip
+		model/x3d+fastinfoset
+	END
+
+	BEGIN_EXTENSIONS
+		x3d x3dv x3db
+		x3dz x3dvz x3dbz
+
+		# FreeWRL
+		x3z
+	END
+
+END
+
+BEGIN_FILE Xara
+
+	BEGIN_SIGNATURES
+		# "XARA"
+		58 41 52 41
+	END
+
+	BEGIN_MIME_TYPES
+		application/x-corelxara
+		application/vnd.xara
+	END
+
+	BEGIN_EXTENSIONS
+		xar web
+	END
+
+	DEFAULT_EXTENSION xar
+
+END

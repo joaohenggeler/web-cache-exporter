@@ -1,0 +1,12 @@
+BEGIN_PROFILE Profile
+
+	DRIVE				D:\
+	WINDOWS				D:\WINDOWS
+	TEMPORARY			D:\Documents and Settings\<User>\Local Settings\Temp
+	USER				D:\Documents and Settings\<User>
+
+	APPDATA				D:\Documents and Settings\<User>\Application Data
+	LOCAL_APPDATA		D:\Documents and Settings\<User>\Local Settings\Application Data
+	LOCAL_LOW_APPDATA	<None>
+
+	INTERNET_CACHE		D:\Documents and Settings\<User>\Local Settings\Temporary Internet Files

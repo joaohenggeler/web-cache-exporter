@@ -1,0 +1,668 @@
+#include "cache.h"
+#include "common.h"
+
+static const TCHAR* SHORT_NAMES[] =
+{
+	T("WALK"),
+	T("IE"), T("MZ"),
+	T("FL"), T("SW"), T("JV"), T("UN"),
+};
+
+static const TCHAR* LONG_NAMES[] =
+{
+	T("Walk"),
+	T("WinINet"), T("Mozilla"),
+	T("Flash"), T("Shockwave"), T("Java"), T("Unity"),
+};
+
+static Array_View<Csv_Column> COLUMNS[] =
+{
+	{},
+	{}, {},
+	{}, SHOCKWAVE_COLUMNS, {}, {},
+};
+
+_STATIC_ASSERT(_countof(SHORT_NAMES) == CACHE_COUNT);
+_STATIC_ASSERT(_countof(LONG_NAMES) == CACHE_COUNT);
+_STATIC_ASSERT(_countof(COLUMNS) == CACHE_COUNT);
+
+bool cache_flags_from_names(const TCHAR* names, u32* flags)
+{
+	bool success = true;
+
+	*flags = 0;
+
+	Split_State state = {};
+	state.view = view_from_c(names);
+	state.delimiters = T(",");
+
+	String_View name = {};
+	while(string_split(&state, &name))
+	{
+		if(string_is_equal(name, T("browsers"), IGNORE_CASE))
+		{
+			*flags |= CACHE_BROWSERS;
+		}
+		else if(string_is_equal(name, T("plugins"), IGNORE_CASE))
+		{
+			*flags |= CACHE_PLUGINS;
+		}
+		else if(string_is_equal(name, T("all"), IGNORE_CASE))
+		{
+			*flags |= CACHE_ALL;
+		}
+		else
+		{
+			bool found = false;
+
+			for(int i = 0; i < CACHE_COUNT; i += 1)
+			{
+				if(string_is_equal(name, SHORT_NAMES[i], IGNORE_CASE)
+				|| string_is_equal(name, LONG_NAMES[i], IGNORE_CASE))
+				{
+					*flags |= (1 << i);
+					found = true;
+					break;
+				}
+			}
+
+			if(!found)
+			{
+				console_error("Unknown cache name '%.*s'", name.code_count, name.data);
+				log_error("Unknown cache name '%.*s' in '%s'", name.code_count, name.data, names);
+				success = false;
+				break;
+			}
+		}
+	}
+
+	if(success && *flags == 0)
+	{
+		console_error("No cache names found");
+		log_error("No cache names found in '%s'", names);
+		success = false;
+	}
+
+	return success;
+}
+
+Key_Paths default_key_paths(void)
+{
+	Key_Paths key_paths = {};
+	key_paths.name = EMPTY_STRING;
+
+	String_Builder* builder = builder_create(MAX_PATH_COUNT);
+
+	// - 98, ME, XP, Vista, 7, 8, 8.1, 10, 11	C:\WINDOWS
+	// - 2000									C:\WINNT
+	if(GetWindowsDirectory(builder->data, builder->capacity) != 0)
+	{
+		// The drive path used to be determined using GetVolumeInformation,
+		// but that function started returning names like "Windows-SSD" in
+		// later Windows versions.
+		key_paths.windows = builder_to_string(builder);
+		key_paths.drive = string_from_view(string_slice(key_paths.windows, 0, 3));
+	}
+	else
+	{
+		log_error("Failed to get the Windows path with the error: %s", last_error_message());
+		key_paths.windows = NO_PATH;
+		key_paths.drive = NO_PATH;
+	}
+
+	// - 98, ME									C:\WINDOWS\TEMP
+	// - 2000, XP								C:\Documents and Settings\<User>\Local Settings\Temp
+	// - Vista, 7, 8, 8.1, 10, 11				C:\Users\<User>\AppData\Local\Temp
+	if(GetTempPath(builder->capacity, builder->data) != 0)
+	{
+		key_paths.temporary = builder_to_string(builder);
+	}
+	else
+	{
+		log_error("Failed to get the temporary path with the error: %s", last_error_message());
+		key_paths.temporary = NO_PATH;
+	}
+
+	// - 98, ME									<None>
+	// - 2000, XP								C:\Documents and Settings\<User>
+	// - Vista, 7, 8, 8.1, 10, 11				C:\Users\<User>
+	if(!path_from_csidl(CSIDL_PROFILE, &key_paths.user)) key_paths.user = NO_PATH;
+
+
+	// - 98, ME									C:\WINDOWS\Application Data
+	// - 2000, XP								C:\Documents and Settings\<User>\Application Data
+	// - Vista, 7, 8, 8.1, 10, 11				C:\Users\<User>\AppData\Roaming
+	if(!path_from_csidl(CSIDL_APPDATA, &key_paths.appdata)) key_paths.appdata = NO_PATH;
+
+	// - 98, ME									<None>
+	// - 2000, XP								C:\Documents and Settings\<User>\Local Settings\Application Data
+	// - Vista, 7, 8, 8.1, 10, 11				C:\Users\<User>\AppData\Local
+	if(!path_from_csidl(CSIDL_LOCAL_APPDATA, &key_paths.local_appdata)) key_paths.local_appdata = NO_PATH;
+
+	// - 98, ME									<None>
+	// - 2000, XP								<None>
+	// - Vista, 7, 8, 8.1, 10, 11				C:\Users\<User>\AppData\LocalLow
+	if(!path_from_kfid(KFID_LOCAL_LOW_APPDATA, &key_paths.local_low_appdata)) key_paths.local_low_appdata = NO_PATH;
+
+	// - 98, ME									C:\WINDOWS\Temporary Internet Files
+	// - 2000, XP								C:\Documents and Settings\<User>\Local Settings\Temporary Internet Files
+	// - Vista, 7								C:\Users\<User>\AppData\Local\Microsoft\Windows\Temporary Internet Files
+	// - 8, 8.1, 10, 11							C:\Users\<User>\AppData\Local\Microsoft\Windows\INetCache
+	if(!path_from_csidl(CSIDL_INTERNET_CACHE, &key_paths.wininet)) key_paths.wininet = NO_PATH;
+
+	return key_paths;
+}
+
+static void exporter_begin(Exporter* exporter, u32 flag, String* subdirectory = NULL)
+{
+	exporter->current_found = 0;
+	exporter->current_exported = 0;
+	exporter->current_excluded = 0;
+
+	u32 index = flag_to_index(flag);
+	ASSERT(0 <= index && index < CACHE_COUNT, "Flag index out of range");
+
+	exporter->current_flag = flag;
+	exporter->current_short = string_from_c(SHORT_NAMES[index]);
+	exporter->current_long = string_from_c(LONG_NAMES[index]);
+
+	if(exporter->copy_files)
+	{
+		builder_clear(exporter->builder);
+		builder_append_path(&exporter->builder, exporter->output_path);
+		if(subdirectory != NULL) builder_append_path(&exporter->builder, subdirectory);
+		builder_append_path(&exporter->builder, exporter->current_short);
+		exporter->current_output = builder_to_string(exporter->builder);
+	}
+
+	if(exporter->create_csvs)
+	{
+		builder_clear(exporter->builder);
+		builder_append_path(&exporter->builder, exporter->output_path);
+		if(subdirectory != NULL) builder_append_path(&exporter->builder, subdirectory);
+		builder_append_path(&exporter->builder, exporter->current_short);
+		builder_append(&exporter->builder, T(".csv"));
+
+		String* path = builder_to_string(exporter->builder);
+		Array_View<Csv_Column> columns = COLUMNS[index];
+		csv_begin(&exporter->current_csv, path, columns);
+	}
+
+	#ifdef WCE_DEBUG
+		context.debug_exporter_balance += 1;
+	#endif
+
+	ASSERT(exporter->builder != NULL, "Terminated builder");
+}
+
+static void exporter_end(Exporter* exporter)
+{
+	ASSERT(exporter->current_flag != 0, "Missing current flag");
+	ASSERT(exporter->current_short != NULL, "Missing current short");
+	ASSERT(exporter->current_long != NULL, "Missing current long");
+	ASSERT(!exporter->copy_files || exporter->current_output != NULL, "Missing current output");
+	ASSERT(!exporter->current_batch || exporter->current_profile != NULL, "Missing current profile");
+
+	if(exporter->create_csvs && exporter->current_csv.created)
+	{
+		csv_end(&exporter->current_csv);
+		if(file_is_empty(exporter->current_csv.path)) file_delete(exporter->current_csv.path);
+	}
+
+	if(exporter->current_found > 0)
+	{
+		console_progress_end();
+		console_info("%s: Exported %d of %d files (%d excluded)", exporter->current_long->data, exporter->current_exported, exporter->current_found, exporter->current_excluded);
+		log_info("%s: Exported %d of %d files (%d excluded)", exporter->current_long->data, exporter->current_exported, exporter->current_found, exporter->current_excluded);
+	}
+	else
+	{
+		console_info("%s: No files found", exporter->current_long->data);
+		log_info("%s: No files found", exporter->current_long->data);
+	}
+
+	exporter->current_flag = 0;
+	exporter->current_short = NULL;
+	exporter->current_long = NULL;
+	exporter->current_output = NULL;
+	exporter->current_batch = false;
+	exporter->current_profile = NULL;
+
+	#ifdef WCE_DEBUG
+		context.debug_exporter_balance -= 1;
+	#endif
+}
+
+static String* exporter_filename(Exporter* exporter)
+{
+	String_Builder* builder = builder_create(8);
+	exporter->filename_count += 1;
+	builder_append_format(&builder, T("~WCE%04d"), exporter->filename_count);
+	return builder_terminate(&builder);
+}
+
+static bool exporter_copy(Exporter* exporter, String* from_path, String* to_path, String** final_path)
+{
+	bool file_success = true;
+
+	String_Builder* builder = builder_create(MAX_PATH_COUNT);
+
+	ARENA_SAVEPOINT()
+	{
+		Path_Parts parts = path_parse(to_path);
+
+		String* directory_path = EMPTY_STRING;
+		String_Builder* parent_builder = builder_create(parts.parent.code_count);
+		String_Builder* collision_builder = builder_create(parts.name.code_count + 5);
+
+		Split_State state = {};
+		state.view = parts.parent;
+		state.delimiters = PATH_DELIMITERS;
+
+		String_View component = {};
+		while(string_split(&state, &component))
+		{
+			builder_append_path(&parent_builder, component);
+			directory_path = builder_to_string(parent_builder);
+
+			int collisions = 0;
+			bool directory_success = CreateDirectory(directory_path->data, NULL) != FALSE;
+			#define COLLISION() (GetLastError() == ERROR_ALREADY_EXISTS && path_is_file(directory_path))
+
+			while(!directory_success && COLLISION())
+			{
+				collisions += 1;
+
+				builder_clear(collision_builder);
+				builder_append_path(&collision_builder, path_parent(directory_path));
+				builder_append_path(&collision_builder, component);
+				builder_append_format(&collision_builder, T("~%d"), collisions);
+
+				directory_path = builder_to_string(collision_builder);
+				directory_success = CreateDirectory(directory_path->data, NULL) != FALSE;
+			}
+
+			#undef COLLISION
+
+			if(!directory_success && GetLastError() != ERROR_ALREADY_EXISTS)
+			{
+				log_error("Failed to create '%s' of '%.*s' with the error: %s", directory_path->data, parts.parent.code_count, parts.parent.data, last_error_message());
+				file_success = false;
+				break;
+			}
+		}
+
+		builder_append_path(&builder, directory_path);
+		builder_append_path(&builder, parts.name);
+	}
+
+	if(!file_success) return file_success;
+
+	String* file_path = builder_to_string(builder);
+	Path_Parts parts = path_parse(file_path);
+
+	if(file_path->code_count > MAX_PATH_COUNT)
+	{
+		String* filename = exporter_filename(exporter);
+
+		builder_clear(builder);
+		builder_append_path(&builder, parts.parent);
+		builder_append_path(&builder, filename);
+
+		file_path = builder_to_string(builder);
+		parts = path_parse(file_path);
+
+		if(file_path->code_count > MAX_PATH_COUNT)
+		{
+			file_path = filename;
+			parts = path_parse(file_path);
+		}
+	}
+
+	int collisions = 0;
+	file_success = file_copy_try(from_path, file_path);
+	#define COLLISION() ( GetLastError() == ERROR_FILE_EXISTS || (GetLastError() == ERROR_ACCESS_DENIED && path_is_directory(file_path)) )
+
+	while(!file_success && COLLISION())
+	{
+		collisions += 1;
+
+		builder_clear(builder);
+		builder_append_path(&builder, parts.parent);
+		builder_append_path(&builder, parts.stem);
+		const TCHAR* format = (parts.extension.char_count > 0) ? (T("~%d.")) : (T("~%d"));
+		builder_append_format(&builder, format, collisions);
+		builder_append(&builder, parts.extension);
+
+		file_path = builder_to_string(builder);
+		file_success = file_copy_try(from_path, file_path);
+	}
+
+	if(file_success) *final_path = file_path;
+	else log_error("Failed to copy '%s' to '%s' with the error: %s", from_path->data, file_path->data, last_error_message());
+
+	#undef COLLISION
+
+	return file_success;
+}
+
+void exporter_next(Exporter* exporter, Export_Params params)
+{
+	#define CSV_HAS_NOT(column) (array_has(exporter->current_csv.columns, column) && !map_has(params.row, column))
+
+	ASSERT(params.row != NULL, "Missing CSV row");
+
+	ASSERT(CSV_HAS_NOT(CSV_OUTPUT_PATH), "Missing or set Output Path column");
+	ASSERT(CSV_HAS_NOT(CSV_OUTPUT_SIZE), "Missing or set Output Size column");
+	ASSERT(CSV_HAS_NOT(CSV_MAJOR_FILE_LABEL), "Missing or set Major File Label column");
+	ASSERT(CSV_HAS_NOT(CSV_MINOR_FILE_LABEL), "Missing or set Minor File Label column");
+	ASSERT(!map_has(params.row, CSV_MAJOR_URL_LABEL), "Set Major URL Label column");
+	ASSERT(!map_has(params.row, CSV_MINOR_URL_LABEL), "Set Minor URL Label column");
+	ASSERT(CSV_HAS_NOT(CSV_SHA_256), "Missing or set SHA-256 column");
+
+	if(params.data_path == NULL)
+	{
+		ASSERT(params.info != NULL, "Missing walk info");
+		ASSERT(params.info->_state->copy, "Shallow walk path");
+		params.data_path = params.info->path;
+	}
+
+	ASSERT(params.data_path != NULL, "Missing data path");
+
+	Url url = {};
+	String* filename = NULL;
+
+	if(params.url != NULL)
+	{
+		url = url_parse(params.url);
+		filename = string_from_view(path_name(url.path));
+	}
+	else
+	{
+		filename = string_from_view(path_name(params.data_path));
+	}
+
+	ASSERT(filename != NULL, "Missing filename");
+
+	if(filename->char_count == 0)
+	{
+		filename = exporter_filename(exporter);
+	}
+
+	String* extension = string_lower(path_extension(filename));
+
+	{
+		exporter->current_found += 1;
+		exporter->total_found += 1;
+		console_progress("%s: %s (%d)", exporter->current_long->data, filename->data, exporter->current_found);
+	}
+
+	{
+		if(CSV_HAS_NOT(CSV_FILENAME)) map_put(&params.row, CSV_FILENAME, filename);
+		if(CSV_HAS_NOT(CSV_FILE_EXTENSION)) map_put(&params.row, CSV_FILE_EXTENSION, extension);
+	}
+
+	{
+		if(params.url != NULL && CSV_HAS_NOT(CSV_URL)) map_put(&params.row, CSV_URL, params.url);
+	}
+
+	{
+		if(params.info != NULL)
+		{
+			if(CSV_HAS_NOT(CSV_CREATION_TIME)) map_put(&params.row, CSV_CREATION_TIME, filetime_format(params.info->creation_time));
+			if(CSV_HAS_NOT(CSV_LAST_ACCESS_TIME)) map_put(&params.row, CSV_LAST_ACCESS_TIME, filetime_format(params.info->last_access_time));
+			if(CSV_HAS_NOT(CSV_LAST_WRITE_TIME)) map_put(&params.row, CSV_LAST_WRITE_TIME, filetime_format(params.info->last_write_time));
+		}
+	}
+
+	{
+		if(CSV_HAS_NOT(CSV_INPUT_PATH)) map_put(&params.row, CSV_INPUT_PATH, path_absolute(params.data_path));
+
+		u64 size = 0;
+		if(CSV_HAS_NOT(CSV_INPUT_SIZE) && file_size_get(params.data_path, &size))
+		{
+			map_put(&params.row, CSV_INPUT_SIZE, string_from_num(size));
+		}
+	}
+
+	{
+		map_put(&params.row, CSV_SHA_256, string_upper(sha256_file(params.data_path)));
+	}
+
+	{
+		Match_Params match_params = {};
+		match_params.path = params.data_path;
+		match_params.mime_type = NULL; // @TODO
+		match_params.extension = extension;
+		match_params.url = url;
+
+		Label file_label = {};
+		Label url_label = {};
+
+		bool file_match = label_file_match(exporter, match_params, &file_label);
+		if(file_match)
+		{
+			map_put(&params.row, CSV_MAJOR_FILE_LABEL, file_label.major_name);
+			map_put(&params.row, CSV_MINOR_FILE_LABEL, file_label.minor_name);
+		}
+
+		bool url_match = params.url != NULL && label_url_match(exporter, match_params, &url_label);
+		if(url_match)
+		{
+			map_put(&params.row, CSV_MAJOR_URL_LABEL, url_label.major_name);
+			map_put(&params.row, CSV_MINOR_URL_LABEL, url_label.minor_name);
+		}
+
+		bool filter = true;
+
+		if(exporter->positive_filter != NULL)
+		{
+			Compare_Params<String*> params = {};
+			params.comparator = string_ignore_case_comparator;
+			filter = (file_match && array_has(exporter->positive_filter, file_label.major_name, params))
+				  || (file_match && array_has(exporter->positive_filter, file_label.minor_name, params))
+				  || (url_match  && array_has(exporter->positive_filter, url_label.major_name, params))
+				  || (url_match  && array_has(exporter->positive_filter, url_label.minor_name, params));
+		}
+
+		if(exporter->negative_filter != NULL)
+		{
+			Compare_Params<String*> params = {};
+			params.comparator = string_ignore_case_comparator;
+			filter = (file_match && array_has(exporter->negative_filter, file_label.major_name, params))
+				  || (file_match && array_has(exporter->negative_filter, file_label.minor_name, params))
+				  || (url_match  && array_has(exporter->negative_filter, url_label.major_name, params))
+				  || (url_match  && array_has(exporter->negative_filter, url_label.minor_name, params));
+			filter = !filter;
+		}
+
+		if(exporter->ignore_filter != 0)
+		{
+			filter = (exporter->ignore_filter & exporter->current_flag) != 0;
+		}
+
+		if(!filter)
+		{
+			exporter->current_excluded += 1;
+			exporter->total_excluded += 1;
+		}
+
+		if(exporter->copy_files && filter)
+		{
+			String_Builder* builder = builder_create(MAX_PATH_COUNT);
+
+			builder_append_path(&builder, exporter->current_output);
+			if(params.subdirectory != NULL) builder_append_path(&builder, params.subdirectory);
+
+			if(params.url != NULL)
+			{
+				builder_append_path(&builder, url.path);
+			}
+			else
+			{
+				builder_append_path(&builder, filename);
+			}
+
+			String* to_path = path_safe(builder_to_string(builder));
+
+			String_View extension = path_extension(to_path);
+			if(extension.char_count == 0)
+			{
+				if(file_label.default_extension != NULL)
+				{
+					builder_append(&builder, T("."));
+					builder_append(&builder, file_label.default_extension);
+					to_path = path_safe(builder_terminate(&builder));
+				}
+				else if(file_label.extensions != NULL && file_label.extensions->count == 1)
+				{
+					builder_append(&builder, T("."));
+					builder_append(&builder, file_label.extensions->data[0]);
+					to_path = path_safe(builder_terminate(&builder));
+				}
+			}
+
+			String* final_path = NULL;
+
+			if(exporter_copy(exporter, params.data_path, to_path, &final_path))
+			{
+				exporter->current_exported += 1;
+				exporter->total_exported += 1;
+
+				map_put(&params.row, CSV_OUTPUT_PATH, path_absolute(final_path));
+
+				u64 size = 0;
+				if(file_size_get(final_path, &size)) map_put(&params.row, CSV_OUTPUT_SIZE, string_from_num(size));
+			}
+			else
+			{
+				log_error("Failed to copy '%s' to '%s'", params.data_path->data, to_path->data);
+			}
+		}
+
+		if(exporter->create_csvs && exporter->current_csv.created && filter)
+		{
+			csv_next(&exporter->current_csv, params.row);
+		}
+	}
+
+	arena_clear(context.current_arena);
+
+	#undef CSV_HAS_NOT
+}
+
+void exporter_main(Exporter* exporter)
+{
+	log_info("Processing %d single and %d key paths", exporter->single_paths->count, exporter->key_paths->count);
+
+	report_begin(exporter);
+
+	#define SINGLE_EXPORT(flag, function) \
+		do \
+		{ \
+			if(single.flags & flag) \
+			{ \
+				exporter_begin(exporter, flag); \
+				exporter->current_batch = false; \
+				console_info("%s (Single): '%s'", exporter->current_long->data, single.path->data); \
+				log_info("%s (Single): '%s'", exporter->current_long->data, single.path->data); \
+				function(exporter, single.path); \
+				exporter_end(exporter); \
+			} \
+		} while(false);
+
+	for(int i = 0; i < exporter->single_paths->count; i += 1)
+	{
+		Single_Path single = exporter->single_paths->data[i];
+		SINGLE_EXPORT(CACHE_SHOCKWAVE, shockwave_single_export);
+	}
+
+	#undef SINGLE_EXPORT
+
+	#define BATCH_EXPORT(flag, function) \
+		do \
+		{ \
+			if(exporter->cache_flags & flag) \
+			{ \
+				exporter_begin(exporter, flag, key_paths.name); \
+				exporter->current_batch = true; \
+				exporter->current_profile = key_paths.name; \
+				exporter->filename_count = 0; \
+				if(key_paths.name->char_count != 0) \
+				{ \
+					console_info("%s (Batch): '%s'", exporter->current_long->data, key_paths.name->data); \
+					log_info("%s (Batch): '%s'", exporter->current_long->data, key_paths.name->data); \
+				} \
+				else \
+				{ \
+					console_info("%s (Default)", exporter->current_long->data); \
+					log_info("%s (Default)", exporter->current_long->data); \
+				} \
+				function(exporter, key_paths); \
+				exporter_end(exporter); \
+			} \
+		} while(false);
+
+	for(int i = 0; i < exporter->key_paths->count; i += 1)
+	{
+		Key_Paths key_paths = exporter->key_paths->data[i];
+
+		log_info("Name: '%s'", key_paths.name->data);
+		log_info("Drive: '%s'", key_paths.drive->data);
+		log_info("Windows: '%s'", key_paths.windows->data);
+		log_info("Temporary: '%s'", key_paths.temporary->data);
+		log_info("User: '%s'", key_paths.user->data);
+		log_info("AppData: '%s'", key_paths.appdata->data);
+		log_info("Local AppData: '%s'", key_paths.local_appdata->data);
+		log_info("LocalLow AppData: '%s'", key_paths.local_low_appdata->data);
+		log_info("WinINet: '%s'", key_paths.wininet->data);
+
+		BATCH_EXPORT(CACHE_SHOCKWAVE, shockwave_batch_export);
+	}
+
+	#undef BATCH_EXPORT
+
+	report_end(exporter);
+
+	if(exporter->total_found > 0)
+	{
+		console_info("Total: Exported %d of %d files (%d excluded)", exporter->total_exported, exporter->total_found, exporter->total_excluded);
+		log_info("Total: Exported %d of %d files (%d excluded)", exporter->total_exported, exporter->total_found, exporter->total_excluded);
+	}
+	else
+	{
+		console_info("Total: No files found");
+		log_info("Total: No files found");
+		directory_delete(exporter->output_path);
+	}
+}
+
+void exporter_tests(void)
+{
+	console_info("Running exporter tests");
+	log_info("Running exporter tests");
+
+	{
+		bool success = false;
+		u32 flags = 0;
+
+		success = cache_flags_from_names(T("walk,ie,mz,fl,sw,jv,un"), &flags);
+		TEST(success, true);
+		TEST(flags, (u32) CACHE_WALK | CACHE_PLUGINS | CACHE_BROWSERS);
+
+		success = cache_flags_from_names(T("all"), &flags);
+		TEST(success, true);
+		TEST(flags, (u32) CACHE_ALL);
+		TEST(flags & CACHE_WALK, 0U);
+
+		success = cache_flags_from_names(T("browsers,plugins"), &flags);
+		TEST(success, true);
+		TEST(flags, (u32) CACHE_PLUGINS | CACHE_BROWSERS);
+
+		success = cache_flags_from_names(T("wrong"), &flags);
+		TEST(success, false);
+
+		success = cache_flags_from_names(T(""), &flags);
+		TEST(success, false);
+	}
+}

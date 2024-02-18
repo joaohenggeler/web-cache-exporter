@@ -3,11 +3,12 @@
 	"configurations":
 	[
 		{
-			"name": "Debug Launch (9x, 32-bit)",
+			"name": "Debug (9x, 32-bit)",
 			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}\\Builds\\Debug\\9x-x86\\WCE9x32.exe",
-			"args": ["-o", "-faea", "WCE9x32"],
+			"console": "externalTerminal",
+			"program": "${workspaceFolder}\\Builds\\Debug\\9x\\x86\\WCE9x.exe",
+			"args": ["-run-tests", "-large-tests"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{
@@ -17,11 +18,12 @@
 		},
 
 		{
-			"name": "Debug Launch (NT, 32-bit)",
+			"name": "Debug (NT, 32-bit)",
 			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}\\Builds\\Debug\\NT-x86\\WCE32.exe",
-			"args": ["-o", "-faea", "WCE32"],
+			"console": "externalTerminal",
+			"program": "${workspaceFolder}\\Builds\\Debug\\NT\\x86\\WCE32.exe",
+			"args": ["-run-tests", "-large-tests", "-e", "all", "-b", "C:\\Work\\GitHub\\web-cache-exporter-redux\\Other\\HP Pavilion zt3200.txt"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{
@@ -31,11 +33,12 @@
 		},
 
 		{
-			"name": "Debug Launch (NT, 64-bit)",
+			"name": "Debug (NT, 64-bit)",
 			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}\\Builds\\Debug\\NT-x64\\WCE64.exe",
-			"args": ["-o", "-faea", "WCE64"],
+			"console": "externalTerminal",
+			"program": "${workspaceFolder}\\Builds\\Debug\\NT\\x64\\WCE64.exe",
+			"args": ["-run-tests", "-large-tests", "-e", "sw", "-i", "D:\\Documents and Settings\\João\\Application Data\\Macromedia\\Shockwave Player"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{
@@ -45,11 +48,12 @@
 		},
 
 		{
-			"name": "Release Launch (9x, 32-bit)",
+			"name": "Release (9x, 32-bit)",
 			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}\\Builds\\Release\\WCE9x32.exe",
-			"args": ["-o", "-faea", "WCE9x32"],
+			"console": "externalTerminal",
+			"program": "${workspaceFolder}\\Builds\\Release\\9x\\x86\\WCE9x.exe",
+			"args": ["-run-tests", "-large-tests"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{
@@ -59,11 +63,12 @@
 		},
 
 		{
-			"name": "Release Launch (NT, 32-bit)",
+			"name": "Release (NT, 32-bit)",
 			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}\\Builds\\Release\\WCE32.exe",
-			"args": ["-o", "-faea", "WCE32"],
+			"console": "externalTerminal",
+			"program": "${workspaceFolder}\\Builds\\Release\\NT\\x86\\WCE32.exe",
+			"args": ["-run-tests", "-large-tests"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{
@@ -73,11 +78,12 @@
 		},
 
 		{
-			"name": "Release Launch (NT, 64-bit)",
+			"name": "Release (NT, 64-bit)",
 			"type": "cppvsdbg",
 			"request": "launch",
-			"program": "${workspaceFolder}\\Builds\\Release\\WCE64.exe",
-			"args": ["-o", "-faea", "WCE64"],
+			"console": "externalTerminal",
+			"program": "${workspaceFolder}\\Builds\\Release\\NT\\x64\\WCE64.exe",
+			"args": ["-run-tests", "-large-tests"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{

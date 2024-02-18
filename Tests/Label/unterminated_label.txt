@@ -1,0 +1,19 @@
+BEGIN_FILE File
+
+	BEGIN_SIGNATURES
+		AA BB CC DD
+		AA BB __ __ CC DD
+	END
+
+	BEGIN_MIME_TYPES
+		abc
+		def
+	END
+
+	BEGIN_EXTENSIONS
+		a
+		b c
+		d e f
+	END
+
+	DEFAULT_EXTENSION abc

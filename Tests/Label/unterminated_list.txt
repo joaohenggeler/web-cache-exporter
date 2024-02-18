@@ -1,0 +1,5 @@
+BEGIN_FILE File
+
+	BEGIN_SIGNATURES
+		AA BB CC DD
+		AA BB __ __ CC DD

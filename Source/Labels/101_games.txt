@@ -1,0 +1,576 @@
+NAME Games
+
+BEGIN_URL 2DPlay
+
+	BEGIN_DOMAINS
+		2dplay.com
+	END
+
+END
+
+BEGIN_URL Addicting Games
+
+	BEGIN_DOMAINS
+		addictinggames.com
+	END
+
+END
+
+BEGIN_URL Adult Swim
+
+	BEGIN_DOMAINS
+		adultswim.com
+	END
+
+END
+
+BEGIN_URL Albino Blacksheep
+
+	BEGIN_DOMAINS
+		albinoblacksheep.com
+	END
+
+END
+
+BEGIN_URL Andkon Arcade
+
+	BEGIN_DOMAINS
+		andkon.com
+	END
+
+END
+
+BEGIN_URL The Arcade Machine
+
+	BEGIN_DOMAINS
+		arcademachine.com
+	END
+
+END
+
+BEGIN_URL ArcadePod
+
+	BEGIN_DOMAINS
+		arcadepod.com
+	END
+
+END
+
+BEGIN_URL ArcadeTown
+
+	BEGIN_DOMAINS
+		arcadetown.com
+	END
+
+END
+
+BEGIN_URL Armor Games
+
+	BEGIN_DOMAINS
+		armorgames.com
+		gamesofgondor.com
+	END
+
+END
+
+BEGIN_URL Big Fish Games
+
+	BEGIN_DOMAINS
+		bigfishgames.com
+	END
+
+END
+
+BEGIN_URL Bonus.com
+
+	BEGIN_DOMAINS
+		bonus.com
+	END
+
+END
+
+BEGIN_URL Box10
+
+	BEGIN_DOMAINS
+		box10.com
+	END
+
+END
+
+BEGIN_URL BubbleBox
+
+	BEGIN_DOMAINS
+		bubblebox.com
+	END
+
+END
+
+BEGIN_URL CleverMedia
+
+	BEGIN_DOMAINS
+		clevermedia.com
+	END
+
+END
+
+BEGIN_URL Club Penguin
+
+	BEGIN_DOMAINS
+		clubpenguin.com
+	END
+
+END
+
+BEGIN_URL Coffee Break Arcade
+
+	BEGIN_DOMAINS
+		coffeebreakarcade.com
+	END
+
+END
+
+BEGIN_URL Coolmath Games
+
+	BEGIN_DOMAINS
+		coolmathgames.com
+	END
+
+END
+
+BEGIN_URL Crazy Monkey Games
+
+	BEGIN_DOMAINS
+		crazymonkeygames.com
+	END
+
+END
+
+BEGIN_URL DAN-BALL
+
+	BEGIN_DOMAINS
+		dan-ball.jp
+	END
+
+END
+
+BEGIN_URL Disney
+
+	BEGIN_DOMAINS
+		disney.com
+		disney.go.com
+	END
+
+END
+
+BEGIN_URL Ezone
+
+	BEGIN_DOMAINS
+		ezone.com
+	END
+
+END
+
+BEGIN_URL FlyOrDie
+
+	BEGIN_DOMAINS
+		flyordie.com
+	END
+
+END
+
+BEGIN_URL FreeArcade
+
+	BEGIN_DOMAINS
+		javaarcade.com
+		freearcade.com
+	END
+
+END
+
+BEGIN_URL FunBrain
+
+	BEGIN_DOMAINS
+		funbrain.com
+	END
+
+END
+
+BEGIN_URL Funschool
+
+	BEGIN_DOMAINS
+		funschool.com
+	END
+
+END
+
+BEGIN_URL FusionFall
+
+	BEGIN_DOMAINS
+		fusionfall.com
+	END
+
+END
+
+BEGIN_URL Game Show Network
+
+	BEGIN_DOMAINS
+		gsn.com
+	END
+
+END
+
+BEGIN_URL GameHouse
+
+	BEGIN_DOMAINS
+		gamehouse.com
+		ghstatic.com
+	END
+
+END
+
+BEGIN_URL Gamelet
+
+	BEGIN_DOMAINS
+		gamelet.com
+	END
+
+END
+
+BEGIN_URL Garfield
+
+	BEGIN_DOMAINS
+		garfield.com
+		professorgarfield.com
+	END
+
+END
+
+BEGIN_URL Global Freeplay
+
+	BEGIN_DOMAINS
+		globalfreeplay.com
+	END
+
+END
+
+BEGIN_URL GlobalFun
+
+	BEGIN_DOMAINS
+		globalfun.com
+	END
+
+END
+
+BEGIN_URL Habbo
+
+	BEGIN_DOMAINS
+		habbo.*
+	END
+
+END
+
+BEGIN_URL iWin
+
+	BEGIN_DOMAINS
+		iwin.com
+	END
+
+END
+
+BEGIN_URL Java On The Brain
+
+	BEGIN_DOMAINS
+		javaonthebrain.com
+		tdb.uu.se/~karl
+	END
+
+END
+
+BEGIN_URL JavaGamePlay.com
+
+	BEGIN_DOMAINS
+		javagameplay.com
+	END
+
+END
+
+BEGIN_URL Jay Is Games
+
+	BEGIN_DOMAINS
+		jayisgames.com
+	END
+
+END
+
+BEGIN_URL Jippii
+
+	BEGIN_DOMAINS
+		jippii.com
+	END
+
+END
+
+BEGIN_URL Kaboose
+
+	BEGIN_DOMAINS
+		kaboose.com
+	END
+
+END
+
+BEGIN_URL Kewlbox
+
+	BEGIN_DOMAINS
+		kewlbox.com
+	END
+
+END
+
+# King.com
+BEGIN_URL Royal Games
+
+	BEGIN_DOMAINS
+		king.com
+		king.gamesgames.com
+		king.games.co.uk
+		midas.games.yahoo.net
+		royalgames.com
+	END
+
+END
+
+BEGIN_URL Kongregate
+
+	BEGIN_DOMAINS
+		kongregate.com
+	END
+
+END
+
+BEGIN_URL Lego Mindstorms
+
+	BEGIN_DOMAINS
+		mindstorms.lego.com
+	END
+
+END
+
+BEGIN_URL MaMaMedia
+
+	BEGIN_DOMAINS
+		mamamedia.com
+	END
+
+END
+
+BEGIN_URL Max Games
+
+	BEGIN_DOMAINS
+		maxgames.com
+	END
+
+END
+
+BEGIN_URL Miniclip
+
+	BEGIN_DOMAINS
+		miniclip.com
+	END
+
+END
+
+BEGIN_URL MoFunZone
+
+	BEGIN_DOMAINS
+		mofunzone.com
+	END
+
+END
+
+BEGIN_URL Newgrounds
+
+	BEGIN_DOMAINS
+		newgrounds.com
+		ungrounded.net
+	END
+
+END
+
+BEGIN_URL Nickelodeon
+
+	BEGIN_DOMAINS
+		nickelodeon.*
+		nick.com
+		nickjr.com
+	END
+
+END
+
+BEGIN_URL Nitrome
+
+	BEGIN_DOMAINS
+		nitrome.com
+	END
+
+END
+
+BEGIN_URL Not Doppler
+
+	BEGIN_DOMAINS
+		notdoppler.com
+	END
+
+END
+
+BEGIN_URL OneMoreLevel
+
+	BEGIN_DOMAINS
+		onemorelevel.com
+	END
+
+END
+
+BEGIN_URL Orisinal
+
+	BEGIN_DOMAINS
+		ferryhalim.com/ori
+		orisinal.com
+	END
+
+END
+
+#  Apaja / Playray / Aapeli
+BEGIN_URL Playforia
+
+	BEGIN_DOMAINS
+		apaja.com
+		playray.com
+		aapeli.com
+		playforia.net
+	END
+
+END
+
+BEGIN_URL PopCap
+
+	BEGIN_DOMAINS
+		popcap.com
+	END
+
+END
+
+BEGIN_URL Poptropica
+
+	BEGIN_DOMAINS
+		poptropica.com
+	END
+
+END
+
+BEGIN_URL Radical Play
+
+	BEGIN_DOMAINS
+		radicalplay.com
+	END
+
+END
+
+BEGIN_URL Roblox
+
+	BEGIN_DOMAINS
+		roblox.com
+		rbxcdn.com
+		rbxtrk.com
+	END
+
+END
+
+BEGIN_URL RuneScape
+
+	BEGIN_DOMAINS
+		runescape.com
+	END
+
+END
+
+BEGIN_URL Scratch
+
+	BEGIN_DOMAINS
+		scratch.mit.edu
+	END
+
+END
+
+BEGIN_URL Shockwave.com
+
+	BEGIN_DOMAINS
+		shockwave.com
+		shockrave.com
+	END
+
+END
+
+BEGIN_URL Transformice
+
+	BEGIN_DOMAINS
+		transformice.com
+		atelier801.com/transformice
+	END
+
+END
+
+BEGIN_URL WildTangent
+
+	BEGIN_DOMAINS
+		wildtangent.com
+	END
+
+END
+
+BEGIN_URL WorldWinner
+
+	BEGIN_DOMAINS
+		worldwinner.com
+	END
+
+END
+
+BEGIN_URL XGen Studios
+
+	BEGIN_DOMAINS
+		xgenstudios.com
+	END
+
+END
+
+BEGIN_URL Y8
+
+	BEGIN_DOMAINS
+		y8.com
+	END
+
+END
+
+BEGIN_URL YTV
+
+	BEGIN_DOMAINS
+		ytv.com
+	END
+
+END
+
+BEGIN_URL Zeeks
+
+	BEGIN_DOMAINS
+		zeeks.com
+	END
+
+END
+
+BEGIN_URL Zylom
+
+	BEGIN_DOMAINS
+		zylom.com
+	END
+
+END

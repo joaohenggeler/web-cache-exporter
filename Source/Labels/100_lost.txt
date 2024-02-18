@@ -1,0 +1,201 @@
+NAME Lost
+
+BEGIN_URL Big Fat Awesome House Party
+
+	BEGIN_DOMAINS
+		awesomehouseparty.com
+	END
+
+END
+
+BEGIN_URL Bejeweled 3
+
+	BEGIN_DOMAINS
+		bejeweled.popcap.com
+	END
+
+END
+
+BEGIN_URL Candystand
+
+	BEGIN_DOMAINS
+		candystand.com
+	END
+
+END
+
+BEGIN_URL Cartoon Network
+
+	BEGIN_DOMAINS
+		cartoonnetwork.*
+		turner.*/toon
+	END
+
+END
+
+BEGIN_URL Faradise
+
+	BEGIN_DOMAINS
+		faradise.com
+	END
+
+END
+
+BEGIN_URL The Groove Alliance
+
+	BEGIN_DOMAINS
+		3dgroove.com
+	END
+
+END
+
+BEGIN_URL Inhance Digital Corporation
+
+	BEGIN_DOMAINS
+		inhance.com
+	END
+
+END
+
+BEGIN_URL Jig Interactive
+
+	BEGIN_DOMAINS
+		jiginteractive.com
+		jigint.com
+	END
+
+END
+
+BEGIN_URL Millsberry
+
+	BEGIN_DOMAINS
+		millsberry.com
+	END
+
+END
+
+BEGIN_URL NabiscoWorld
+
+	BEGIN_DOMAINS
+		nabiscoworld.com
+	END
+
+END
+
+BEGIN_URL Neopets
+
+	BEGIN_DOMAINS
+		neopets.com
+	END
+
+END
+
+BEGIN_URL PBS Kids
+
+	BEGIN_DOMAINS
+		pbskids.org
+	END
+
+END
+
+BEGIN_URL Pogo.com
+
+	BEGIN_DOMAINS
+		pogo.com
+	END
+
+END
+
+BEGIN_URL Pokemon
+
+	BEGIN_DOMAINS
+		yimg.jp/images/kids/pokemon
+		d01.kids.tnz.yahoo.co.jp
+		pokemon-gl.com
+		p2kthemovie.com/game
+		p2kmovie.warnerbros.com/game
+	END
+
+END
+
+BEGIN_URL Postopia
+
+	BEGIN_DOMAINS
+		postopia.com
+		postkids.com
+	END
+
+END
+
+BEGIN_URL PrizeGames.com
+
+	BEGIN_DOMAINS
+		prizegames.com
+	END
+
+END
+
+BEGIN_URL Pumkin Online English Course
+
+	BEGIN_DOMAINS
+		pumkin.com
+	END
+
+END
+
+BEGIN_URL Robobombo
+
+	BEGIN_DOMAINS
+		robobombo.com
+	END
+
+END
+
+BEGIN_URL RollerBoy 2
+
+	BEGIN_DOMAINS
+		rollerboy2.com
+	END
+
+END
+
+BEGIN_URL Teslatron
+
+	BEGIN_DOMAINS
+		teslatron.com
+	END
+
+END
+
+BEGIN_URL Too Munch Fun
+
+	BEGIN_DOMAINS
+		toomunchfun.com
+	END
+
+END
+
+BEGIN_URL VR Edmonton
+
+	BEGIN_DOMAINS
+		vredmonton.com
+	END
+
+END
+
+BEGIN_URL Webkinz
+
+	BEGIN_DOMAINS
+		webkinz.com
+		ganz.com
+	END
+
+END
+
+BEGIN_URL Wonderville 3D
+
+	BEGIN_DOMAINS
+		wonderville.ca
+	END
+
+END

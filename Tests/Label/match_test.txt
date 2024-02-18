@@ -1,0 +1,67 @@
+NAME Match
+
+BEGIN_FILE File 1
+
+	BEGIN_SIGNATURES
+		AA BB CC DD
+		AA BB __ __ CC DD
+	END
+
+	BEGIN_MIME_TYPES
+		abc
+	END
+
+	BEGIN_EXTENSIONS
+		a
+		b c
+	END
+
+END
+
+BEGIN_FILE File 2
+
+	BEGIN_SIGNATURES
+		DD EE FF
+	END
+
+	BEGIN_MIME_TYPES
+		def
+	END
+
+	BEGIN_EXTENSIONS
+		d e f
+	END
+
+END
+
+BEGIN_URL URL 1
+
+	BEGIN_DOMAINS
+		abc.com
+	END
+
+END
+
+BEGIN_URL URL 2
+
+	BEGIN_DOMAINS
+		abc.*
+	END
+
+END
+
+BEGIN_URL URL 3
+
+	BEGIN_DOMAINS
+		def.com/path
+	END
+
+END
+
+BEGIN_URL URL 4
+
+	BEGIN_DOMAINS
+		def.*/path
+	END
+
+END

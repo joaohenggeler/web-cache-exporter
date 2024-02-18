@@ -23,7 +23,7 @@
 			"request": "launch",
 			"console": "externalTerminal",
 			"program": "${workspaceFolder}\\Builds\\Debug\\NT\\x86\\WCE32.exe",
-			"args": ["-run-tests", "-large-tests", "-e", "all", "-b", "C:\\Work\\GitHub\\web-cache-exporter-redux\\Other\\HP Pavilion zt3200.txt"],
+			"args": ["-run-tests", "-large-tests"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{
@@ -38,7 +38,7 @@
 			"request": "launch",
 			"console": "externalTerminal",
 			"program": "${workspaceFolder}\\Builds\\Debug\\NT\\x64\\WCE64.exe",
-			"args": ["-run-tests", "-large-tests", "-e", "sw", "-i", "D:\\Documents and Settings\\João\\Application Data\\Macromedia\\Shockwave Player"],
+			"args": ["-run-tests", "-large-tests"],
 			"cwd": "${workspaceFolder}",
 			"logging":
 			{

@@ -18,7 +18,7 @@ static const TCHAR* LONG_NAMES[] =
 static Array_View<Csv_Column> COLUMNS[] =
 {
 	{},
-	{}, {},
+	{}, MOZILLA_COLUMNS,
 	{}, SHOCKWAVE_COLUMNS, {}, {},
 };
 
@@ -68,8 +68,8 @@ bool cache_flags_from_names(const TCHAR* names, u32* flags)
 
 			if(!found)
 			{
-				console_error("Unknown cache name '%.*s'", name.code_count, name.data);
-				log_error("Unknown cache name '%.*s' in '%s'", name.code_count, name.data, names);
+				console_error("Unknown cache format '%.*s'", name.code_count, name.data);
+				log_error("Unknown cache format '%.*s' in '%s'", name.code_count, name.data, names);
 				success = false;
 				break;
 			}
@@ -78,8 +78,8 @@ bool cache_flags_from_names(const TCHAR* names, u32* flags)
 
 	if(success && *flags == 0)
 	{
-		console_error("No cache names found");
-		log_error("No cache names found in '%s'", names);
+		console_error("No cache formats found");
+		log_error("No cache formats found in '%s'", names);
 		success = false;
 	}
 
@@ -201,7 +201,7 @@ static void exporter_end(Exporter* exporter)
 	ASSERT(exporter->current_short != NULL, "Missing current short");
 	ASSERT(exporter->current_long != NULL, "Missing current long");
 	ASSERT(!exporter->copy_files || exporter->current_output != NULL, "Missing current output");
-	ASSERT(!exporter->current_batch || exporter->current_profile != NULL, "Missing current profile");
+	ASSERT(!exporter->current_batch || exporter->current_key_paths.name != NULL, "Missing current key paths");
 
 	if(exporter->create_csvs && exporter->current_csv.created)
 	{
@@ -226,11 +226,31 @@ static void exporter_end(Exporter* exporter)
 	exporter->current_long = NULL;
 	exporter->current_output = NULL;
 	exporter->current_batch = false;
-	exporter->current_profile = NULL;
+	ZeroMemory(&exporter->current_key_paths, sizeof(exporter->current_key_paths));
 
 	#ifdef WCE_DEBUG
 		context.debug_exporter_balance -= 1;
 	#endif
+}
+
+String* exporter_path_localize(Exporter* exporter, String* path)
+{
+	ASSERT(exporter->current_batch, "Localizing path in single mode");
+	ASSERT(exporter->current_key_paths.drive != NULL, "Missing drive");
+	ASSERT(path_is_absolute(path), "Path is relative");
+
+	String* path_without_drive = string_from_view(string_slice(path, 3, path->char_count));
+
+	String_Builder* builder = builder_create(MAX_PATH_COUNT);
+	builder_append_path(&builder, exporter->current_key_paths.drive);
+	builder_append_path(&builder, path_without_drive);
+
+	return builder_terminate(&builder);
+}
+
+static String* exporter_yes_or_no(bool yes)
+{
+	return (yes) ? (CSTR("Yes")) : (CSTR("No"));
 }
 
 static String* exporter_filename(Exporter* exporter)
@@ -241,62 +261,93 @@ static String* exporter_filename(Exporter* exporter)
 	return builder_terminate(&builder);
 }
 
-static bool exporter_copy(Exporter* exporter, String* from_path, String* to_path, String** final_path)
+struct Copy_Params
 {
-	bool file_success = true;
+	String* from_path;
+	String* to_path;
+	String* fallback_path;
+	String* extension;
+};
+
+static bool exporter_copy(Exporter* exporter, Copy_Params params, String** final_path)
+{
+	// Any path that is used to build the destination must be
+	// absolute so we can check the count against MAX_PATH.
+	params.to_path = path_absolute(params.to_path);
+	params.fallback_path = path_absolute(params.fallback_path);
+
+	bool copy_success = true;
 
 	String_Builder* builder = builder_create(MAX_PATH_COUNT);
+	bool fallback = false;
 
-	ARENA_SAVEPOINT()
+	if(params.to_path->code_count > MAX_PATH_COUNT)
 	{
-		Path_Parts parts = path_parse(to_path);
+		fallback = true;
 
-		String* directory_path = EMPTY_STRING;
-		String_Builder* parent_builder = builder_create(parts.parent.code_count);
-		String_Builder* collision_builder = builder_create(parts.name.code_count + 5);
-
-		Split_State state = {};
-		state.view = parts.parent;
-		state.delimiters = PATH_DELIMITERS;
-
-		String_View component = {};
-		while(string_split(&state, &component))
+		if(!directory_create(params.fallback_path))
 		{
-			builder_append_path(&parent_builder, component);
-			directory_path = builder_to_string(parent_builder);
-
-			int collisions = 0;
-			bool directory_success = CreateDirectory(directory_path->data, NULL) != FALSE;
-			#define COLLISION() (GetLastError() == ERROR_ALREADY_EXISTS && path_is_file(directory_path))
-
-			while(!directory_success && COLLISION())
-			{
-				collisions += 1;
-
-				builder_clear(collision_builder);
-				builder_append_path(&collision_builder, path_parent(directory_path));
-				builder_append_path(&collision_builder, component);
-				builder_append_format(&collision_builder, T("~%d"), collisions);
-
-				directory_path = builder_to_string(collision_builder);
-				directory_success = CreateDirectory(directory_path->data, NULL) != FALSE;
-			}
-
-			#undef COLLISION
-
-			if(!directory_success && GetLastError() != ERROR_ALREADY_EXISTS)
-			{
-				log_error("Failed to create '%s' of '%.*s' with the error: %s", directory_path->data, parts.parent.code_count, parts.parent.data, last_error_message());
-				file_success = false;
-				break;
-			}
+			log_error("Failed to create the fallback directory '%s'", params.fallback_path->data);
+			copy_success = false;
 		}
 
-		builder_append_path(&builder, directory_path);
+		Path_Parts parts = path_parse(params.to_path);
+		builder_append_path(&builder, params.fallback_path);
 		builder_append_path(&builder, parts.name);
 	}
+	else
+	{
+		ARENA_SAVEPOINT()
+		{
+			Path_Parts parts = path_parse(params.to_path);
 
-	if(!file_success) return file_success;
+			String* directory_path = EMPTY_STRING;
+			String_Builder* parent_builder = builder_create(parts.parent.code_count);
+			String_Builder* collision_builder = builder_create(parts.name.code_count + 5);
+
+			Split_State state = {};
+			state.view = parts.parent;
+			state.delimiters = PATH_DELIMITERS;
+
+			String_View component = {};
+			while(string_split(&state, &component))
+			{
+				builder_append_path(&parent_builder, component);
+				directory_path = builder_to_string(parent_builder);
+
+				int collisions = 0;
+				bool directory_success = CreateDirectory(directory_path->data, NULL) != FALSE;
+				#define COLLISION() (GetLastError() == ERROR_ALREADY_EXISTS && path_is_file(directory_path))
+
+				while(!directory_success && COLLISION())
+				{
+					collisions += 1;
+
+					builder_clear(collision_builder);
+					builder_append_path(&collision_builder, path_parent(directory_path));
+					builder_append_path(&collision_builder, component);
+					builder_append_format(&collision_builder, T("~%d"), collisions);
+
+					directory_path = builder_to_string(collision_builder);
+					directory_success = CreateDirectory(directory_path->data, NULL) != FALSE;
+				}
+
+				#undef COLLISION
+
+				if(!directory_success && GetLastError() != ERROR_ALREADY_EXISTS)
+				{
+					log_error("Failed to create '%s' of '%.*s' with the error: %s", directory_path->data, parts.parent.code_count, parts.parent.data, last_error_message());
+					copy_success = false;
+					break;
+				}
+			}
+
+			builder_append_path(&builder, directory_path);
+			builder_append_path(&builder, parts.name);
+		}
+	}
+
+	if(!copy_success) return copy_success;
 
 	String* file_path = builder_to_string(builder);
 	Path_Parts parts = path_parse(file_path);
@@ -305,25 +356,49 @@ static bool exporter_copy(Exporter* exporter, String* from_path, String* to_path
 	{
 		String* filename = exporter_filename(exporter);
 
-		builder_clear(builder);
-		builder_append_path(&builder, parts.parent);
-		builder_append_path(&builder, filename);
+		// We only want to use the parent path for URLs.
+		if(!fallback)
+		{
+			builder_clear(builder);
+			builder_append_path(&builder, parts.parent);
+			builder_append_path(&builder, filename);
 
-		file_path = builder_to_string(builder);
-		parts = path_parse(file_path);
+			if(params.extension->char_count > 0)
+			{
+				builder_append(&builder, T("."));
+				builder_append(&builder, params.extension);
+			}
+
+			file_path = builder_to_string(builder);
+			parts = path_parse(file_path);
+		}
 
 		if(file_path->code_count > MAX_PATH_COUNT)
 		{
-			file_path = filename;
+			builder_clear(builder);
+			builder_append_path(&builder, params.fallback_path);
+			builder_append_path(&builder, filename);
+
+			if(params.extension->char_count > 0)
+			{
+				builder_append(&builder, T("."));
+				builder_append(&builder, params.extension);
+			}
+
+			file_path = builder_to_string(builder);
 			parts = path_parse(file_path);
 		}
 	}
 
 	int collisions = 0;
-	file_success = file_copy_try(from_path, file_path);
+	#ifdef WCE_DEBUG
+		copy_success = (exporter->empty_copy) ? (file_empty_create(file_path)) : (file_copy_try(params.from_path, file_path));
+	#else
+		copy_success = file_copy_try(params.from_path, file_path);
+	#endif
 	#define COLLISION() ( GetLastError() == ERROR_FILE_EXISTS || (GetLastError() == ERROR_ACCESS_DENIED && path_is_directory(file_path)) )
 
-	while(!file_success && COLLISION())
+	while(!copy_success && COLLISION())
 	{
 		collisions += 1;
 
@@ -335,15 +410,19 @@ static bool exporter_copy(Exporter* exporter, String* from_path, String* to_path
 		builder_append(&builder, parts.extension);
 
 		file_path = builder_to_string(builder);
-		file_success = file_copy_try(from_path, file_path);
+		#ifdef WCE_DEBUG
+			copy_success = (exporter->empty_copy) ? (file_empty_create(file_path)) : (file_copy_try(params.from_path, file_path));
+		#else
+			copy_success = file_copy_try(params.from_path, file_path);
+		#endif
 	}
 
-	if(file_success) *final_path = file_path;
-	else log_error("Failed to copy '%s' to '%s' with the error: %s", from_path->data, file_path->data, last_error_message());
+	if(copy_success) *final_path = file_path;
+	else log_error("Failed to copy '%s' to '%s' with the error: %s", params.from_path->data, file_path->data, last_error_message());
 
 	#undef COLLISION
 
-	return file_success;
+	return copy_success;
 }
 
 void exporter_next(Exporter* exporter, Export_Params params)
@@ -352,12 +431,16 @@ void exporter_next(Exporter* exporter, Export_Params params)
 
 	ASSERT(params.row != NULL, "Missing CSV row");
 
+	ASSERT(!map_has(params.row, CSV_DECOMPRESSED), "Set Decompressed Label column");
+	ASSERT(CSV_HAS_NOT(CSV_EXPORTED), "Missing or set Exported column");
 	ASSERT(CSV_HAS_NOT(CSV_OUTPUT_PATH), "Missing or set Output Path column");
 	ASSERT(CSV_HAS_NOT(CSV_OUTPUT_SIZE), "Missing or set Output Size column");
 	ASSERT(CSV_HAS_NOT(CSV_MAJOR_FILE_LABEL), "Missing or set Major File Label column");
 	ASSERT(CSV_HAS_NOT(CSV_MINOR_FILE_LABEL), "Missing or set Minor File Label column");
 	ASSERT(!map_has(params.row, CSV_MAJOR_URL_LABEL), "Set Major URL Label column");
 	ASSERT(!map_has(params.row, CSV_MINOR_URL_LABEL), "Set Minor URL Label column");
+	ASSERT(!map_has(params.row, CSV_MAJOR_ORIGIN_LABEL), "Set Major Origin Label column");
+	ASSERT(!map_has(params.row, CSV_MINOR_ORIGIN_LABEL), "Set Minor Origin Label column");
 	ASSERT(CSV_HAS_NOT(CSV_SHA_256), "Missing or set SHA-256 column");
 
 	if(params.data_path == NULL)
@@ -384,26 +467,30 @@ void exporter_next(Exporter* exporter, Export_Params params)
 
 	ASSERT(filename != NULL, "Missing filename");
 
+	{
+		if(CSV_HAS_NOT(CSV_FILENAME)) map_put(&params.row, CSV_FILENAME, filename);
+		if(CSV_HAS_NOT(CSV_EXTENSION)) map_put(&params.row, CSV_EXTENSION, string_lower(path_extension(filename)));
+	}
+
 	if(filename->char_count == 0)
 	{
 		filename = exporter_filename(exporter);
 	}
 
-	String* extension = string_lower(path_extension(filename));
-
 	{
 		exporter->current_found += 1;
 		exporter->total_found += 1;
-		console_progress("%s: %s (%d)", exporter->current_long->data, filename->data, exporter->current_found);
+
+		String_View short_filename = string_slice(filename, 0, 50);
+		console_progress("%s [%04d]: %.*s", exporter->current_long->data, exporter->current_found, short_filename.code_count, short_filename.data);
 	}
 
-	{
-		if(CSV_HAS_NOT(CSV_FILENAME)) map_put(&params.row, CSV_FILENAME, filename);
-		if(CSV_HAS_NOT(CSV_FILE_EXTENSION)) map_put(&params.row, CSV_FILE_EXTENSION, extension);
-	}
+	Url origin = {};
+	if(params.origin != NULL) origin = url_parse(params.origin);
 
 	{
 		if(params.url != NULL && CSV_HAS_NOT(CSV_URL)) map_put(&params.row, CSV_URL, params.url);
+		if(params.origin != NULL && CSV_HAS_NOT(CSV_ORIGIN)) map_put(&params.row, CSV_ORIGIN, params.origin);
 	}
 
 	{
@@ -416,6 +503,32 @@ void exporter_next(Exporter* exporter, Export_Params params)
 	}
 
 	{
+		if(params.http_headers != NULL)
+		{
+			#define HTTP_HEADER_PUT(column, key) \
+				do \
+				{ \
+					if(CSV_HAS_NOT(column)) \
+					{ \
+						String* value = string_from_view(map_get_or(params.http_headers, T(key), EMPTY_VIEW)); \
+						map_put(&params.row, column, value); \
+					} \
+				} while(false)
+
+			HTTP_HEADER_PUT(CSV_RESPONSE, "");
+			HTTP_HEADER_PUT(CSV_SERVER, "server");
+			HTTP_HEADER_PUT(CSV_CACHE_CONTROL, "cache-control");
+			HTTP_HEADER_PUT(CSV_PRAGMA, "pragma");
+			HTTP_HEADER_PUT(CSV_CONTENT_TYPE, "content-type");
+			HTTP_HEADER_PUT(CSV_CONTENT_LENGTH, "content-length");
+			HTTP_HEADER_PUT(CSV_CONTENT_RANGE, "content-range");
+			HTTP_HEADER_PUT(CSV_CONTENT_ENCODING, "content-encoding");
+
+			#undef HTTP_HEADER_PUT
+		}
+	}
+
+	{
 		if(CSV_HAS_NOT(CSV_INPUT_PATH)) map_put(&params.row, CSV_INPUT_PATH, path_absolute(params.data_path));
 
 		u64 size = 0;
@@ -423,22 +536,65 @@ void exporter_next(Exporter* exporter, Export_Params params)
 		{
 			map_put(&params.row, CSV_INPUT_SIZE, string_from_num(size));
 		}
+
+		{
+			bool found = path_is_file(params.data_path);
+			if(CSV_HAS_NOT(CSV_FOUND)) map_put(&params.row, CSV_FOUND, exporter_yes_or_no(found));
+		}
+	}
+
+	File_Writer decompress_writer = {};
+
+	{
+		bool decompressed = false;
+
+		String_View encoding_view = {};
+		if(exporter->decompress && params.http_headers != NULL && map_get(params.http_headers, T("content-encoding"), &encoding_view) && !file_is_empty(params.data_path))
+		{
+			if(temporary_file_begin(&decompress_writer))
+			{
+				String* encoding = string_from_view(encoding_view);
+				if(decompress_from_content_encoding(params.data_path, encoding, &decompress_writer, TEMPORARY))
+				{
+					decompressed = true;
+					params.data_path = decompress_writer.path;
+				}
+				else
+				{
+					log_error("Failed to decompress '%s'", params.data_path->data);
+				}
+			}
+			else
+			{
+				log_error("Failed to create the temporary file to decompress '%s'", params.data_path->data);
+			}
+		}
+
+		map_put(&params.row, CSV_DECOMPRESSED, exporter_yes_or_no(decompressed));
 	}
 
 	{
-		map_put(&params.row, CSV_SHA_256, string_upper(sha256_file(params.data_path)));
+		map_put(&params.row, CSV_SHA_256, string_upper(sha256_file(params.data_path, TEMPORARY)));
 	}
 
 	{
+		String_View mime_type_view = {};
+		String* mime_type = NULL;
+		if(params.http_headers != NULL && map_get(params.http_headers, T("content-type"), &mime_type_view))
+		{
+			mime_type = string_from_view(mime_type_view);
+		}
+
+		String* extension = string_from_view(path_extension(filename));
+
 		Match_Params match_params = {};
+		match_params.temporary = true;
 		match_params.path = params.data_path;
-		match_params.mime_type = NULL; // @TODO
+		match_params.mime_type = mime_type;
 		match_params.extension = extension;
 		match_params.url = url;
 
 		Label file_label = {};
-		Label url_label = {};
-
 		bool file_match = label_file_match(exporter, match_params, &file_label);
 		if(file_match)
 		{
@@ -446,11 +602,20 @@ void exporter_next(Exporter* exporter, Export_Params params)
 			map_put(&params.row, CSV_MINOR_FILE_LABEL, file_label.minor_name);
 		}
 
+		Label url_label = {};
 		bool url_match = params.url != NULL && label_url_match(exporter, match_params, &url_label);
 		if(url_match)
 		{
 			map_put(&params.row, CSV_MAJOR_URL_LABEL, url_label.major_name);
 			map_put(&params.row, CSV_MINOR_URL_LABEL, url_label.minor_name);
+		}
+
+		Label origin_label = {};
+		match_params.url = origin;
+		if(params.origin != NULL && label_url_match(exporter, match_params, &origin_label))
+		{
+			map_put(&params.row, CSV_MAJOR_ORIGIN_LABEL, origin_label.major_name);
+			map_put(&params.row, CSV_MINOR_ORIGIN_LABEL, origin_label.minor_name);
 		}
 
 		bool filter = true;
@@ -487,6 +652,8 @@ void exporter_next(Exporter* exporter, Export_Params params)
 			exporter->total_excluded += 1;
 		}
 
+		bool exported = false;
+
 		if(exporter->copy_files && filter)
 		{
 			String_Builder* builder = builder_create(MAX_PATH_COUNT);
@@ -494,38 +661,53 @@ void exporter_next(Exporter* exporter, Export_Params params)
 			builder_append_path(&builder, exporter->current_output);
 			if(params.subdirectory != NULL) builder_append_path(&builder, params.subdirectory);
 
+			String* fallback_path = builder_to_string(builder);
+
+			if(exporter->group_origin && params.origin != NULL)
+			{
+				builder_append_path(&builder, origin.host);
+			}
+
 			if(params.url != NULL)
 			{
-				builder_append_path(&builder, url.path);
-			}
-			else
-			{
-				builder_append_path(&builder, filename);
+				builder_append_path(&builder, url.host);
+				builder_append_path(&builder, path_parent(url.path));
 			}
 
+			builder_append_path(&builder, filename);
+
+			// Note that making the path safe can truncate the filename and remove the extension.
 			String* to_path = path_safe(builder_to_string(builder));
 
-			String_View extension = path_extension(to_path);
-			if(extension.char_count == 0)
+			if(extension->char_count == 0)
 			{
 				if(file_label.default_extension != NULL)
 				{
+					extension = file_label.default_extension;
 					builder_append(&builder, T("."));
-					builder_append(&builder, file_label.default_extension);
+					builder_append(&builder, extension);
 					to_path = path_safe(builder_terminate(&builder));
 				}
 				else if(file_label.extensions != NULL && file_label.extensions->count == 1)
 				{
+					extension = file_label.extensions->data[0];
 					builder_append(&builder, T("."));
-					builder_append(&builder, file_label.extensions->data[0]);
+					builder_append(&builder, extension);
 					to_path = path_safe(builder_terminate(&builder));
 				}
 			}
 
+			Copy_Params copy_params = {};
+			copy_params.from_path = params.data_path;
+			copy_params.to_path = to_path;
+			copy_params.fallback_path = fallback_path;
+			copy_params.extension = extension;
+
 			String* final_path = NULL;
 
-			if(exporter_copy(exporter, params.data_path, to_path, &final_path))
+			if(exporter_copy(exporter, copy_params, &final_path))
 			{
+				exported = true;
 				exporter->current_exported += 1;
 				exporter->total_exported += 1;
 
@@ -540,11 +722,15 @@ void exporter_next(Exporter* exporter, Export_Params params)
 			}
 		}
 
+		map_put(&params.row, CSV_EXPORTED, exporter_yes_or_no(exported));
+
 		if(exporter->create_csvs && exporter->current_csv.created && filter)
 		{
 			csv_next(&exporter->current_csv, params.row);
 		}
 	}
+
+	if(decompress_writer.opened) temporary_file_end(&decompress_writer);
 
 	arena_clear(context.current_arena);
 
@@ -557,16 +743,17 @@ void exporter_main(Exporter* exporter)
 
 	report_begin(exporter);
 
-	#define SINGLE_EXPORT(flag, function) \
+	#define SINGLE_EXPORT(cache_flag, export_function) \
 		do \
 		{ \
-			if(single.flags & flag) \
+			if(single.flag & cache_flag) \
 			{ \
-				exporter_begin(exporter, flag); \
+				exporter_begin(exporter, cache_flag); \
 				exporter->current_batch = false; \
+				ZeroMemory(&exporter->current_key_paths, sizeof(exporter->current_key_paths)); \
 				console_info("%s (Single): '%s'", exporter->current_long->data, single.path->data); \
 				log_info("%s (Single): '%s'", exporter->current_long->data, single.path->data); \
-				function(exporter, single.path); \
+				export_function(exporter, single.path); \
 				exporter_end(exporter); \
 			} \
 		} while(false);
@@ -574,19 +761,21 @@ void exporter_main(Exporter* exporter)
 	for(int i = 0; i < exporter->single_paths->count; i += 1)
 	{
 		Single_Path single = exporter->single_paths->data[i];
+		ASSERT(flag_has_one(single.flag), "More than one single flag set");
+		SINGLE_EXPORT(CACHE_MOZILLA, mozilla_single_export);
 		SINGLE_EXPORT(CACHE_SHOCKWAVE, shockwave_single_export);
 	}
 
 	#undef SINGLE_EXPORT
 
-	#define BATCH_EXPORT(flag, function) \
+	#define BATCH_EXPORT(cache_flag, export_function) \
 		do \
 		{ \
-			if(exporter->cache_flags & flag) \
+			if(exporter->cache_flags & cache_flag) \
 			{ \
-				exporter_begin(exporter, flag, key_paths.name); \
+				exporter_begin(exporter, cache_flag, key_paths.name); \
 				exporter->current_batch = true; \
-				exporter->current_profile = key_paths.name; \
+				exporter->current_key_paths = key_paths; \
 				exporter->filename_count = 0; \
 				if(key_paths.name->char_count != 0) \
 				{ \
@@ -598,7 +787,7 @@ void exporter_main(Exporter* exporter)
 					console_info("%s (Default)", exporter->current_long->data); \
 					log_info("%s (Default)", exporter->current_long->data); \
 				} \
-				function(exporter, key_paths); \
+				export_function(exporter, key_paths); \
 				exporter_end(exporter); \
 			} \
 		} while(false);
@@ -617,6 +806,7 @@ void exporter_main(Exporter* exporter)
 		log_info("LocalLow AppData: '%s'", key_paths.local_low_appdata->data);
 		log_info("WinINet: '%s'", key_paths.wininet->data);
 
+		BATCH_EXPORT(CACHE_MOZILLA, mozilla_batch_export);
 		BATCH_EXPORT(CACHE_SHOCKWAVE, shockwave_batch_export);
 	}
 
@@ -664,5 +854,16 @@ void exporter_tests(void)
 
 		success = cache_flags_from_names(T(""), &flags);
 		TEST(success, false);
+	}
+
+	{
+		Exporter exporter = {};
+		exporter.current_batch = true;
+
+		exporter.current_key_paths.drive = CSTR("C:\\OldDrive");
+		TEST(exporter_path_localize(&exporter, CSTR("C:\\Path\\file.ext")), T("C:\\OldDrive\\Path\\file.ext"));
+
+		exporter.current_key_paths.drive = CSTR("D:\\");
+		TEST(exporter_path_localize(&exporter, CSTR("C:\\Path\\file.ext")), T("D:\\Path\\file.ext"));
 	}
 }

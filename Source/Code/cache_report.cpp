@@ -42,6 +42,24 @@ void report_end(Exporter* exporter)
 	#endif
 }
 
+Report_Params report_save(Exporter* exporter)
+{
+	Report_Params save = {};
+	save.found = exporter->total_found;
+	save.exported = exporter->total_exported;
+	save.excluded = exporter->total_excluded;
+	return save;
+}
+
+Report_Params report_update(Exporter* exporter, Report_Params save)
+{
+	Report_Params params = {};
+	params.found = exporter->total_found - save.found;
+	params.exported = exporter->total_exported - save.exported;
+	params.excluded = exporter->total_excluded - save.excluded;
+	return params;
+}
+
 void report_next(Exporter* exporter, Report_Params params)
 {
 	ASSERT(exporter->current_long != NULL, "Missing current long");
@@ -53,7 +71,7 @@ void report_next(Exporter* exporter, Report_Params params)
 
 		map_put(&row, CSV_FORMAT, exporter->current_long);
 		map_put(&row, CSV_MODE, (exporter->current_batch) ? (CSTR("Batch")) : (CSTR("Single")));
-		map_put(&row, CSV_PROFILE, exporter->current_profile);
+		map_put(&row, CSV_PROFILE, exporter->current_key_paths.name);
 		map_put(&row, CSV_INPUT_PATH, path_absolute(params.path));
 		map_put(&row, CSV_OUTPUT_PATH, path_absolute(exporter->current_output));
 		map_put(&row, CSV_FOUND, string_from_num(params.found));

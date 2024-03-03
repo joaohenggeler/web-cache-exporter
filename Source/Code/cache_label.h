@@ -53,6 +53,7 @@ struct Label
 
 struct Match_Params
 {
+	bool temporary;
 	String* path;
 	String* mime_type;
 	String* extension;
@@ -60,6 +61,7 @@ struct Match_Params
 };
 
 void label_load_all(Exporter* exporter);
+void label_filter_check(Exporter* exporter);
 bool label_file_match(Exporter* exporter, Match_Params params, Label* result);
 bool label_url_match(Exporter* exporter, Match_Params params, Label* result);
 

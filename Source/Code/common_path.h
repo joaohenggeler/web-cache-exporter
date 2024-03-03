@@ -10,6 +10,8 @@ extern String* NO_PATH;
 
 bool path_is_file(String* path);
 bool path_is_directory(String* path);
+bool path_has_file(String* path, const TCHAR* name);
+bool path_has_directory(String* path, const TCHAR* name);
 bool path_refers_to_same_object(String* a, String* b);
 Array<String*>* path_unique_directories(Array<String*>* paths);
 
@@ -28,6 +30,11 @@ String_View path_stem(String* path);
 String_View path_extension(String* path);
 bool path_has_extension(String* path, const TCHAR* extension);
 
+String_View path_component(String* path, int index);
+String_View path_component_end(String* path, int index);
+
+bool path_is_relative(String* path);
+bool path_is_absolute(String* path);
 String* path_absolute(String* path);
 String* path_safe(String* path);
 
@@ -35,6 +42,24 @@ extern const GUID KFID_LOCAL_LOW_APPDATA;
 
 bool path_from_csidl(int csidl, String** path);
 bool path_from_kfid(const GUID & kfid, String** path);
+
+template<typename String_Type_1, typename String_Type_2>
+bool path_is_equal(String_Type_1 a, String_Type_2 b)
+{
+	return string_is_equal(a, b, IGNORE_CASE);
+}
+
+template<typename String_Type_1, typename String_Type_2>
+bool path_begins_with(String_Type_1 a, String_Type_2 b)
+{
+	return string_begins_with(a, b, IGNORE_CASE);
+}
+
+template<typename String_Type_1, typename String_Type_2>
+bool path_ends_with(String_Type_1 a, String_Type_2 b)
+{
+	return string_ends_with(a, b, IGNORE_CASE);
+}
 
 struct Walk_Node
 {

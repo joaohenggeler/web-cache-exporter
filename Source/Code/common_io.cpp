@@ -88,6 +88,8 @@ bool file_size_get(String* path, u64* size)
 	return success;
 }
 
+const bool TEMPORARY = true;
+
 bool file_read_begin(File_Reader* reader, String* path)
 {
 	reader->path = path;
@@ -157,8 +159,8 @@ bool file_read_next(File_Reader* reader)
 		if(windows_is_9x())
 		{
 			// In Windows 9x: using overlapped IO results in ERROR_INVALID_PARAMETER.
-			LONG high_ = high;
-			low = SetFilePointer(reader->_handle, low, &high_, FILE_BEGIN);
+			LONG long_high = high;
+			low = SetFilePointer(reader->_handle, low, &long_high, FILE_BEGIN);
 			success = !( (low == 0xFFFFFFFF) && (GetLastError() != NO_ERROR) );
 
 			// Since Windows 7: lpNumberOfBytesRead cannot be NULL.
@@ -263,12 +265,13 @@ bool file_read_all(String* path, File* file, bool temporary)
 	return success;
 }
 
-bool file_read_first(String* path, void* buffer, size_t size, bool temporary)
+bool file_read_chunk(String* path, void* buffer, size_t size, u64 offset, bool temporary)
 {
 	bool success = false;
 
 	File_Reader reader = {};
 	reader.temporary = temporary;
+	reader.offset = offset;
 	reader.capacity = size;
 	reader.data = buffer;
 
@@ -279,6 +282,11 @@ bool file_read_first(String* path, void* buffer, size_t size, bool temporary)
 	}
 
 	return success;
+}
+
+bool file_read_first(String* path, void* buffer, size_t size, bool temporary)
+{
+	return file_read_chunk(path, buffer, size, 0ULL, temporary);
 }
 
 bool file_read_at_most(String* path, void* buffer, size_t size, size_t* bytes_read, bool temporary)
@@ -397,6 +405,15 @@ bool file_write_all(String* path, const void* data, size_t size)
 	return success;
 }
 
+bool file_write_truncate(File_Writer* writer, u64 size)
+{
+	u32 low = 0;
+	u32 high = 0;
+	u64_to_u32s(size, &low, &high);
+	LONG long_high = high;
+	return (SetFilePointer(writer->_handle, low, &long_high, FILE_BEGIN) != INVALID_SET_FILE_POINTER) && (SetEndOfFile(writer->_handle) != FALSE);
+}
+
 bool temporary_file_begin(File_Writer* writer)
 {
 	if(!context.has_temporary) return false;
@@ -512,17 +529,20 @@ bool file_is_empty(String* path)
 	return file_size_get(path, &size) && size == 0;
 }
 
-bool empty_file_create(String* path)
+bool file_empty_create(String* path)
 {
+	// @GetLastError: see exporter_copy.
 	HANDLE handle = handle_create(path, 0, 0, CREATE_NEW, FILE_ATTRIBUTE_NORMAL);
+	u32 error = GetLastError();
 	bool success = (handle != INVALID_HANDLE_VALUE);
-	if(!success) log_error("Failed to create '%s' with the error: %s", path->data, last_error_message());
 	handle_close(&handle);
+	if(!success) SetLastError(error);
 	return success;
 }
 
 bool file_copy_try(String* from_path, String* to_path)
 {
+	// @GetLastError: see exporter_copy.
 	return CopyFile(from_path->data, to_path->data, TRUE) != FALSE;
 }
 
@@ -764,6 +784,13 @@ void io_tests(void)
 
 	{
 		char buffer[3] = "";
+		bool success = file_read_chunk(file_path, buffer, sizeof(buffer), 16ULL);
+		TEST(success, true);
+		TEST(memory_is_equal("fox", buffer, sizeof(buffer)), true);
+	}
+
+	{
+		char buffer[3] = "";
 		bool success = file_read_first(file_path, buffer, sizeof(buffer));
 		TEST(success, true);
 		TEST(memory_is_equal("The", buffer, sizeof(buffer)), true);
@@ -824,6 +851,13 @@ void io_tests(void)
 
 			{
 				char buffer[3] = "";
+				bool success = file_read_chunk(writer.path, buffer, sizeof(buffer), 16ULL, writer.temporary);
+				TEST(success, true);
+				TEST(memory_is_equal("fox", buffer, sizeof(buffer)), true);
+			}
+
+			{
+				char buffer[3] = "";
 				bool success = file_read_first(writer.path, buffer, sizeof(buffer), writer.temporary);
 				TEST(success, true);
 				TEST(memory_is_equal("The", buffer, sizeof(buffer)), true);
@@ -848,6 +882,19 @@ void io_tests(void)
 				}
 
 				TEST(file.opened, true);
+			}
+
+			{
+				bool success = false;
+
+				success = file_write_truncate(&writer, 3);
+				TEST(success, true);
+
+				File file = {};
+				success = file_read_all(writer.path, &file, writer.temporary);
+				TEST(success, true);
+				TEST(file.size, (size_t) 3);
+				TEST(memory_is_equal("The", file.data, file.size), true);
 			}
 		}
 

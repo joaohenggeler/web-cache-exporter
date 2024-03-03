@@ -103,6 +103,12 @@ void array_tests(void)
 		TEST(found, true);
 		TEST(value, 55);
 
+		Array<int>* other = array_create<int>(0);
+		for(int i = 0; i < 5; i += 1) array_add(&other, i);
+		array_merge(&array, other);
+		TEST(array->count, 9);
+		TEST(other->count, 5);
+
 		array_truncate(array, 2);
 		TEST(array->count, 2);
 

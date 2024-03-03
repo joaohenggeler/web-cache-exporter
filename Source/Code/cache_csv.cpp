@@ -4,7 +4,7 @@
 static const TCHAR* CSV_COLUMNS[] =
 {
 	T("Filename"),
-	T("File Extension"),
+	T("Extension"),
 
 	T("URL"),
 	T("Origin"),
@@ -15,7 +15,7 @@ static const TCHAR* CSV_COLUMNS[] =
 	T("Last Access Time"),
 	T("Expiry Time"),
 
-	T("Access Time"),
+	T("Access Count"),
 
 	T("Response"),
 	T("Server"),
@@ -26,9 +26,16 @@ static const TCHAR* CSV_COLUMNS[] =
 	T("Content Range"),
 	T("Content Encoding"),
 
+	T("Browser"),
+	T("Profile"),
+	T("Version"),
+
+	T("Found"),
 	T("Input Path"),
 	T("Input Size"),
-	T("Missing"),
+
+	T("Decompressed"),
+	T("Exported"),
 	T("Output Path"),
 	T("Output Size"),
 
@@ -36,15 +43,14 @@ static const TCHAR* CSV_COLUMNS[] =
 	T("Minor File Label"),
 	T("Major URL Label"),
 	T("Minor URL Label"),
+	T("Major Origin Label"),
+	T("Minor Origin Label"),
 
 	T("SHA-256"),
 
 	// Report
 	T("Format"),
 	T("Mode"),
-	T("Profile"),
-	T("Found"),
-	T("Exported"),
 	T("Excluded"),
 
 	// Shockwave

@@ -4,6 +4,7 @@
 bool batch_load(Exporter* exporter)
 {
 	ASSERT(exporter->batch_path != NULL, "Missing batch path");
+	ASSERT(exporter->key_paths != NULL, "Missing key paths");
 
 	bool success = true;
 	String* content = NULL;
@@ -38,7 +39,7 @@ bool batch_load(Exporter* exporter)
 				{
 					is_profile = false;
 
-					#define KEY_PATH_CHECK(member, directive) \
+					#define CHECK(member, directive) \
 						do \
 						{ \
 							if(key_paths.member == NULL) \
@@ -49,16 +50,16 @@ bool batch_load(Exporter* exporter)
 							} \
 						} while(false)
 
-					KEY_PATH_CHECK(drive, "DRIVE");
-					KEY_PATH_CHECK(windows, "WINDOWS");
-					KEY_PATH_CHECK(temporary, "TEMPORARY");
-					KEY_PATH_CHECK(user, "USER");
-					KEY_PATH_CHECK(appdata, "APPDATA");
-					KEY_PATH_CHECK(local_appdata, "LOCAL_APPDATA");
-					KEY_PATH_CHECK(local_low_appdata, "LOCAL_LOW_APPDATA");
-					KEY_PATH_CHECK(wininet, "INTERNET_CACHE");
+					CHECK(drive, "DRIVE");
+					CHECK(windows, "WINDOWS");
+					CHECK(temporary, "TEMPORARY");
+					CHECK(user, "USER");
+					CHECK(appdata, "APPDATA");
+					CHECK(local_appdata, "LOCAL_APPDATA");
+					CHECK(local_low_appdata, "LOCAL_LOW_APPDATA");
+					CHECK(wininet, "INTERNET_CACHE");
 
-					#undef KEY_PATH_CHECK
+					#undef CHECK
 
 					if(success)
 					{
@@ -216,6 +217,44 @@ bool batch_load(Exporter* exporter)
 	return success;
 }
 
+bool batch_check(Exporter* exporter)
+{
+	ASSERT(exporter->batch_path != NULL, "Missing batch path");
+	ASSERT(exporter->key_paths != NULL, "Missing key paths");
+
+	bool success = true;
+
+	String_View filename = path_name(exporter->batch_path);
+
+	#define CHECK(member, directive) \
+		do \
+		{ \
+			if(!string_is_equal(key_paths.member, NO_PATH) && !path_is_directory(key_paths.member)) \
+			{ \
+				console_error("The directory '%s' defined in directive '%s' in profile '%s' in '%.*s' does not exist", key_paths.member->data, T(directive), key_paths.name->data, filename.code_count, filename.data); \
+				log_error("The directory '%s' defined in directive '%s' in profile '%s' in '%s' does not exist", key_paths.member->data, T(directive), key_paths.name->data, exporter->batch_path->data); \
+				success = false; \
+			} \
+		} while(false)
+
+	for(int i = 0; i < exporter->key_paths->count; i += 1)
+	{
+		Key_Paths key_paths = exporter->key_paths->data[i];
+		CHECK(drive, "DRIVE");
+		CHECK(windows, "WINDOWS");
+		CHECK(temporary, "TEMPORARY");
+		CHECK(user, "USER");
+		CHECK(appdata, "APPDATA");
+		CHECK(local_appdata, "LOCAL_APPDATA");
+		CHECK(local_low_appdata, "LOCAL_LOW_APPDATA");
+		CHECK(wininet, "INTERNET_CACHE");
+	}
+
+	#undef CHECK
+
+	return success;
+}
+
 void batch_tests(void)
 {
 	console_info("Running batch tests");
@@ -256,7 +295,7 @@ void batch_tests(void)
 		for(int i = 0; i < exporter.single_paths->count; i += 1)
 		{
 			Single_Path single = exporter.single_paths->data[i];
-			TEST(single.flags, expected_flags[i]);
+			TEST(single.flag, expected_flags[i]);
 			TEST(single.path, expected_paths[i]);
 		}
 
@@ -270,7 +309,7 @@ void batch_tests(void)
 		TEST(key_paths.user, T("D:\\Documents and Settings\\<User>"));
 		TEST(key_paths.appdata, T("D:\\Documents and Settings\\<User>\\Application Data"));
 		TEST(key_paths.local_appdata, T("D:\\Documents and Settings\\<User>\\Local Settings\\Application Data"));
-		TEST(key_paths.local_low_appdata, T("<None>"));
+		TEST(key_paths.local_low_appdata, NO_PATH);
 		TEST(key_paths.wininet, T("D:\\Documents and Settings\\<User>\\Local Settings\\Temporary Internet Files"));
 
 		BATCH_LOAD("Tests\\Batch\\bad_directive.txt");

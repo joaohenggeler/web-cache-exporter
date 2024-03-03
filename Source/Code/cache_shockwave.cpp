@@ -3,11 +3,13 @@
 
 static Csv_Column _SHOCKWAVE_COLUMNS[] =
 {
-	CSV_FILENAME, CSV_FILE_EXTENSION,
+	CSV_FILENAME, CSV_EXTENSION,
 	CSV_CREATION_TIME, CSV_LAST_WRITE_TIME, CSV_LAST_ACCESS_TIME,
 	CSV_DIRECTOR_FORMAT, CSV_XTRA_DESCRIPTION, CSV_XTRA_VERSION, CSV_XTRA_COPYRIGHT,
-	CSV_INPUT_PATH, CSV_INPUT_SIZE, CSV_OUTPUT_PATH, CSV_OUTPUT_SIZE,
-	CSV_MAJOR_FILE_LABEL, CSV_MINOR_FILE_LABEL, CSV_SHA_256,
+	CSV_INPUT_PATH, CSV_INPUT_SIZE,
+	CSV_EXPORTED, CSV_OUTPUT_PATH, CSV_OUTPUT_SIZE,
+	CSV_MAJOR_FILE_LABEL, CSV_MINOR_FILE_LABEL,
+	CSV_SHA_256,
 };
 
 Array_View<Csv_Column> SHOCKWAVE_COLUMNS = ARRAY_VIEW_FROM_C(_SHOCKWAVE_COLUMNS);
@@ -21,7 +23,7 @@ static Array<String*>* shockwave_paths(Key_Paths key_paths)
 	int vendor_count = _countof(vendors);
 
 	String_Builder* builder = builder_create(MAX_PATH_COUNT);
-	Array<String*>* array = array_create<String*>(base_count * vendor_count);
+	Array<String*>* result = array_create<String*>(base_count * vendor_count);
 
 	for(int i = 0; i < base_count; i += 1)
 	{
@@ -45,13 +47,13 @@ static Array<String*>* shockwave_paths(Key_Paths key_paths)
 				Walk_Info info = {};
 				while(walk_next(&state, &info))
 				{
-					array_add(&array, info.path);
+					array_add(&result, info.path);
 				}
 			}
 		}
 	}
 
-	return array;
+	return path_unique_directories(result);
 }
 
 static String* shockwave_director_format(String* path)
@@ -182,59 +184,49 @@ static void shockwave_cache_export(Exporter* exporter, String* path, bool mp_cac
 {
 	log_info("Exporting from '%s'", path->data);
 
-	int total_found = exporter->total_found;
-	int total_exported = exporter->total_exported;
-	int total_excluded = exporter->total_excluded;
-
 	ARENA_SAVEPOINT()
 	{
-		Walk_State state = {};
-		state.base_path = path;
-		state.query = (mp_cache) ? (T("mp*")) : (T("*"));
-		state.files = true;
-		state.max_depth = (mp_cache) ? (0) : (-1);
-		state.copy = true;
-
-		WALK_DEFER(&state)
+		REPORT_DEFER(exporter, path)
 		{
-			Walk_Info info = {};
-			while(walk_next(&state, &info))
+			Walk_State state = {};
+			state.base_path = path;
+			state.query = (mp_cache) ? (T("mp*")) : (T("*"));
+			state.files = true;
+			state.max_depth = (mp_cache) ? (0) : (-1);
+			state.copy = true;
+
+			WALK_DEFER(&state)
 			{
-				Map<Csv_Column, String*>* row = map_create<Csv_Column, String*>(SHOCKWAVE_COLUMNS.count);
-
+				Walk_Info info = {};
+				while(walk_next(&state, &info))
 				{
-					String* format = shockwave_director_format(info.path);
-					map_put(&row, CSV_DIRECTOR_FORMAT, format);
-				}
+					Map<Csv_Column, String*>* row = map_create<Csv_Column, String*>(SHOCKWAVE_COLUMNS.count);
 
-				{
-					File_Info file_info = file_info_get(info.path);
-					map_put(&row, CSV_XTRA_DESCRIPTION, file_info.file_description);
-					map_put(&row, CSV_XTRA_VERSION, file_info.product_version);
-					map_put(&row, CSV_XTRA_COPYRIGHT, file_info.legal_copyright);
-				}
+					{
+						String* format = shockwave_director_format(info.path);
+						map_put(&row, CSV_DIRECTOR_FORMAT, format);
+					}
 
-				{
+					{
+						File_Info file_info = file_info_get(info.path);
+						map_put(&row, CSV_XTRA_DESCRIPTION, file_info.file_description);
+						map_put(&row, CSV_XTRA_VERSION, file_info.product_version);
+						map_put(&row, CSV_XTRA_COPYRIGHT, file_info.legal_copyright);
+					}
+
 					map_put(&row, CSV_INPUT_PATH, info.path);
+
+					bool xtra = path_has_extension(info.path, T("x32"));
+
+					Export_Params params = {};
+					params.info = &info;
+					params.subdirectory = (xtra) ? (CSTR("Xtras")) : (CSTR("Cache"));
+					params.row = row;
+					exporter_next(exporter, params);
 				}
-
-				bool xtra = path_has_extension(info.path, T("x32"));
-
-				Export_Params params = {};
-				params.info = &info;
-				params.subdirectory = (xtra) ? (CSTR("Xtras")) : (CSTR("Cache"));
-				params.row = row;
-				exporter_next(exporter, params);
 			}
 		}
 	}
-
-	Report_Params params = {};
-	params.path = path;
-	params.found = exporter->total_found - total_found;
-	params.exported = exporter->total_exported - total_exported;
-	params.excluded = exporter->total_excluded - total_excluded;
-	report_next(exporter, params);
 }
 
 static void shockwave_dswmedia_xtras_export(Exporter* exporter, String* path)

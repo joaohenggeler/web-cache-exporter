@@ -70,10 +70,10 @@ void map_tests(void)
 		TEST(found, true);
 		TEST(value, 'A');
 
-		value = map_get_or_default(map, 123, 'B');
+		value = map_get_or(map, 123, 'B');
 		TEST(value, 'A');
 
-		value = map_get_or_default(map, 456, 'B');
+		value = map_get_or(map, 456, 'B');
 		TEST(value, 'B');
 
 		TEST(map_has(map, 123), true);
@@ -97,10 +97,10 @@ void map_tests(void)
 		TEST(found, true);
 		TEST(value, 999);
 
-		value = map_get_or_default(map, CSTR("key"), -1);
+		value = map_get_or(map, CSTR("key"), -1);
 		TEST(value, 999);
 
-		value = map_get_or_default(map, CSTR("wrong"), -1);
+		value = map_get_or(map, CSTR("wrong"), -1);
 		TEST(value, -1);
 
 		TEST(map_has(map, CSTR("key")), true);
@@ -124,10 +124,10 @@ void map_tests(void)
 		TEST(found, true);
 		TEST(value, 999);
 
-		value = map_get_or_default(map, CVIEW("key"), -1);
+		value = map_get_or(map, CVIEW("key"), -1);
 		TEST(value, 999);
 
-		value = map_get_or_default(map, CVIEW("wrong"), -1);
+		value = map_get_or(map, CVIEW("wrong"), -1);
 		TEST(value, -1);
 
 		TEST(map_has(map, CVIEW("key")), true);

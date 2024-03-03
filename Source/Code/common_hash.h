@@ -4,7 +4,7 @@
 #include "common_core.h"
 #include "common_string.h"
 
-String* sha256_file(String* path);
+String* sha256_file(String* path, bool temporary = false);
 
 void hash_tests(void);
 

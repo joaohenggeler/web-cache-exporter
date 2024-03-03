@@ -28,7 +28,7 @@ enum
 
 struct Single_Path
 {
-	u32 flags;
+	u32 flag;
 	String* path;
 };
 
@@ -61,8 +61,14 @@ struct Exporter
 
 	bool copy_files;
 	bool create_csvs;
+	bool decompress;
+	bool group_origin;
 	bool auto_confirm;
 	bool run_tests;
+
+	#ifdef WCE_DEBUG
+		bool empty_copy;
+	#endif
 
 	Array<Single_Path>* single_paths;
 	Array<Key_Paths>* key_paths;
@@ -77,7 +83,7 @@ struct Exporter
 	String* current_long;
 	String* current_output;
 	bool current_batch;
-	String* current_profile;
+	Key_Paths current_key_paths;
 
 	Csv current_csv;
 	Csv report_csv;
@@ -96,8 +102,11 @@ struct Exporter
 struct Export_Params
 {
 	String* data_path;
-	String* url;
 	Walk_Info* info;
+
+	String* url;
+	String* origin;
+	Map<const TCHAR*, String_View>* http_headers;
 
 	String* subdirectory;
 	Map<Csv_Column, String*>* row;
@@ -106,6 +115,7 @@ struct Export_Params
 bool cache_flags_from_names(const TCHAR* ids, u32* flags);
 Key_Paths default_key_paths(void);
 
+String* exporter_path_localize(Exporter* exporter, String* path);
 void exporter_next(Exporter* exporter, Export_Params params);
 void exporter_main(Exporter* exporter);
 

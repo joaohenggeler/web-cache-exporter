@@ -5,6 +5,7 @@
 #include "cache_csv.h"
 #include "cache_exporter.h"
 #include "cache_label.h"
+#include "cache_mozilla.h"
 #include "cache_report.h"
 #include "cache_shockwave.h"
 

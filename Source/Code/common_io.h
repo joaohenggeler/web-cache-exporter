@@ -39,10 +39,13 @@ struct File
 	void* data;
 };
 
+extern const bool TEMPORARY;
+
 bool file_read_begin(File_Reader* reader, String* path);
 void file_read_end(File_Reader* reader);
 bool file_read_next(File_Reader* reader);
 bool file_read_all(String* path, File* file, bool temporary = false);
+bool file_read_chunk(String* path, void* buffer, size_t size, u64 offset, bool temporary = false);
 bool file_read_first(String* path, void* buffer, size_t size, bool temporary = false);
 bool file_read_at_most(String* path, void* buffer, size_t size, size_t* bytes_read, bool temporary = false);
 
@@ -64,6 +67,7 @@ bool file_write_begin(File_Writer* writer, String* path);
 void file_write_end(File_Writer* writer);
 bool file_write_next(File_Writer* writer, const void* data, size_t size);
 bool file_write_all(String* path, const void* data, size_t size);
+bool file_write_truncate(File_Writer* writer, u64 size);
 
 #define FILE_WRITE_DEFER(writer, path) DEFER_IF(file_write_begin(writer, path), file_write_end(writer))
 
@@ -91,8 +95,7 @@ void file_map_end(File_Mapping* file);
 #define FILE_MAP_DEFER(file, path) DEFER_IF(file_map_begin(file, path), file_map_end(file))
 
 bool file_is_empty(String* path);
-bool empty_file_create(String* path);
-
+bool file_empty_create(String* path);
 bool file_copy_try(String* from_path, String* to_path);
 bool file_delete(String* path);
 

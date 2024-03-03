@@ -61,15 +61,27 @@ Arena* context_permanent_arena(void);
 
 #define ARENA_SAVEPOINT() \
 	size_t LINE_VAR(_saved_size_); \
-	DEFER((LINE_VAR(_saved_size_) = arena_save(context.current_arena)), (arena_clear(context.current_arena), arena_restore(context.current_arena, LINE_VAR(_saved_size_))))
+	DEFER \
+	( \
+		(LINE_VAR(_saved_size_) = arena_save(context.current_arena)), \
+		(arena_clear(context.current_arena), arena_restore(context.current_arena, LINE_VAR(_saved_size_))) \
+	)
 
 #define TO_TEMPORARY_ARENA() \
 	Arena* LINE_VAR(_saved_arena_) = context.current_arena; \
-	DEFER((context.current_arena = context_temporary_arena()), (context.current_arena = LINE_VAR(_saved_arena_)))
+	DEFER \
+	( \
+		(context.current_arena = context_temporary_arena()), \
+		(context.current_arena = LINE_VAR(_saved_arena_)) \
+	)
 
 #define TO_PERMANENT_ARENA() \
 	Arena* LINE_VAR(_saved_arena_) = context.current_arena; \
-	DEFER((context.current_arena = context_permanent_arena()), (context.current_arena = LINE_VAR(_saved_arena_)))
+	DEFER \
+	( \
+		(context.current_arena = context_permanent_arena()), \
+		(context.current_arena = LINE_VAR(_saved_arena_)) \
+	)
 
 void context_tests(void);
 

@@ -3,8 +3,7 @@
 
 /*
 	@TODO:
-
-	- mozilla: mozilla_export
+	- mozilla: mozilla_v1_cache_export
 	- exporter: -auto-batch
 */
 
@@ -83,6 +82,7 @@ int _tmain(int argc, TCHAR** argv)
 			batch_tests();
 			label_tests();
 			csv_tests();
+			mozilla_tests();
 			shockwave_tests();
 
 			int passed_count = context.total_test_count - context.failed_test_count;
@@ -165,6 +165,7 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 	{
 		exporter->copy_files = true;
 		exporter->create_csvs = true;
+		exporter->decompress = true;
 
 		for(int i = 0; i < args.count; i += 1)
 		{
@@ -308,6 +309,14 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 			{
 				exporter->copy_files = false;
 			}
+			else if(IS_OPTION(arg, "-nd", "-no-decompress"))
+			{
+				exporter->decompress = false;
+			}
+			else if(IS_OPTION(arg, "-go", "-group-origin"))
+			{
+				exporter->group_origin = true;
+			}
 			else if(IS_OPTION(arg, "-y", "-yes"))
 			{
 				exporter->auto_confirm = true;
@@ -316,6 +325,12 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 			{
 				exporter->run_tests = true;
 			}
+			#ifdef WCE_DEBUG
+			else if(IS_OPTION(arg, "-dec", "-debug-empty-copy"))
+			{
+				exporter->empty_copy = true;
+			}
+			#endif
 			else if(IS_OPTION(arg, "-v", "-version")
 				 || IS_OPTION(arg, "-q", "-quiet")
 				 || IS_OPTION(arg, "-nl", "-no-log")
@@ -337,7 +352,7 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		if(exporter->cache_flags == 0 && !exporter->run_tests)
 		{
 			console_error("Missing the -e option");
-			log_error("Missing the -e option");
+			log_error("Missing -e");
 			success = false;
 			goto error;
 		}
@@ -347,7 +362,7 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		if(exporter->cache_flags != 0 && exporter->run_tests)
 		{
 			console_error("The -e and -rt options cannot be used at the same time");
-			log_error("Passed the -e and -rt options at the same time");
+			log_error("Passed -e and -rt at the same time");
 			success = false;
 			goto error;
 		}
@@ -356,7 +371,7 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		if(context.large_tests && !exporter->run_tests)
 		{
 			console_error("The -lt option requires -rt");
-			log_error("Passed the -lt option without -rt");
+			log_error("Passed -lt without -rt");
 			success = false;
 			goto error;
 		}
@@ -364,7 +379,15 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		if(!exporter->copy_files && !exporter->create_csvs)
 		{
 			console_error("The -fo and -co options cannot be used at the same time");
-			log_error("Passed the -fo and -co options at the same time");
+			log_error("Passed -fo and -co at the same time");
+			success = false;
+			goto error;
+		}
+
+		if(exporter->input_path != NULL && !flag_has_one(exporter->cache_flags))
+		{
+			console_error("The -i option cannot be used when exporting more than one cache format");
+			log_error("Passed -i while -e specifies more than one cache format");
 			success = false;
 			goto error;
 		}
@@ -372,7 +395,7 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		if(exporter->input_path != NULL && exporter->batch_path != NULL)
 		{
 			console_error("The -i and -b options cannot be used at the same time");
-			log_error("Passed the -i and -b options at the same time");
+			log_error("Passed -i and -b at the same time");
 			success = false;
 			goto error;
 		}
@@ -403,13 +426,15 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		else if(exporter->input_path != NULL)
 		{
 			Single_Path single = {};
-			single.flags = exporter->cache_flags;
+			single.flag = exporter->cache_flags;
 			single.path = exporter->input_path;
 			array_add(&exporter->single_paths, single);
 		}
 		else if(exporter->batch_path != NULL)
 		{
 			success = batch_load(exporter);
+			if(success) success = batch_check(exporter);
+			if(!success) goto error;
 		}
 		else
 		{
@@ -421,6 +446,15 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 			exporter->output_path = CSTR("ExportedCache");
 		}
 
+		if(path_refers_to_same_object(exporter->output_path, CSTR(".")))
+		{
+			String_View directory = path_name(exporter->output_path);
+			console_error("The output directory '%.*s' cannot be the current working directory", directory.code_count, directory.data);
+			log_error("The output directory '%s' is the working directory", exporter->output_path->data);
+			success = false;
+			goto error;
+		}
+
 		if(path_is_directory(exporter->output_path))
 		{
 			String_View directory = path_name(exporter->output_path);
@@ -429,7 +463,13 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 			{
 				console_info("Deleting the previous output directory '%.*s'..", directory.code_count, directory.data);
 				log_info("Deleting the previous output directory '%s'", exporter->output_path->data);
-				directory_delete(exporter->output_path);
+				if(!directory_delete(exporter->output_path))
+				{
+					console_error("Failed to delete the previous output directory '%.*s'", directory.code_count, directory.data);
+					log_error("Failed to delete the previous output directory '%s'", exporter->output_path->data);
+					success = false;
+					goto error;
+				}
 			}
 			else
 			{
@@ -446,7 +486,13 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 				{
 					console_info("Deleting the previous output directory '%.*s'..", directory.code_count, directory.data);
 					log_info("Deleting the previous output directory '%s'", exporter->output_path->data);
-					directory_delete(exporter->output_path);
+					if(!directory_delete(exporter->output_path))
+					{
+						console_error("Failed to delete the previous output directory '%.*s'", directory.code_count, directory.data);
+						log_error("Failed to delete the previous output directory '%s'", exporter->output_path->data);
+						success = false;
+						goto error;
+					}
 				}
 				else
 				{
@@ -460,8 +506,8 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 		else if(path_is_file(exporter->output_path))
 		{
 			String_View directory = path_name(exporter->output_path);
-			console_error("The output directory '%.*s' points to a file", directory.code_count, directory.data);
-			log_error("The output directory '%s' points to a file", exporter->output_path->data);
+			console_error("The output directory '%.*s' is already a file", directory.code_count, directory.data);
+			log_error("The output directory '%s' is a file", exporter->output_path->data);
 			success = false;
 			goto error;
 		}
@@ -471,39 +517,8 @@ static bool arguments_parse_2(Array_View<TCHAR*> args, Exporter* exporter)
 			exporter->temporary_directory = CSTR(".temp");
 		}
 
-		{
-			label_load_all(exporter);
-
-			Array<String*>* filters[] = {exporter->positive_filter, exporter->negative_filter};
-
-			for(int i = 0; i < _countof(filters); i += 1)
-			{
-				Array<String*>* filter = filters[i];
-
-				for(int j = 0; filter != NULL && j < filter->count; j += 1)
-				{
-					String* name = filter->data[j];
-
-					bool found = false;
-
-					for(int k = 0; k < exporter->labels->count; k += 1)
-					{
-						Label label = exporter->labels->data[k];
-						if(string_is_equal(label.major_name, name, IGNORE_CASE) || string_is_equal(label.minor_name, name, IGNORE_CASE))
-						{
-							found = true;
-							break;
-						}
-					}
-
-					if(!found)
-					{
-						console_warning("Could not find the filter name '%s' in the loaded labels", name->data);
-						log_warning("Could not find the filter name '%s' in the loaded labels", name->data);
-					}
-				}
-			}
-		}
+		label_load_all(exporter);
+		label_filter_check(exporter);
 
 		exporter->builder = builder_create(MAX_PATH_COUNT);
 

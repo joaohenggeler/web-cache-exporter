@@ -1,8 +1,8 @@
 #include "common.h"
 
-static const bool DECODE_PLUS = true;
+const bool DECODE_PLUS = true;
 
-static String* url_decode(String_View component, bool decode_plus = false)
+String* url_decode(String_View component, bool decode_plus)
 {
 	String_Builder* builder = builder_create(component.code_count);
 
@@ -255,89 +255,34 @@ Map<const TCHAR*, String_View>* http_headers_parse(String* headers)
 	line_state.delimiters = LINE_DELIMITERS;
 
 	String_View line = {};
-	bool first = true;
 
-	while(string_split(&line_state, &line))
+	for(int i = 0; string_split(&line_state, &line); i += 1)
 	{
-		// E.g. "HTTP/1.1 200 OK"
-		if(first)
+		if(i == 0)
 		{
-			first = false;
-			continue;
+			// E.g. "HTTP/1.1 200 OK"
+			map_put(&map, T(""), line);
 		}
-
-		Split_State key_state = {};
-		key_state.view = line;
-		key_state.delimiters = T(":");
-
-		String_View key = {};
-		String_View value = {};
-		if(string_partition(&key_state, &key, &value))
+		else
 		{
-			// E.g. "Content-Type: text/html"
-			const TCHAR* lower_key = string_lower(key)->data;
-			value = string_trim(value);
-			map_put(&map, lower_key, value);
+			Split_State key_state = {};
+			key_state.view = line;
+			key_state.delimiters = T(":");
+
+			String_View key = {};
+			String_View value = {};
+			if(string_partition(&key_state, &key, &value))
+			{
+				// E.g. "Content-Type: text/html"
+				const TCHAR* lower_key = string_lower(key)->data;
+				value = string_trim(value);
+				map_put(&map, lower_key, value);
+			}
 		}
 	}
 
 	return map;
 }
-
-#if 0
-bool http_decompress(String* in_path, String* out_path, String* content_encoding)
-{
-	bool success = false;
-
-	String* current_path = in_path;
-
-	File_Writer writer = {};
-	writer.temporary = true;
-
-	FILE_WRITE_DEFER(out_path, writer)
-	{
-		// E.g. "gzip" or "deflate, gzip"
-		// In the order in which they were applied.
-		Split_State state = {};
-		state.str = content_encoding;
-		state.delimiters = T(", ");
-		state.reverse = true;
-
-		String_View encoding = {};
-		while(string_split(&state, &encoding))
-		{
-			#define IS_ENCODING(str) string_is_equal(encoding, T(str), IGNORE_CASE)
-
-			if(IS_ENCODING("identity"))
-			{
-				continue;
-			}
-			else if(IS_ENCODING("gzip") || IS_ENCODING("x-gzip") || IS_ENCODING("deflate"))
-			{
-				// @TODO
-			}
-			else if(IS_ENCODING("br"))
-			{
-				// @TODO
-			}
-			else if(IS_ENCODING("compress") || IS_ENCODING("x-compress"))
-			{
-				// @TODO
-			}
-			else
-			{
-				success = false;
-			}
-
-			if(!success) break;
-
-			#undef IS_ENCODING
-		}
-	}
-
-	return success;
-}
-#endif
 
 void net_tests(void)
 {
@@ -460,10 +405,14 @@ void net_tests(void)
 								T("Cache-Control: public; max-age=3600");
 
 		Map<const TCHAR*, String_View>* map = http_headers_parse(string_from_c(headers));
-		TEST(map->count, 4);
+		TEST(map->count, 5);
 
 		bool found = false;
 		String_View value = {};
+
+		found = map_get(map, T(""), &value);
+		TEST(found, true);
+		TEST(value, T("HTTP/1.1 200 OK"));
 
 		found = map_get(map, T("content-type"), &value);
 		TEST(found, true);

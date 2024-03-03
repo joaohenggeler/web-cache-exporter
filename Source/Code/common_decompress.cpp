@@ -20,7 +20,7 @@ static void zlib_free(voidpf opaque, voidpf address)
 }
 #pragma warning(pop)
 
-bool zlib_file_decompress(String* path, File_Writer* writer)
+static bool zlib_file_decompress(String* path, File_Writer* writer, bool temporary = false)
 {
 	bool success = false;
 
@@ -37,7 +37,7 @@ bool zlib_file_decompress(String* path, File_Writer* writer)
 
 		const size_t MAGIC_COUNT = 2;
 		u8 magic[MAGIC_COUNT] = {};
-		file_read_first(path, magic, MAGIC_COUNT);
+		file_read_first(path, magic, MAGIC_COUNT, temporary);
 
 		// This assumes 0x78 is the first byte of the Zlib format (DEFLATE with a 32K window).
 		bool is_gzip_or_zlib = memory_is_equal(magic, "\x1F\x8B", MAGIC_COUNT)
@@ -54,6 +54,7 @@ bool zlib_file_decompress(String* path, File_Writer* writer)
 		if(error == Z_OK)
 		{
 			File_Reader reader = {};
+			reader.temporary = temporary;
 			FILE_READ_DEFER(&reader, path)
 			{
 				// Clamp the capacity so we can cast the read and write sizes to Zlib's u32 type.
@@ -120,7 +121,7 @@ static void brotli_free(void* opaque, void* address)
 }
 #pragma warning(pop)
 
-bool brotli_file_decompress(String* path, File_Writer* writer)
+static bool brotli_file_decompress(String* path, File_Writer* writer, bool temporary = false)
 {
 	bool success = false;
 
@@ -137,6 +138,7 @@ bool brotli_file_decompress(String* path, File_Writer* writer)
 		if(state != NULL)
 		{
 			File_Reader reader = {};
+			reader.temporary = temporary;
 			FILE_READ_DEFER(&reader, path)
 			{
 				size_t buffer_size = MAX(reader.capacity, MIN_OUTPUT_SIZE);
@@ -205,7 +207,7 @@ bool brotli_file_decompress(String* path, File_Writer* writer)
 	return success;
 }
 
-bool compress_file_decompress(String* path, File_Writer* writer)
+static bool compress_file_decompress(String* path, File_Writer* writer, bool temporary = false)
 {
 	// Below are the main sources used to learn how to parse the ncompress Unix utility's file format,
 	// and how the Lempel–Ziv–Welch (LZW) compression algorithm works.
@@ -236,10 +238,11 @@ bool compress_file_decompress(String* path, File_Writer* writer)
 	ARENA_SAVEPOINT()
 	{
 		File_Reader reader = {};
+		reader.temporary = temporary;
 
 		const size_t MAGIC_COUNT = 3;
 		u8 magic[MAGIC_COUNT] = {};
-		file_read_first(path, magic, MAGIC_COUNT);
+		file_read_first(path, magic, MAGIC_COUNT, temporary);
 
 		if(!memory_is_equal(magic, "\x1F\x9D", 2))
 		{
@@ -536,58 +539,202 @@ bool compress_file_decompress(String* path, File_Writer* writer)
 	return success;
 }
 
+bool decompress_from_content_encoding(String* path, String* content_encoding, File_Writer* writer, bool temporary)
+{
+	// The Content-Encoding HTTP header contains a list of comma-separated encodings in the order they were applied.
+	//
+	// We only support the main encodings listed here: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
+	// To avoid any confusion, here's a brief description of each one:
+	//
+	// 1. gzip - Gzip file format (RFC 1952) that uses the DEFLATE compression method. Alias: x-gzip.
+	//
+	// 2. deflate - Zlib data format (RFC 1950) that uses the DEFLATE compression method. Despite the name, this is
+	// not supposed to be a raw DEFLATE stream (RFC 1951). Although HTTP 1.1 defines this encoding as the Zlib format,
+	// some servers (e.g. Microsoft) transmitted raw DEFLATE data. As such, we'll try to decompress the data using both
+	// methods when we see this encoding. See: https://zlib.net/zlib_faq.html#faq39
+	//
+	// 3. br - Brotli data format (RFC 7932).
+	//
+	// 4. compress - data compressed using the compress/ncompress Unix utility. Although uncommon nowdays, this format
+	// should be handled since we support older browsers. Alias: x-compress.
+	//
+	// See also:
+	// - "Hypertext Transfer Protocol (HTTP) Parameters": https://www.iana.org/assignments/http-parameters/http-parameters.xml#http-parameters-1
+	// - "Hypertext Transfer Protocol -- HTTP/1.0": https://datatracker.ietf.org/doc/html/rfc1945#section-3.5
+	// - "Hypertext Transfer Protocol -- HTTP/1.1": https://datatracker.ietf.org/doc/html/rfc2616#section-3.5
+
+	bool success = true;
+
+	ARENA_SAVEPOINT()
+	{
+		Split_State state = {};
+		state.str = content_encoding;
+		state.delimiters = T(", ");
+		state.reverse = true;
+
+		Array<String_View>* encodings = string_split_all(&state);
+
+		if(encodings->count == 0)
+		{
+			log_warning("Got empty content encoding");
+
+			File_Reader reader = {};
+			reader.temporary = temporary;
+			FILE_READ_DEFER(&reader, path)
+			{
+				while(file_read_next(&reader))
+				{
+					success = file_write_next(writer, reader.data, reader.size);
+					if(!success) break;
+				}
+			}
+
+			success = success && reader.eof;
+		}
+		else if(encodings->count == 1)
+		{
+			String_View encoding = encodings->data[0];
+
+			if(string_is_equal(encoding, T("gzip"))
+			|| string_is_equal(encoding, T("x-gzip"))
+			|| string_is_equal(encoding, T("deflate")))
+			{
+				success = zlib_file_decompress(path, writer, temporary);
+			}
+			else if(string_is_equal(encoding, T("br")))
+			{
+				success = brotli_file_decompress(path, writer, temporary);
+			}
+			else if(string_is_equal(encoding, T("compress"))
+				 || string_is_equal(encoding, T("x-compress")))
+			{
+				success = compress_file_decompress(path, writer, temporary);
+			}
+			else
+			{
+				log_error("Unsupported encoding '%.*s'", encoding.code_count, encoding.data);
+				success = false;
+			}
+		}
+		else
+		{
+			File_Writer even = {};
+			File_Writer odd = {};
+
+			TEMPORARY_FILE_DEFER(&even)
+			{
+				TEMPORARY_FILE_DEFER(&odd)
+				{
+					String* previous_path = path;
+
+					for(int i = 0; i < encodings->count; i += 1)
+					{
+						File_Writer* current_writer = NULL;
+
+						if(i == encodings->count - 1) current_writer = writer;
+						else if(i % 2 == 0) current_writer = &even;
+						else current_writer = &odd;
+
+						ASSERT(!path_is_equal(previous_path, current_writer->path), "Same input and output paths");
+
+						String_View encoding = encodings->data[i];
+
+						if(string_is_equal(encoding, T("gzip"))
+						|| string_is_equal(encoding, T("x-gzip"))
+						|| string_is_equal(encoding, T("deflate")))
+						{
+							success = zlib_file_decompress(previous_path, current_writer, TEMPORARY);
+						}
+						else if(string_is_equal(encoding, T("br")))
+						{
+							success = brotli_file_decompress(previous_path, current_writer, TEMPORARY);
+						}
+						else if(string_is_equal(encoding, T("compress"))
+							 || string_is_equal(encoding, T("x-compress")))
+						{
+							success = compress_file_decompress(previous_path, current_writer, TEMPORARY);
+						}
+						else
+						{
+							log_error("Unsupported encoding '%.*s' in '%s'", encoding.code_count, encoding.data, content_encoding->data);
+							success = false;
+						}
+
+						previous_path = current_writer->path;
+
+						if(!success) break;
+					}
+				}
+			}
+
+			success = success && even.opened && odd.opened;
+		}
+	}
+
+	return success;
+}
+
 void decompress_tests(void)
 {
 	console_info("Running decompress tests");
 	log_info("Running decompress tests");
 
 	{
-		#define TEST_DECOMPRESS(in_name, expected_name, function) \
+		#define TEST_DECOMPRESS(in_name, encoding, expected_name) \
 			do \
 			{ \
-				String* in_path = string_from_c(T("Tests\\Decompress\\") T(in_name)); \
-				String* expected_path = string_from_c(T("Tests\\Decompress\\") T(expected_name)); \
-				\
-				File_Writer writer = {}; \
-				TEMPORARY_FILE_DEFER(&writer) \
+				ARENA_SAVEPOINT() \
 				{ \
-					bool success = false; \
+					String* in_path = string_from_c(T("Tests\\Decompress\\") T(in_name)); \
+					String* expected_path = string_from_c(T("Tests\\Decompress\\") T(expected_name)); \
 					\
-					success = function(in_path, &writer); \
-					TEST(success, true); \
-					\
-					File out_file = {}; \
-					success = file_read_all(writer.path, &out_file, writer.temporary); \
-					TEST(success, true); \
-					\
-					File expected_file = {}; \
-					success = file_read_all(expected_path, &expected_file); \
-					TEST(success, true); \
-					TEST(out_file.size, expected_file.size); \
-					TEST(memory_is_equal(out_file.data, expected_file.data, expected_file.size), true); \
+					File_Writer writer = {}; \
+					TEMPORARY_FILE_DEFER(&writer) \
+					{ \
+						bool success = false; \
+						\
+						success = decompress_from_content_encoding(in_path, CSTR(encoding), &writer); \
+						TEST(success, true); \
+						\
+						File out_file = {}; \
+						success = file_read_all(writer.path, &out_file, writer.temporary); \
+						TEST(success, true); \
+						\
+						File expected_file = {}; \
+						success = file_read_all(expected_path, &expected_file); \
+						TEST(success, true); \
+						TEST(out_file.size, expected_file.size); \
+						TEST(memory_is_equal(out_file.data, expected_file.data, expected_file.size), true); \
+					} \
+					TEST(writer.opened, true); \
 				} \
-				TEST(writer.opened, true); \
 			} while(false)
 
-		TEST_DECOMPRESS("File\\file.gz", "File\\file.txt", zlib_file_decompress);
-		TEST_DECOMPRESS("File\\file.zz", "File\\file.txt", zlib_file_decompress);
-		TEST_DECOMPRESS("File\\file.deflate", "File\\file.txt", zlib_file_decompress);
-		TEST_DECOMPRESS("File\\file.br", "File\\file.txt", brotli_file_decompress);
-		TEST_DECOMPRESS("File\\file.Z", "File\\file.txt", compress_file_decompress);
+		TEST_DECOMPRESS("File\\file.txt.gz", "gzip", "File\\file.txt");
+		TEST_DECOMPRESS("File\\file.txt.zz", "deflate", "File\\file.txt");
+		TEST_DECOMPRESS("File\\file.txt.deflate", "deflate", "File\\file.txt");
+		TEST_DECOMPRESS("File\\file.txt.br", "br", "File\\file.txt");
+		TEST_DECOMPRESS("File\\file.txt.Z", "compress", "File\\file.txt");
+		TEST_DECOMPRESS("File\\file.txt.zz.gz", "deflate, gzip", "File\\file.txt");
+		TEST_DECOMPRESS("File\\file.txt", "", "File\\file.txt");
 
-		TEST_DECOMPRESS("Empty\\empty.gz", "Empty\\empty.txt", zlib_file_decompress);
-		TEST_DECOMPRESS("Empty\\empty.zz", "Empty\\empty.txt", zlib_file_decompress);
-		TEST_DECOMPRESS("Empty\\empty.deflate", "Empty\\empty.txt", zlib_file_decompress);
-		TEST_DECOMPRESS("Empty\\empty.br", "Empty\\empty.txt", brotli_file_decompress);
-		TEST_DECOMPRESS("Empty\\empty.Z", "Empty\\empty.txt", compress_file_decompress);
+		TEST_DECOMPRESS("Empty\\empty.txt.gz", "gzip", "Empty\\empty.txt");
+		TEST_DECOMPRESS("Empty\\empty.txt.zz", "deflate", "Empty\\empty.txt");
+		TEST_DECOMPRESS("Empty\\empty.txt.deflate", "deflate", "Empty\\empty.txt");
+		TEST_DECOMPRESS("Empty\\empty.txt.br", "br", "Empty\\empty.txt");
+		TEST_DECOMPRESS("Empty\\empty.txt.Z", "compress", "Empty\\empty.txt");
+		TEST_DECOMPRESS("Empty\\empty.txt.zz.gz", "deflate, gzip", "Empty\\empty.txt");
+		TEST_DECOMPRESS("Empty\\empty.txt", "", "Empty\\empty.txt");
 
 		if(context.large_tests)
 		{
-			TEST_DECOMPRESS("Large\\large.gz", "Large\\large.jpg", zlib_file_decompress);
-			TEST_DECOMPRESS("Large\\large.zz", "Large\\large.jpg", zlib_file_decompress);
-			TEST_DECOMPRESS("Large\\large.deflate", "Large\\large.jpg", zlib_file_decompress);
-			TEST_DECOMPRESS("Large\\large.br", "Large\\large.jpg", brotli_file_decompress);
-			TEST_DECOMPRESS("Large\\large.Z", "Large\\large.jpg", compress_file_decompress);
+			TEST_DECOMPRESS("Large\\large.jpg.gz", "gzip", "Large\\large.jpg");
+			TEST_DECOMPRESS("Large\\large.jpg.zz", "deflate", "Large\\large.jpg");
+			TEST_DECOMPRESS("Large\\large.jpg.deflate", "deflate", "Large\\large.jpg");
+			TEST_DECOMPRESS("Large\\large.jpg.br", "br", "Large\\large.jpg");
+			TEST_DECOMPRESS("Large\\large.jpg.Z", "compress", "Large\\large.jpg");
+			TEST_DECOMPRESS("Large\\large.jpg.zz.gz", "deflate, gzip", "Large\\large.jpg");
+			TEST_DECOMPRESS("Large\\large.jpg", "", "Large\\large.jpg");
 		}
 
 		#undef TEST_DECOMPRESS

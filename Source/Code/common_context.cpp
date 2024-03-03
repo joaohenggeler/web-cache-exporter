@@ -113,7 +113,8 @@ void context_terminate(void)
 	{
 		if(!directory_delete(context.temporary_path))
 		{
-			console_error("Failed to delete the temporary directory '%s'", context.temporary_path->data);
+			String_View directory = path_name(context.temporary_path);
+			console_error("Failed to delete the temporary directory '%.*s'", directory.code_count, directory.data);
 			log_error("Failed to delete the temporary directory '%s'", context.temporary_path->data);
 		}
 	}

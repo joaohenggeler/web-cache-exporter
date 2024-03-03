@@ -153,6 +153,16 @@ bool array_pop_end(Array<Type>* array, int index, Type* value = NULL)
 }
 
 template<typename Type>
+void array_merge(Array<Type>** to, Array<Type>* from)
+{
+	for(int i = 0; i < from->count; i += 1)
+	{
+		Type value = from->data[i];
+		array_add(to, value);
+	}
+}
+
+template<typename Type>
 void array_truncate(Array<Type>* array, int count)
 {
 	array->count = MIN(count, array->count);

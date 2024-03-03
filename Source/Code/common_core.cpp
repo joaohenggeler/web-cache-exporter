@@ -19,6 +19,11 @@ void u64_to_u32s(u64 num, u32* low, u32* high)
 	*high = (u32) (num >> 32);
 }
 
+bool flag_has_one(u32 flags)
+{
+	return is_power_of_two(flags);
+}
+
 #pragma warning(push)
 #pragma warning(disable : 4189)
 u32 flag_to_index(u32 flag)

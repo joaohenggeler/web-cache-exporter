@@ -5,7 +5,7 @@
 	#include "sha256/sha256.h"
 #pragma warning(pop)
 
-String* sha256_file(String* path)
+String* sha256_file(String* path, bool temporary)
 {
 	String* result = EMPTY_STRING;
 
@@ -13,6 +13,8 @@ String* sha256_file(String* path)
 	sha256_init(&state);
 
 	File_Reader reader = {};
+	reader.temporary = temporary;
+
 	FILE_READ_DEFER(&reader, path)
 	{
 		while(file_read_next(&reader))

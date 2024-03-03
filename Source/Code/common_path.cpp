@@ -22,16 +22,38 @@ bool path_is_directory(String* path)
 	return (attributes != INVALID_FILE_ATTRIBUTES) && (attributes & FILE_ATTRIBUTE_DIRECTORY);
 }
 
-template<typename String_Type_1, typename String_Type_2>
-static bool path_is_equal(String_Type_1 a, String_Type_2 b)
+bool path_has_file(String* path, const TCHAR* name)
 {
-	return string_is_equal(a, b, IGNORE_CASE);
+	bool result = false;
+
+	ARENA_SAVEPOINT()
+	{
+		String_Builder* builder = builder_create(MAX_PATH_COUNT);
+		builder_append_path(&builder, path);
+		builder_append_path(&builder, name);
+
+		String* file_path = builder_terminate(&builder);
+		result = path_is_file(file_path);
+	}
+
+	return result;
 }
 
-template<typename String_Type_1, typename String_Type_2>
-static bool path_ends_with(String_Type_1 a, String_Type_2 b)
+bool path_has_directory(String* path, const TCHAR* name)
 {
-	return string_ends_with(a, b, IGNORE_CASE);
+	bool result = false;
+
+	ARENA_SAVEPOINT()
+	{
+		String_Builder* builder = builder_create(MAX_PATH_COUNT);
+		builder_append_path(&builder, path);
+		builder_append_path(&builder, name);
+
+		String* directory_path = builder_terminate(&builder);
+		result = path_is_directory(directory_path);
+	}
+
+	return result;
 }
 
 bool path_refers_to_same_object(String* a, String* b)
@@ -162,6 +184,48 @@ bool path_has_extension(String* path, const TCHAR* extension)
 {
 	String_View ext = path_extension(path);
 	return path_is_equal(ext, extension);
+}
+
+static String_View path_component(String* path, int index, bool reverse)
+{
+	String_View result = EMPTY_VIEW;
+
+	ARENA_SAVEPOINT()
+	{
+		Split_State state = {};
+		state.str = path;
+		state.delimiters = PATH_DELIMITERS;
+		state.keep_empty = true;
+		state.reverse = reverse;
+
+		Array<String_View>* components = string_split_all(&state);
+		if(0 <= index && index < components->count)
+		{
+			result = components->data[index];
+		}
+	}
+
+	return result;
+}
+
+String_View path_component(String* path, int index)
+{
+	return path_component(path, index, false);
+}
+
+String_View path_component_end(String* path, int index)
+{
+	return path_component(path, index, true);
+}
+
+bool path_is_relative(String* path)
+{
+	return PathIsRelative(path->data) != FALSE;
+}
+
+bool path_is_absolute(String* path)
+{
+	return !path_is_relative(path);
 }
 
 String* path_absolute(String* path)
@@ -658,7 +722,7 @@ const bool SORT_PATHS = true;
 
 Array<Walk_Info>* walk_all(Walk_State* state, bool sort_paths)
 {
-	Array<Walk_Info>* array = array_create<Walk_Info>(0);
+	Array<Walk_Info>* result = array_create<Walk_Info>(0);
 
 	state->copy = true;
 
@@ -667,13 +731,13 @@ Array<Walk_Info>* walk_all(Walk_State* state, bool sort_paths)
 		Walk_Info info = {};
 		while(walk_next(state, &info))
 		{
-			array_add(&array, info);
+			array_add(&result, info);
 		}
 	}
 
-	if(sort_paths) array_sort(array);
+	if(sort_paths) array_sort(result);
 
-	return array;
+	return result;
 }
 
 void path_tests(void)
@@ -682,14 +746,24 @@ void path_tests(void)
 	log_info("Running path tests");
 
 	{
-		String* file = CSTR("Tests\\IO\\file.txt");
-		String* directory = CSTR("Tests\\IO");
+		String* file = CSTR("Tests\\Path\\1.txt");
+		String* directory = CSTR("Tests\\Path\\Dir1");
 
 		TEST(path_is_file(file), true);
 		TEST(path_is_file(directory), false);
 
 		TEST(path_is_directory(directory), true);
 		TEST(path_is_directory(file), false);
+	}
+
+	{
+		String* path = CSTR("Tests\\Path");
+
+		TEST(path_has_file(path, T("1.txt")), true);
+		TEST(path_has_file(path, T("Dir1")), false);
+
+		TEST(path_has_directory(path, T("Dir1")), true);
+		TEST(path_has_directory(path, T("1.txt")), false);
 	}
 
 	{
@@ -773,9 +847,31 @@ void path_tests(void)
 	}
 
 	{
-		String* relative = CSTR("Tests\\IO");
+		String* path = CSTR("C:\\Path\\file.ext");
+
+		TEST(path_component(path, -1), T(""));
+		TEST(path_component(path, 0), T("C:"));
+		TEST(path_component(path, 1), T("Path"));
+		TEST(path_component(path, 2), T("file.ext"));
+		TEST(path_component(path, 99), T(""));
+
+		TEST(path_component_end(path, -1), T(""));
+		TEST(path_component_end(path, 0), T("file.ext"));
+		TEST(path_component_end(path, 1), T("Path"));
+		TEST(path_component_end(path, 2), T("C:"));
+		TEST(path_component_end(path, 99), T(""));
+	}
+
+	{
+		String* relative = CSTR("Tests\\Path");
 		String* absolute = path_absolute(relative);
 		TEST_NOT(relative, absolute);
+
+		TEST(path_is_relative(relative), true);
+		TEST(path_is_relative(absolute), false);
+
+		TEST(path_is_absolute(absolute), true);
+		TEST(path_is_absolute(relative), false);
 	}
 
 	{
@@ -804,6 +900,7 @@ void path_tests(void)
 			Split_State state = {};
 			state.str = path_safe(builder_terminate(&builder));
 			state.delimiters = PATH_DELIMITERS;
+			state.keep_empty = true;
 
 			Array<String_View>* components = string_split_all(&state);
 			TEST(components->count, 3);
@@ -816,6 +913,19 @@ void path_tests(void)
 	}
 
 	{
+		String* path = CSTR("C:\\Path\\File.ext");
+
+		TEST(path_is_equal(path, T("c:\\path\\file.ext")), true);
+		TEST(path_is_equal(path, T("wrong")), false);
+
+		TEST(path_begins_with(path, T("c:\\path")), true);
+		TEST(path_begins_with(path, T("wrong")), false);
+
+		TEST(path_ends_with(path, T("file.ext")), true);
+		TEST(path_ends_with(path, T("wrong")), false);
+	}
+
+	{
 		String* path = CSTR("Tests\\Path");
 
 		{
@@ -825,11 +935,11 @@ void path_tests(void)
 			state.files = true;
 			state.max_depth = -1;
 
-			Array<Walk_Info>* array = walk_all(&state);
-			TEST(array->count, 1);
-			TEST(array->data[0].size, 44ULL);
-			TEST(array->data[0].is_directory, false);
-			TEST(array->data[0].depth, 2);
+			Array<Walk_Info>* paths = walk_all(&state);
+			TEST(paths->count, 1);
+			TEST(paths->data[0].size, 44ULL);
+			TEST(paths->data[0].is_directory, false);
+			TEST(paths->data[0].depth, 2);
 		}
 
 		{
@@ -840,8 +950,8 @@ void path_tests(void)
 			state.directories = true;
 			state.max_depth = 1;
 
-			Array<Walk_Info>* array = walk_all(&state);
-			TEST(array->count, 7);
+			Array<Walk_Info>* paths = walk_all(&state);
+			TEST(paths->count, 7);
 		}
 	}
 }

@@ -362,6 +362,43 @@ void label_load_all(Exporter* exporter)
 	}
 }
 
+void label_filter_check(Exporter* exporter)
+{
+	ASSERT(exporter->labels != NULL, "Missing labels");
+
+	Array<String*>* filters[] = {exporter->positive_filter, exporter->negative_filter};
+
+	for(int i = 0; i < _countof(filters); i += 1)
+	{
+		Array<String*>* filter = filters[i];
+		if(filter == NULL) continue;
+
+		for(int j = 0; j < filter->count; j += 1)
+		{
+			String* name = filter->data[j];
+
+			bool found = false;
+
+			for(int k = 0; k < exporter->labels->count; k += 1)
+			{
+				Label label = exporter->labels->data[k];
+				if(string_is_equal(label.major_name, name, IGNORE_CASE)
+				|| string_is_equal(label.minor_name, name, IGNORE_CASE))
+				{
+					found = true;
+					break;
+				}
+			}
+
+			if(!found)
+			{
+				console_warning("Could not find the filter name '%s' in the loaded labels", name->data);
+				log_warning("Could not find the filter name '%s' in the loaded labels", name->data);
+			}
+		}
+	}
+}
+
 bool label_file_match(Exporter* exporter, Match_Params params, Label* result)
 {
 	ASSERT(exporter->labels != NULL, "Missing labels");
@@ -373,7 +410,7 @@ bool label_file_match(Exporter* exporter, Match_Params params, Label* result)
 	u8* buffer = arena_push_buffer(context.current_arena, exporter->max_signature_size, u8);
 	size_t bytes_read = 0;
 
-	if(file_read_at_most(params.path, buffer, exporter->max_signature_size, &bytes_read))
+	if(file_read_at_most(params.path, buffer, exporter->max_signature_size, &bytes_read, params.temporary))
 	{
 		if(bytes_read > 0)
 		{
@@ -468,6 +505,13 @@ bool label_url_match(Exporter* exporter, Match_Params params, Label* result)
 
 	ARENA_SAVEPOINT()
 	{
+		Split_State param_state = {};
+		param_state.str = params.url.host;
+		param_state.delimiters = T(".");
+		param_state.reverse = true;
+
+		Array<String_View>* param_components = string_split_all(&param_state);
+
 		for(int i = 0; !success && i < exporter->labels->count; i += 1)
 		{
 			Label label = exporter->labels->data[i];
@@ -478,17 +522,11 @@ bool label_url_match(Exporter* exporter, Match_Params params, Label* result)
 				Domain domain = label.domains->data[j];
 				bool any_tld = string_ends_with(domain.host, T(".*"));
 
-				Split_State param_state = {};
-				param_state.str = params.url.host;
-				param_state.delimiters = T(".");
-				param_state.reverse = true;
-
 				Split_State label_state = {};
 				label_state.str = domain.host;
 				label_state.delimiters = T(".");
 				label_state.reverse = true;
 
-				Array<String_View>* param_components = string_split_all(&param_state);
 				Array<String_View>* label_components = string_split_all(&label_state);
 
 				if(label_components->count > param_components->count) continue;
@@ -511,22 +549,23 @@ bool label_url_match(Exporter* exporter, Match_Params params, Label* result)
 
 				if(any_tld && !host_ok)
 				{
-					host_ok = true;
-
 					array_insert(&label_components, 0, CVIEW("*"));
 
-					int count = MIN(param_components->count, label_components->count);
-
-					for(int k = 0; k < count; k += 1)
+					if(label_components->count <= param_components->count)
 					{
-						String_View param_component = param_components->data[k];
-						String_View label_component = label_components->data[k];
-						bool wildcard = string_is_equal(label_component, T("*")) && k <= 1;
+						host_ok = true;
 
-						if(!wildcard && !string_is_equal(param_component, label_component))
+						for(int k = 0; k < label_components->count; k += 1)
 						{
-							host_ok = false;
-							break;
+							String_View param_component = param_components->data[k];
+							String_View label_component = label_components->data[k];
+							bool wildcard = string_is_equal(label_component, T("*")) && k <= 1;
+
+							if(!wildcard && !string_is_equal(param_component, label_component))
+							{
+								host_ok = false;
+								break;
+							}
 						}
 					}
 				}
@@ -737,5 +776,8 @@ void label_tests(void)
 		TEST(label_url_match(&exporter, params, &label), true);
 		TEST(label.type, LABEL_URL);
 		TEST(label.minor_name, T("URL 4"));
+
+		params.url = url_parse(CSTR("http://wrong.com/path/index.html"));
+		TEST(label_url_match(&exporter, params, &label), false);
 	}
 }

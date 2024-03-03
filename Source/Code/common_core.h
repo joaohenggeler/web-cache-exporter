@@ -149,6 +149,7 @@ u64 u32s_to_u64(u32 low, u32 high);
 void u32_to_u16s(u32 num, u16* low, u16* high);
 void u64_to_u32s(u64 num, u32* low, u32* high);
 
+bool flag_has_one(u32 flags);
 u32 flag_to_index(u32 flag);
 
 size_t from_kilobytes(size_t kilobytes);

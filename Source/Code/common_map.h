@@ -97,7 +97,7 @@ bool map_get(Map<Key_Type, Value_Type>* map, Key_Type key, Value_Type* value)
 }
 
 template<typename Key_Type, typename Value_Type>
-Value_Type map_get_or_default(Map<Key_Type, Value_Type>* map, Key_Type key, Value_Type default)
+Value_Type map_get_or(Map<Key_Type, Value_Type>* map, Key_Type key, Value_Type default)
 {
 	Value_Type value;
 	bool found = map_get(map, key, &value);

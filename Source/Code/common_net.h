@@ -22,7 +22,12 @@ struct Url
 	Map<const TCHAR*, String*>* query_params;
 };
 
+extern const bool DECODE_PLUS;
+
+String* url_decode(String_View component, bool decode_plus = false);
 Url url_parse(String* url);
+
+Map<const TCHAR*, String_View>* http_headers_parse(String* headers);
 
 void net_tests(void);
 

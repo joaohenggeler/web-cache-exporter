@@ -9,6 +9,8 @@ BEGIN_FILE Certificate
 		application/x-pkcs
 		application/x-pem
 
+		application/ocsp-response
+
 		# application/pkcs8
 		# application/pkcs10
 		# application/pkix-cert

@@ -5,9 +5,7 @@
 #include "common_string.h"
 #include "common_io.h"
 
-bool zlib_file_decompress(String* path, File_Writer* writer);
-bool brotli_file_decompress(String* path, File_Writer* writer);
-bool compress_file_decompress(String* path, File_Writer* writer);
+bool decompress_from_content_encoding(String* path, String* content_encoding, File_Writer* writer, bool temporary = false);
 
 void decompress_tests(void);
 

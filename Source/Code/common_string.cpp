@@ -53,7 +53,7 @@ String* string_from_c(const TCHAR* c_str)
 	str->char_count = char_count;
 	str->code_count = code_count;
 	StringCchCopy(str->data, code_count + 1, c_str);
-	ASSERT(str->data[code_count] == T('\0'), "String is not null terminated");
+	ASSERT(str->data[code_count] == T('\0'), "String is not null-terminated");
 
 	return str;
 }
@@ -65,7 +65,7 @@ static String* string_from_c(const TCHAR* c_str, int code_count)
 
 	str->code_count = code_count;
 	StringCchCopy(str->data, code_count + 1, c_str);
-	ASSERT(str->data[code_count] == T('\0'), "String is not null terminated");
+	ASSERT(str->data[code_count] == T('\0'), "String is not null-terminated");
 
 	str->char_count = c_string_char_count(str->data);
 
@@ -754,10 +754,10 @@ bool string_split(Split_State* state, String_View* token)
 
 Array<String_View>* string_split_all(Split_State* state)
 {
-	Array<String_View>* array = array_create<String_View>(0);
+	Array<String_View>* result = array_create<String_View>(0);
 	String_View token = {};
-	while(string_split(state, &token)) array_add(&array, token);
-	return array;
+	while(string_split(state, &token)) array_add(&result, token);
+	return result;
 }
 
 bool string_partition(Split_State* state, String_View* first, String_View* delimiter, String_View* second)
@@ -1095,7 +1095,7 @@ void builder_append_path(String_Builder** builder_ptr, String_View path)
 {
 	ASSERT(*builder_ptr != NULL, "Builder was terminated");
 
-	// We need to handle views separately since they're not null terminated.
+	// We need to handle views separately since they're not null-terminated.
 	String_Builder* builder = *builder_ptr;
 	bool empty = builder->data[0] == T('\0');
 	String_View last_chr = string_char_at_end(builder->data, 0);

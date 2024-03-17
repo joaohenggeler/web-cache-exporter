@@ -54,13 +54,13 @@ Map<Key_Type, Value_Type>* map_create(int capacity)
 template<typename Key_Type>
 u32 map_hash(Key_Type key)
 {
-	return fnv1a_hash(&key, sizeof(key));
+	return fnv1a_hash(&key, sizeof(Key_Type));
 }
 
 template<typename Key_Type>
 bool map_equals(Key_Type a, Key_Type b)
 {
-	return a == b;
+	return memory_is_equal(&a, &b, sizeof(Key_Type));
 }
 
 u32 map_hash(const TCHAR* key);

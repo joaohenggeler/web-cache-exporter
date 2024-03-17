@@ -8,6 +8,7 @@
 #include "common_array.h"
 #include "common_map.h"
 #include "common_path.h"
+#include "common_hash.h"
 
 enum
 {
@@ -19,7 +20,7 @@ enum
 	CACHE_JAVA = 1 << 5,
 	CACHE_UNITY = 1 << 6,
 
-	CACHE_COUNT = 7,
+	MAX_CACHE = 7,
 
 	CACHE_BROWSERS = CACHE_WININET | CACHE_MOZILLA,
 	CACHE_PLUGINS = CACHE_FLASH | CACHE_SHOCKWAVE | CACHE_JAVA | CACHE_UNITY,
@@ -104,6 +105,9 @@ struct Export_Params
 	String* data_path;
 	Walk_Info* info;
 
+	Map<Sha256, bool>** index;
+	bool unindexed;
+
 	String* url;
 	String* origin;
 	Map<const TCHAR*, String_View>* http_headers;
@@ -116,7 +120,10 @@ bool cache_flags_from_names(const TCHAR* ids, u32* flags);
 Key_Paths default_key_paths(void);
 
 String* exporter_path_localize(Exporter* exporter, String* path);
+void exporter_index_put(Map<Sha256, bool>** index_ptr, String* path);
+bool exporter_index_has(Map<Sha256, bool>* index, String* path);
 void exporter_next(Exporter* exporter, Export_Params params);
+
 void exporter_main(Exporter* exporter);
 
 void exporter_tests(void);

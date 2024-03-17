@@ -46,8 +46,9 @@ void file_read_end(File_Reader* reader);
 bool file_read_next(File_Reader* reader);
 bool file_read_all(String* path, File* file, bool temporary = false);
 bool file_read_chunk(String* path, void* buffer, size_t size, u64 offset, bool temporary = false);
-bool file_read_first(String* path, void* buffer, size_t size, bool temporary = false);
-bool file_read_at_most(String* path, void* buffer, size_t size, size_t* bytes_read, bool temporary = false);
+bool file_read_first_chunk(String* path, void* buffer, size_t size, bool temporary = false);
+bool file_read_at_most(String* path, void* buffer, size_t size, u64 offset, size_t* bytes_read, bool temporary = false);
+bool file_read_first_at_most(String* path, void* buffer, size_t size, size_t* bytes_read, bool temporary = false);
 
 #define FILE_READ_DEFER(reader, path) DEFER_IF(file_read_begin(reader, path), file_read_end(reader))
 

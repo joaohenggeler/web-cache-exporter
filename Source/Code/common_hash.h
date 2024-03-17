@@ -4,7 +4,13 @@
 #include "common_core.h"
 #include "common_string.h"
 
-String* sha256_file(String* path, bool temporary = false);
+struct Sha256
+{
+	u8 data[32];
+};
+
+String* sha256_string_from_file(String* path, bool temporary = false);
+Sha256 sha256_bytes_from_file(String* path, bool temporary = false);
 
 void hash_tests(void);
 

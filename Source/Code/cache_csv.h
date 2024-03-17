@@ -37,6 +37,7 @@ enum Csv_Column
 	CSV_VERSION,
 
 	CSV_FOUND,
+	CSV_INDEXED,
 	CSV_INPUT_PATH,
 	CSV_INPUT_SIZE,
 
@@ -65,7 +66,7 @@ enum Csv_Column
 	CSV_XTRA_VERSION,
 	CSV_XTRA_COPYRIGHT,
 
-	NUM_CSV_COLUMNS,
+	MAX_CSV_COLUMNS,
 };
 
 struct Csv

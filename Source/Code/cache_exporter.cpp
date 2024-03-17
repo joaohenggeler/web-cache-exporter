@@ -22,9 +22,9 @@ static Array_View<Csv_Column> COLUMNS[] =
 	{}, SHOCKWAVE_COLUMNS, {}, {},
 };
 
-_STATIC_ASSERT(_countof(SHORT_NAMES) == CACHE_COUNT);
-_STATIC_ASSERT(_countof(LONG_NAMES) == CACHE_COUNT);
-_STATIC_ASSERT(_countof(COLUMNS) == CACHE_COUNT);
+_STATIC_ASSERT(_countof(SHORT_NAMES) == MAX_CACHE);
+_STATIC_ASSERT(_countof(LONG_NAMES) == MAX_CACHE);
+_STATIC_ASSERT(_countof(COLUMNS) == MAX_CACHE);
 
 bool cache_flags_from_names(const TCHAR* names, u32* flags)
 {
@@ -55,7 +55,7 @@ bool cache_flags_from_names(const TCHAR* names, u32* flags)
 		{
 			bool found = false;
 
-			for(int i = 0; i < CACHE_COUNT; i += 1)
+			for(int i = 0; i < MAX_CACHE; i += 1)
 			{
 				if(string_is_equal(name, SHORT_NAMES[i], IGNORE_CASE)
 				|| string_is_equal(name, LONG_NAMES[i], IGNORE_CASE))
@@ -99,7 +99,7 @@ Key_Paths default_key_paths(void)
 	{
 		// The drive path used to be determined using GetVolumeInformation,
 		// but that function started returning names like "Windows-SSD" in
-		// later Windows versions.
+		// newer Windows versions.
 		key_paths.windows = builder_to_string(builder);
 		key_paths.drive = string_from_view(string_slice(key_paths.windows, 0, 3));
 	}
@@ -160,7 +160,7 @@ static void exporter_begin(Exporter* exporter, u32 flag, String* subdirectory = 
 	exporter->current_excluded = 0;
 
 	u32 index = flag_to_index(flag);
-	ASSERT(0 <= index && index < CACHE_COUNT, "Flag index out of range");
+	ASSERT(0 <= index && index < MAX_CACHE, "Flag index out of range");
 
 	exporter->current_flag = flag;
 	exporter->current_short = string_from_c(SHORT_NAMES[index]);
@@ -240,12 +240,19 @@ String* exporter_path_localize(Exporter* exporter, String* path)
 	ASSERT(path_is_absolute(path), "Path is relative");
 
 	String* path_without_drive = string_from_view(string_slice(path, 3, path->char_count));
+	return path_build(CANY(exporter->current_key_paths.drive), CANY(path_without_drive));
+}
 
-	String_Builder* builder = builder_create(MAX_PATH_COUNT);
-	builder_append_path(&builder, exporter->current_key_paths.drive);
-	builder_append_path(&builder, path_without_drive);
+void exporter_index_put(Map<Sha256, bool>** index_ptr, String* path)
+{
+	Sha256 sha256 = sha256_bytes_from_file(path, TEMPORARY);
+	map_put(index_ptr, sha256, true);
+}
 
-	return builder_terminate(&builder);
+bool exporter_index_has(Map<Sha256, bool>* index, String* path)
+{
+	Sha256 sha256 = sha256_bytes_from_file(path, TEMPORARY);
+	return map_has(index, sha256);
 }
 
 static String* exporter_yes_or_no(bool yes)
@@ -303,7 +310,7 @@ static bool exporter_copy(Exporter* exporter, Copy_Params params, String** final
 
 			String* directory_path = EMPTY_STRING;
 			String_Builder* parent_builder = builder_create(parts.parent.code_count);
-			String_Builder* collision_builder = builder_create(parts.name.code_count + 5);
+			String_Builder* collision_builder = builder_create(params.to_path->code_count + 5);
 
 			Split_State state = {};
 			state.view = parts.parent;
@@ -417,6 +424,30 @@ static bool exporter_copy(Exporter* exporter, Copy_Params params, String** final
 		#endif
 	}
 
+	// For rare error cases.
+	if(!copy_success)
+	{
+		String* filename = exporter_filename(exporter);
+
+		builder_clear(builder);
+		builder_append_path(&builder, params.fallback_path);
+		builder_append_path(&builder, filename);
+
+		if(params.extension->char_count > 0)
+		{
+			builder_append(&builder, T("."));
+			builder_append(&builder, params.extension);
+		}
+
+		file_path = builder_to_string(builder);
+
+		#ifdef WCE_DEBUG
+			copy_success = (exporter->empty_copy) ? (file_empty_create(file_path)) : (file_copy_try(params.from_path, file_path));
+		#else
+			copy_success = file_copy_try(params.from_path, file_path);
+		#endif
+	}
+
 	if(copy_success) *final_path = file_path;
 	else log_error("Failed to copy '%s' to '%s' with the error: %s", params.from_path->data, file_path->data, last_error_message());
 
@@ -429,8 +460,10 @@ void exporter_next(Exporter* exporter, Export_Params params)
 {
 	#define CSV_HAS_NOT(column) (array_has(exporter->current_csv.columns, column) && !map_has(params.row, column))
 
-	ASSERT(params.row != NULL, "Missing CSV row");
+	ASSERT(params.row != NULL, "Missing row");
 
+	ASSERT(CSV_HAS_NOT(CSV_FOUND), "Missing or set Found column");
+	ASSERT(!map_has(params.row, CSV_INDEXED), "Set Indexed column");
 	ASSERT(!map_has(params.row, CSV_DECOMPRESSED), "Set Decompressed Label column");
 	ASSERT(CSV_HAS_NOT(CSV_EXPORTED), "Missing or set Exported column");
 	ASSERT(CSV_HAS_NOT(CSV_OUTPUT_PATH), "Missing or set Output Path column");
@@ -452,6 +485,8 @@ void exporter_next(Exporter* exporter, Export_Params params)
 
 	ASSERT(params.data_path != NULL, "Missing data path");
 
+	bool valid_path = !path_is_equal(params.data_path, NO_PATH);
+
 	Url url = {};
 	String* filename = NULL;
 
@@ -460,9 +495,13 @@ void exporter_next(Exporter* exporter, Export_Params params)
 		url = url_parse(params.url);
 		filename = string_from_view(path_name(url.path));
 	}
-	else
+	else if(valid_path)
 	{
 		filename = string_from_view(path_name(params.data_path));
+	}
+	else
+	{
+		filename = EMPTY_STRING;
 	}
 
 	ASSERT(filename != NULL, "Missing filename");
@@ -529,27 +568,34 @@ void exporter_next(Exporter* exporter, Export_Params params)
 	}
 
 	{
-		if(CSV_HAS_NOT(CSV_INPUT_PATH)) map_put(&params.row, CSV_INPUT_PATH, path_absolute(params.data_path));
-
-		u64 size = 0;
-		if(CSV_HAS_NOT(CSV_INPUT_SIZE) && file_size_get(params.data_path, &size))
 		{
-			map_put(&params.row, CSV_INPUT_SIZE, string_from_num(size));
+			bool found = valid_path && path_is_file(params.data_path);
+			if(CSV_HAS_NOT(CSV_FOUND)) map_put(&params.row, CSV_FOUND, exporter_yes_or_no(found));
 		}
 
+		if(CSV_HAS_NOT(CSV_INDEXED)) map_put(&params.row, CSV_INDEXED, exporter_yes_or_no(!params.unindexed));
+
+		if(CSV_HAS_NOT(CSV_INPUT_PATH) && valid_path) map_put(&params.row, CSV_INPUT_PATH, path_absolute(params.data_path));
+
+		u64 size = 0;
+		if(CSV_HAS_NOT(CSV_INPUT_SIZE) && valid_path && file_size_get(params.data_path, &size))
 		{
-			bool found = path_is_file(params.data_path);
-			if(CSV_HAS_NOT(CSV_FOUND)) map_put(&params.row, CSV_FOUND, exporter_yes_or_no(found));
+			map_put(&params.row, CSV_INPUT_SIZE, string_from_num(size));
 		}
 	}
 
 	File_Writer decompress_writer = {};
 
 	{
+		if(params.index != NULL && valid_path) exporter_index_put(params.index, params.data_path);
+
 		bool decompressed = false;
 
 		String_View encoding_view = {};
-		if(exporter->decompress && params.http_headers != NULL && map_get(params.http_headers, T("content-encoding"), &encoding_view) && !file_is_empty(params.data_path))
+		if(exporter->decompress && params.http_headers != NULL
+		&& map_get(params.http_headers, T("content-encoding"), &encoding_view)
+		&& valid_path
+		&& !file_is_empty(params.data_path))
 		{
 			if(temporary_file_begin(&decompress_writer))
 			{
@@ -558,6 +604,7 @@ void exporter_next(Exporter* exporter, Export_Params params)
 				{
 					decompressed = true;
 					params.data_path = decompress_writer.path;
+					if(params.index != NULL) exporter_index_put(params.index, params.data_path);
 				}
 				else
 				{
@@ -574,7 +621,8 @@ void exporter_next(Exporter* exporter, Export_Params params)
 	}
 
 	{
-		map_put(&params.row, CSV_SHA_256, string_upper(sha256_file(params.data_path, TEMPORARY)));
+		String* sha256 = (valid_path) ? (string_upper(sha256_string_from_file(params.data_path, TEMPORARY))) : (EMPTY_STRING);
+		map_put(&params.row, CSV_SHA_256, sha256);
 	}
 
 	{
@@ -654,7 +702,7 @@ void exporter_next(Exporter* exporter, Export_Params params)
 
 		bool exported = false;
 
-		if(exporter->copy_files && filter)
+		if(exporter->copy_files && filter && valid_path)
 		{
 			String_Builder* builder = builder_create(MAX_PATH_COUNT);
 
@@ -746,7 +794,7 @@ void exporter_main(Exporter* exporter)
 	#define SINGLE_EXPORT(cache_flag, export_function) \
 		do \
 		{ \
-			if(single.flag & cache_flag) \
+			if((exporter->cache_flags & cache_flag) && (single.flag & cache_flag)) \
 			{ \
 				exporter_begin(exporter, cache_flag); \
 				exporter->current_batch = false; \

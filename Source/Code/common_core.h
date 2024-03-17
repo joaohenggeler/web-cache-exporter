@@ -108,6 +108,8 @@ typedef unsigned __int64 u64;
 typedef float f32;
 typedef double f64;
 
+typedef SSIZE_T ssize_t;
+
 // Require the use of the /J compiler option so that the default char type is unsigned.
 // This is useful for handling character data since it makes char behave like the char8_t type added in C++20.
 // See: https://learn.microsoft.com/en-us/cpp/cpp/char-wchar-t-char16-t-char32-t?view=msvc-170
@@ -173,9 +175,13 @@ const TCHAR* errno_string(void);
 #define POINTER_IS_ALIGNED_TO_SIZE(ptr, size) ( (uintptr_t) (ptr) % (size) == 0 )
 #define POINTER_IS_ALIGNED_TO_TYPE(ptr, Type) POINTER_IS_ALIGNED_TO_SIZE((ptr), __alignof(Type))
 
+s8 byte_order_swap(s8 num);
 u8 byte_order_swap(u8 num);
+s16 byte_order_swap(s16 num);
 u16 byte_order_swap(u16 num);
+s32 byte_order_swap(s32 num);
 u32 byte_order_swap(u32 num);
+s64 byte_order_swap(s64 num);
 u64 byte_order_swap(u64 num);
 
 // We'll always target a little endian architecture on Windows.
@@ -211,6 +217,48 @@ void* advance(const void* ptr, Int_Type size)
 {
 	ASSERT(size >= 0, "Negative size");
 	return (char*) ptr + size;
+}
+
+struct Cursor
+{
+	void* data;
+	size_t size;
+
+	bool end;
+};
+
+template<typename Type>
+void cursor_read(Cursor* cursor, Type* var)
+{
+	ASSERT(cursor->data != NULL, "Missing data");
+
+	if(cursor->size < sizeof(Type)) cursor->end = true;
+	if(cursor->end) return;
+
+	CopyMemory(var, cursor->data, sizeof(Type));
+
+	cursor->data = advance(cursor->data, sizeof(Type));
+	cursor->size -= sizeof(Type);
+}
+
+template<typename Type>
+void cursor_little_endian_read(Cursor* cursor, Type* var)
+{
+	cursor_read(cursor, var);
+	if(!cursor->end)
+	{
+		LITTLE_ENDIAN_TO_HOST(*var);
+	}
+}
+
+template<typename Type>
+void cursor_big_endian_read(Cursor* cursor, Type* var)
+{
+	cursor_read(cursor, var);
+	if(!cursor->end)
+	{
+		BIG_ENDIAN_TO_HOST(*var);
+	}
 }
 
 void core_tests(void);

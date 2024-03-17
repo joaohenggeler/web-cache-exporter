@@ -37,7 +37,7 @@ HANDLE metadata_handle_create(String* path)
 
 HANDLE directory_metadata_handle_create(String* path)
 {
-	// See above. Even though this won't work in Windows 9x, we'll leave it for early versions of NT like Windows 2000.
+	// See above. Even though this won't work in Windows 9x, we'll leave it for older versions of NT like Windows 2000.
 	return handle_create(path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS);
 }
 
@@ -142,10 +142,10 @@ bool file_read_next(File_Reader* reader)
 	reader->size = 0;
 	u32 max_read_size = u32_clamp(reader->capacity);
 
-	size_t num_reads = CEIL_DIV(reader->capacity, max_read_size);
-	ASSERT(num_reads >= 1, "Number of reads is zero");
+	size_t read_count = CEIL_DIV(reader->capacity, max_read_size);
+	ASSERT(read_count >= 1, "Read count is zero");
 
-	for(size_t i = 0; i < num_reads; i += 1)
+	for(size_t i = 0; i < read_count; i += 1)
 	{
 		void* buffer = advance(reader->data, reader->size);
 		u32 buffer_size = (u32) MIN(reader->capacity - reader->size, max_read_size);
@@ -284,17 +284,18 @@ bool file_read_chunk(String* path, void* buffer, size_t size, u64 offset, bool t
 	return success;
 }
 
-bool file_read_first(String* path, void* buffer, size_t size, bool temporary)
+bool file_read_first_chunk(String* path, void* buffer, size_t size, bool temporary)
 {
 	return file_read_chunk(path, buffer, size, 0ULL, temporary);
 }
 
-bool file_read_at_most(String* path, void* buffer, size_t size, size_t* bytes_read, bool temporary)
+bool file_read_at_most(String* path, void* buffer, size_t size, u64 offset, size_t* bytes_read, bool temporary)
 {
 	bool success = false;
 
 	File_Reader reader = {};
 	reader.temporary = temporary;
+	reader.offset = offset;
 	reader.capacity = size;
 	reader.data = buffer;
 
@@ -307,6 +308,11 @@ bool file_read_at_most(String* path, void* buffer, size_t size, size_t* bytes_re
 	}
 
 	return success;
+}
+
+bool file_read_first_at_most(String* path, void* buffer, size_t size, size_t* bytes_read, bool temporary)
+{
+	return file_read_at_most(path, buffer, size, 0ULL, bytes_read, temporary);
 }
 
 bool file_write_begin(File_Writer* writer, String* path)
@@ -363,10 +369,10 @@ bool file_write_next(File_Writer* writer, const void* data, size_t size)
 	size_t total_written = 0;
 	u32 max_write_size = u32_clamp(size);
 
-	size_t num_writes = CEIL_DIV(size, max_write_size);
-	ASSERT(num_writes >= 1, "Number of writes is zero");
+	size_t write_count = CEIL_DIV(size, max_write_size);
+	ASSERT(write_count >= 1, "Write count is zero");
 
-	for(size_t i = 0; i < num_writes; i += 1)
+	for(size_t i = 0; i < write_count; i += 1)
 	{
 		const void* buffer = advance(data, total_written);
 		u32 buffer_size = (u32) MIN(size - total_written, max_write_size);
@@ -644,19 +650,20 @@ File_Info file_info_get(String* path)
 
 			if(VerQueryValue(info_block, T("\\VarFileInfo\\Translation"), (LPVOID*) &language_code_page_info, &queried_info_size) != FALSE)
 			{
-				u32 num_languages_and_code_pages = queried_info_size / sizeof(Language_Code_Page_Info);
+				int language_count = (int) (queried_info_size / sizeof(Language_Code_Page_Info));
 
-				if(num_languages_and_code_pages > 0)
+				if(language_count > 0)
 				{
-					if(num_languages_and_code_pages > 1)
+					if(language_count > 1)
 					{
-						log_warning("Ignoring %d languages and code pages in '%s'", num_languages_and_code_pages - 1, path->data);
+						log_warning("Ignoring %d languages in '%s'", language_count - 1, path->data);
 					}
 
 					u16 language = language_code_page_info[0].wLanguage;
 					u16 code_page = language_code_page_info[0].wCodePage;
 
-					const TCHAR* info_keys[] = {
+					const TCHAR* info_keys[] =
+					{
 						T("Comments"),
 						T("CompanyName"),
 						T("FileDescription"),
@@ -791,7 +798,7 @@ void io_tests(void)
 
 	{
 		char buffer[3] = "";
-		bool success = file_read_first(file_path, buffer, sizeof(buffer));
+		bool success = file_read_first_chunk(file_path, buffer, sizeof(buffer));
 		TEST(success, true);
 		TEST(memory_is_equal("The", buffer, sizeof(buffer)), true);
 	}
@@ -799,7 +806,16 @@ void io_tests(void)
 	{
 		char buffer[999] = "";
 		size_t bytes_read = 0;
-		bool success = file_read_at_most(file_path, buffer, sizeof(buffer), &bytes_read);
+		bool success = file_read_at_most(file_path, buffer, sizeof(buffer), 16ULL, &bytes_read);
+		TEST(success, true);
+		TEST(bytes_read, (size_t) 28);
+		TEST(memory_is_equal("fox jumps over the lazy dog.", buffer, bytes_read), true);
+	}
+
+	{
+		char buffer[999] = "";
+		size_t bytes_read = 0;
+		bool success = file_read_first_at_most(file_path, buffer, sizeof(buffer), &bytes_read);
 		TEST(success, true);
 		TEST(bytes_read, (size_t) 44);
 		TEST(memory_is_equal("The quick brown fox jumps over the lazy dog.", buffer, bytes_read), true);
@@ -858,7 +874,7 @@ void io_tests(void)
 
 			{
 				char buffer[3] = "";
-				bool success = file_read_first(writer.path, buffer, sizeof(buffer), writer.temporary);
+				bool success = file_read_first_chunk(writer.path, buffer, sizeof(buffer), writer.temporary);
 				TEST(success, true);
 				TEST(memory_is_equal("The", buffer, sizeof(buffer)), true);
 			}
@@ -866,7 +882,16 @@ void io_tests(void)
 			{
 				char buffer[999] = "";
 				size_t bytes_read = 0;
-				bool success = file_read_at_most(writer.path, buffer, sizeof(buffer), &bytes_read, writer.temporary);
+				bool success = file_read_at_most(writer.path, buffer, sizeof(buffer), 16ULL, &bytes_read, writer.temporary);
+				TEST(success, true);
+				TEST(bytes_read, (size_t) 28);
+				TEST(memory_is_equal("fox jumps over the lazy dog.", buffer, bytes_read), true);
+			}
+
+			{
+				char buffer[999] = "";
+				size_t bytes_read = 0;
+				bool success = file_read_first_at_most(writer.path, buffer, sizeof(buffer), &bytes_read, writer.temporary);
 				TEST(success, true);
 				TEST(bytes_read, (size_t) 44);
 				TEST(memory_is_equal("The quick brown fox jumps over the lazy dog.", buffer, bytes_read), true);

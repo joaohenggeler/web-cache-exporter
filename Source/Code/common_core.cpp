@@ -106,9 +106,19 @@ const TCHAR* errno_string(void)
 	return error_message;
 }
 
+s8 byte_order_swap(s8 num)
+{
+	return num;
+}
+
 u8 byte_order_swap(u8 num)
 {
 	return num;
+}
+
+s16 byte_order_swap(s16 num)
+{
+	return _byteswap_ushort(num);
 }
 
 u16 byte_order_swap(u16 num)
@@ -116,9 +126,19 @@ u16 byte_order_swap(u16 num)
 	return _byteswap_ushort(num);
 }
 
+s32 byte_order_swap(s32 num)
+{
+	return _byteswap_ulong(num);
+}
+
 u32 byte_order_swap(u32 num)
 {
 	return _byteswap_ulong(num);
+}
+
+s64 byte_order_swap(s64 num)
+{
+	return _byteswap_uint64(num);
 }
 
 u64 byte_order_swap(u64 num)
@@ -272,5 +292,31 @@ void core_tests(void)
 		int buffer[10] = {};
 		TEST(advance(buffer, 0), buffer);
 		TEST(advance(buffer, 5 * sizeof(int)), buffer + 5);
+	}
+
+	{
+		char data[] = "\xAA\xBB\xCC\xDD\x11\x22\x33\x44";
+		size_t size = sizeof(data) - 1;
+
+		Cursor cursor = {};
+		cursor.data = data;
+		cursor.size = size;
+
+		u16 num_1 = 0;
+		cursor_little_endian_read(&cursor, &num_1);
+		TEST(num_1, 0xBBAA);
+		TEST(cursor.size, size - sizeof(num_1));
+		TEST(cursor.end, false);
+
+		u32 num_2 = 0;
+		cursor_big_endian_read(&cursor, &num_2);
+		TEST(num_2, 0xCCDD1122U);
+		TEST(cursor.size, size - sizeof(num_1) - sizeof(num_2));
+		TEST(cursor.end, false);
+
+		u64 num_3 = 0;
+		cursor_big_endian_read(&cursor, &num_3);
+		TEST(num_3, 0ULL);
+		TEST(cursor.end, true);
 	}
 }

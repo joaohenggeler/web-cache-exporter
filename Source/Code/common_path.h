@@ -33,6 +33,9 @@ bool path_has_extension(String* path, const TCHAR* extension);
 String_View path_component(String* path, int index);
 String_View path_component_end(String* path, int index);
 
+String* internal_path_build(Any_String first, ...);
+#define path_build(...) internal_path_build(__VA_ARGS__, ANY_STRING_SENTINEL)
+
 bool path_is_relative(String* path);
 bool path_is_absolute(String* path);
 String* path_absolute(String* path);
@@ -104,11 +107,14 @@ struct Walk_Info
 };
 
 extern const bool SORT_PATHS;
+extern const bool RECURSIVE;
 
 void walk_begin(Walk_State* state);
 void walk_end(Walk_State* state);
 bool walk_next(Walk_State* state, Walk_Info* info);
 Array<Walk_Info>* walk_all(Walk_State* state, bool sort_paths = false);
+int walk_count(Walk_State* state);
+int walk_file_count(String* path, bool recursive = false);
 
 #define WALK_DEFER(state) DEFER(walk_begin(state), walk_end(state))
 

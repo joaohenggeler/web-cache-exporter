@@ -28,11 +28,7 @@ bool path_has_file(String* path, const TCHAR* name)
 
 	ARENA_SAVEPOINT()
 	{
-		String_Builder* builder = builder_create(MAX_PATH_COUNT);
-		builder_append_path(&builder, path);
-		builder_append_path(&builder, name);
-
-		String* file_path = builder_terminate(&builder);
+		String* file_path = path_build(CANY(path), CANY(name));
 		result = path_is_file(file_path);
 	}
 
@@ -45,11 +41,7 @@ bool path_has_directory(String* path, const TCHAR* name)
 
 	ARENA_SAVEPOINT()
 	{
-		String_Builder* builder = builder_create(MAX_PATH_COUNT);
-		builder_append_path(&builder, path);
-		builder_append_path(&builder, name);
-
-		String* directory_path = builder_terminate(&builder);
+		String* directory_path = path_build(CANY(path), CANY(name));
 		result = path_is_directory(directory_path);
 	}
 
@@ -216,6 +208,29 @@ String_View path_component(String* path, int index)
 String_View path_component_end(String* path, int index)
 {
 	return path_component(path, index, true);
+}
+
+String* internal_path_build(Any_String first, ...)
+{
+	String_Builder* builder = builder_create(MAX_PATH_COUNT);
+
+	va_list args;
+	va_start(args, first);
+
+	Any_String current = first;
+	while(current.type != STRING_SENTINEL)
+	{
+		if(current.type == STRING_C) builder_append_path(&builder, current.c_str);
+		else if(current.type == STRING_WITH_COUNT) builder_append_path(&builder, current.str);
+		else if(current.type == STRING_VIEW) builder_append_path(&builder, current.view);
+		else ASSERT(false, "Unhandled string type");
+
+		current = va_arg(args, Any_String);
+	}
+
+	va_end(args);
+
+	return builder_terminate(&builder);
 }
 
 bool path_is_relative(String* path)
@@ -740,6 +755,31 @@ Array<Walk_Info>* walk_all(Walk_State* state, bool sort_paths)
 	return result;
 }
 
+int walk_count(Walk_State* state)
+{
+	int result = 0;
+
+	WALK_DEFER(state)
+	{
+		Walk_Info info = {};
+		while(walk_next(state, &info)) result += 1;
+	}
+
+	return result;
+}
+
+const bool RECURSIVE = true;
+
+int walk_file_count(String* path, bool recursive)
+{
+	Walk_State state = {};
+	state.base_path = path;
+	state.query = T("*");
+	state.files = true;
+	state.max_depth = (recursive) ? (-1) : (0);
+	return walk_count(&state);
+}
+
 void path_tests(void)
 {
 	console_info("Running path tests");
@@ -863,6 +903,12 @@ void path_tests(void)
 	}
 
 	{
+		TEST(path_build(CANY(T("C:")), CANY(CSTR("Path")), CANY(CVIEW("file.ext"))), T("C:\\Path\\file.ext"));
+		TEST(path_build(CANY(T("C:\\Path\\file.ext"))), T("C:\\Path\\file.ext"));
+		TEST(path_build(CANY(T(""))), T(""));
+	}
+
+	{
 		String* relative = CSTR("Tests\\Path");
 		String* absolute = path_absolute(relative);
 		TEST_NOT(relative, absolute);
@@ -887,11 +933,11 @@ void path_tests(void)
 		{
 			String_Builder* builder = builder_create(MAX_PATH_COUNT);
 			builder_append_path(&builder, T("C:"));
+			builder_append_path(&builder, T(""));
 
 			for(int i = 0; i < context.max_component_count; i += 1)
 			{
-				if(i == 0) builder_append_path(&builder, T("A"));
-				else builder_append(&builder, T("A"));
+				builder_append(&builder, T("A"));
 			}
 
 			builder_append(&builder, T("BBBBB"));
@@ -953,5 +999,22 @@ void path_tests(void)
 			Array<Walk_Info>* paths = walk_all(&state);
 			TEST(paths->count, 7);
 		}
+	}
+
+	{
+		Walk_State state = {};
+		state.base_path = CSTR("Tests\\Path");
+		state.query = T("*1*");
+		state.files = true;
+		state.directories = true;
+		state.max_depth = 1;
+
+		TEST(walk_count(&state), 4);
+	}
+
+	{
+		String* path = CSTR("Tests\\Path");
+		TEST(walk_file_count(path), 2);
+		TEST(walk_file_count(path, RECURSIVE), 5);
 	}
 }

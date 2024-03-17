@@ -18,10 +18,31 @@ struct String_View
 	const TCHAR* data;
 };
 
+enum String_Type
+{
+	STRING_C,
+	STRING_WITH_COUNT,
+	STRING_VIEW,
+	STRING_SENTINEL,
+};
+
+struct Any_String
+{
+	String_Type type;
+
+	union
+	{
+		const TCHAR* c_str;
+		String* str;
+		String_View view;
+	};
+};
+
 extern String* EMPTY_STRING;
 extern const String_View EMPTY_VIEW;
 extern const char* EMPTY_UTF_8;
 extern const TCHAR* NEW_LINE;
+extern const Any_String ANY_STRING_SENTINEL;
 
 extern const bool IGNORE_CASE;
 
@@ -32,6 +53,12 @@ String* string_from_view(String_View view);
 
 #define CSTR(x) string_from_c(T(x))
 #define CVIEW(x) view_from_c(T(x))
+
+Any_String any_string(const TCHAR* c_str);
+Any_String any_string(String* str);
+Any_String any_string(String_View str);
+
+#define CANY(x) any_string(x)
 
 size_t string_size(const TCHAR* c_str);
 size_t string_size(String* str);
@@ -118,7 +145,7 @@ struct Split_State
 
 	int _index;
 	String_View _char;
-	int _num_tokens;
+	int _token_count;
 	bool _ends_with_delimiter;
 };
 

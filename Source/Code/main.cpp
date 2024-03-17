@@ -3,7 +3,6 @@
 
 /*
 	@TODO:
-	- mozilla: mozilla_v1_cache_export
 	- exporter: -auto-batch
 */
 

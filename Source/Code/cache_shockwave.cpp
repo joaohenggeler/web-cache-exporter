@@ -22,19 +22,13 @@ static Array<String*>* shockwave_paths(Key_Paths key_paths)
 	int base_count = _countof(base_paths);
 	int vendor_count = _countof(vendors);
 
-	String_Builder* builder = builder_create(MAX_PATH_COUNT);
 	Array<String*>* result = array_create<String*>(base_count * vendor_count);
 
 	for(int i = 0; i < base_count; i += 1)
 	{
 		for(int j = 0; j < vendor_count; j += 1)
 		{
-			builder_clear(builder);
-			builder_append_path(&builder, base_paths[i]);
-			builder_append_path(&builder, vendors[j]);
-
-			bool last = (i == base_count - 1) && (j == vendor_count - 1);
-			String* parent_path = (last) ? (builder_terminate(&builder)) : (builder_to_string(builder));
+			String* parent_path = path_build(CANY(base_paths[i]), CANY(vendors[j]));
 
 			Walk_State state = {};
 			state.base_path = parent_path;
@@ -71,7 +65,7 @@ static String* shockwave_director_format(String* path)
 
 	u8 buffer[BUFFER_SIZE] = "";
 	size_t bytes_read = 0;
-	bool success = file_read_at_most(path, buffer, sizeof(buffer), &bytes_read);
+	bool success = file_read_first_at_most(path, buffer, sizeof(buffer), &bytes_read);
 
 	String* result = EMPTY_STRING;
 
@@ -238,18 +232,10 @@ static void shockwave_appdata_cache_export(Exporter* exporter, String* path)
 {
 	ARENA_SAVEPOINT()
 	{
-		String_Builder* builder = builder_create(MAX_PATH_COUNT);
-
-		builder_append_path(&builder, path);
-		builder_append_path(&builder, T("DswMedia"));
-		String* dswmedia_path = builder_to_string(builder);
+		String* dswmedia_path = path_build(CANY(path), CANY(T("DswMedia")));
 		shockwave_dswmedia_xtras_export(exporter, dswmedia_path);
 
-		builder_clear(builder);
-
-		builder_append_path(&builder, path);
-		builder_append_path(&builder, T("Xtras"));
-		String* xtras_path = builder_to_string(builder);
+		String* xtras_path = path_build(CANY(path), CANY(T("Xtras")));
 		shockwave_dswmedia_xtras_export(exporter, xtras_path);
 	}
 }

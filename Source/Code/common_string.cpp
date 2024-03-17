@@ -5,6 +5,7 @@ String* EMPTY_STRING = &_EMPTY_STRING;
 const String_View EMPTY_VIEW = {};
 const char* EMPTY_UTF_8 = "";
 const TCHAR* NEW_LINE = T("\r\n");
+const Any_String ANY_STRING_SENTINEL = {STRING_SENTINEL};
 
 const bool IGNORE_CASE = true;
 
@@ -93,6 +94,30 @@ String* string_from_view(String_View view)
 	str->data[view.code_count] = T('\0');
 
 	return str;
+}
+
+Any_String any_string(const TCHAR* c_str)
+{
+	Any_String any = {};
+	any.type = STRING_C;
+	any.c_str = c_str;
+	return any;
+}
+
+Any_String any_string(String* str)
+{
+	Any_String any = {};
+	any.type = STRING_WITH_COUNT;
+	any.str = str;
+	return any;
+}
+
+Any_String any_string(String_View str)
+{
+	Any_String any = {};
+	any.type = STRING_VIEW;
+	any.view = str;
+	return any;
 }
 
 size_t string_size(const TCHAR* c_str)
@@ -646,7 +671,7 @@ bool string_split(Split_State* state, String_View* token)
 {
 	ASSERT(state->delimiters != NULL, "Missing delimiters");
 	ASSERT(state->max_tokens >= 0, "Invalid max tokens");
-	ASSERT(state->max_tokens == 0 || (0 <= state->_num_tokens && state->_num_tokens <= state->max_tokens), "Invalid number of tokens");
+	ASSERT(state->max_tokens == 0 || (0 <= state->_token_count && state->_token_count <= state->max_tokens), "Invalid number of tokens");
 
 	const TCHAR* str = (state->str != NULL) ? (state->str->data) : (state->view.data);
 	int char_count = (state->str != NULL) ? (state->str->char_count) : (state->view.char_count);
@@ -675,15 +700,15 @@ bool string_split(Split_State* state, String_View* token)
 
 	if(state->max_tokens > 0)
 	{
-		if(state->_num_tokens == state->max_tokens)
+		if(state->_token_count == state->max_tokens)
 		{
 			return false;
 		}
 		// Return the remaining string if we reached
 		// the maximum (even if it contains delimiters).
-		else if(state->_num_tokens == state->max_tokens - 1)
+		else if(state->_token_count == state->max_tokens - 1)
 		{
-			state->_num_tokens += 1;
+			state->_token_count += 1;
 			*token = SLICE(state->_index, char_count);
 			return true;
 		}
@@ -701,7 +726,7 @@ bool string_split(Split_State* state, String_View* token)
 			has_token = true;
 			state->split = true;
 			state->delimiter = state->_char;
-			state->_num_tokens += 1;
+			state->_token_count += 1;
 			*token = SLICE(token_index, state->_index);
 
 			// If we want empty tokens, we have to move the index
@@ -716,7 +741,7 @@ bool string_split(Split_State* state, String_View* token)
 		else if(is_end)
 		{
 			has_token = true;
-			state->_num_tokens += 1;
+			state->_token_count += 1;
 			*token = SLICE(token_index, state->_index + 1);
 		}
 	}
@@ -730,7 +755,7 @@ bool string_split(Split_State* state, String_View* token)
 		{
 			has_token = true;
 			state->_ends_with_delimiter = false;
-			state->_num_tokens += 1;
+			state->_token_count += 1;
 			*token = EMPTY_VIEW;
 		}
 		// If we want empty tokens and the string is empty,
@@ -740,7 +765,7 @@ bool string_split(Split_State* state, String_View* token)
 		{
 			has_token = true;
 			state->_ends_with_delimiter = true;
-			state->_num_tokens += 1;
+			state->_token_count += 1;
 			*token = EMPTY_VIEW;
 		}
 	}
@@ -1045,13 +1070,19 @@ void builder_append(String_Builder** builder_ptr, const TCHAR* c_str)
 	ASSERT(*builder_ptr != NULL, "Builder was terminated");
 
 	String_Builder* builder = *builder_ptr;
-	HRESULT error = S_OK;
 
 	while(true)
 	{
-		error = (builder->data[0] == T('\0')) ?
-				(StringCchCopy(builder->data, builder->capacity, c_str)) :
-				(StringCchCatEx(builder->data, builder->capacity, c_str, NULL, NULL, STRSAFE_NO_TRUNCATION));
+		HRESULT error = S_OK;
+
+		if(builder->data[0] == T('\0'))
+		{
+			error = StringCchCopyEx(builder->data, builder->capacity, c_str, NULL, NULL, STRSAFE_NO_TRUNCATION);
+		}
+		else
+		{
+			error = StringCchCatEx(builder->data, builder->capacity, c_str, NULL, NULL, STRSAFE_NO_TRUNCATION);
+		}
 
 		if(error == STRSAFE_E_INSUFFICIENT_BUFFER)
 		{
@@ -1108,7 +1139,7 @@ void builder_append_format(String_Builder** builder_ptr, const TCHAR* format, ..
 	ASSERT(*builder_ptr != NULL, "Builder was terminated");
 
 	String_Builder* builder = *builder_ptr;
-	HRESULT error = S_OK;
+
 
 	va_list args;
 	va_start(args, format);
@@ -1121,9 +1152,16 @@ void builder_append_format(String_Builder** builder_ptr, const TCHAR* format, ..
 		TCHAR* concat_data = builder->data + code_count;
 		int concat_capacity = builder->capacity - code_count;
 
-		error = (builder->data[0] == T('\0')) ?
-				(StringCchVPrintf(builder->data, builder->capacity, format, args)) :
-				(StringCchVPrintfEx(concat_data, concat_capacity, NULL, NULL, STRSAFE_NO_TRUNCATION, format, args));
+		HRESULT error = S_OK;
+
+		if(builder->data[0] == T('\0'))
+		{
+			error = StringCchVPrintf(builder->data, builder->capacity, format, args);
+		}
+		else
+		{
+			error = StringCchVPrintfEx(concat_data, concat_capacity, NULL, NULL, STRSAFE_NO_TRUNCATION, format, args);
+		}
 
 		if(error == STRSAFE_E_INSUFFICIENT_BUFFER)
 		{

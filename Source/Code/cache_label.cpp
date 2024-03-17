@@ -332,12 +332,10 @@ static bool label_load(Exporter* exporter, String* path)
 
 void label_load_all(Exporter* exporter)
 {
-	String_Builder* builder = builder_create(MAX_PATH_COUNT);
-	builder_append_path(&builder, context.executable_path);
-	builder_append_path(&builder, T("Labels"));
+	String* labels_path = path_build(CANY(context.executable_path), CANY(T("Labels")));
 
 	Walk_State state = {};
-	state.base_path = builder_terminate(&builder);
+	state.base_path = labels_path;
 	state.query = T("*");
 	state.files = true;
 
@@ -407,51 +405,54 @@ bool label_file_match(Exporter* exporter, Match_Params params, Label* result)
 
 	bool success = false;
 
-	u8* buffer = arena_push_buffer(context.current_arena, exporter->max_signature_size, u8);
-	size_t bytes_read = 0;
-
-	if(file_read_at_most(params.path, buffer, exporter->max_signature_size, &bytes_read, params.temporary))
+	if(!path_is_equal(params.path, NO_PATH))
 	{
-		if(bytes_read > 0)
+		u8* buffer = arena_push_buffer(context.current_arena, exporter->max_signature_size, u8);
+		size_t bytes_read = 0;
+
+		if(file_read_first_at_most(params.path, buffer, exporter->max_signature_size, &bytes_read, params.temporary))
 		{
-			for(int i = 0; !success && i < exporter->labels->count; i += 1)
+			if(bytes_read > 0)
 			{
-				Label label = exporter->labels->data[i];
-				if(label.type != LABEL_FILE || label.signatures == NULL) continue;
-
-				for(int j = 0; j < label.signatures->count; j += 1)
+				for(int i = 0; !success && i < exporter->labels->count; i += 1)
 				{
-					Signature signature = label.signatures->data[j];
-					if(signature.bytes->count > (int) bytes_read) continue;
+					Label label = exporter->labels->data[i];
+					if(label.type != LABEL_FILE || label.signatures == NULL) continue;
 
-					bool match = true;
-					int count = MIN(signature.bytes->count, (int) bytes_read);
-
-					for(int k = 0; k < count; k += 1)
+					for(int j = 0; j < label.signatures->count; j += 1)
 					{
-						u8 byte = signature.bytes->data[k];
-						bool wildcard = signature.wildcards->data[k];
+						Signature signature = label.signatures->data[j];
+						if(signature.bytes->count > (int) bytes_read) continue;
 
-						if(!wildcard && byte != buffer[k])
+						bool match = true;
+						int count = MIN(signature.bytes->count, (int) bytes_read);
+
+						for(int k = 0; k < count; k += 1)
 						{
-							match = false;
+							u8 byte = signature.bytes->data[k];
+							bool wildcard = signature.wildcards->data[k];
+
+							if(!wildcard && byte != buffer[k])
+							{
+								match = false;
+								break;
+							}
+						}
+
+						if(match)
+						{
+							success = true;
+							*result = label;
 							break;
 						}
-					}
-
-					if(match)
-					{
-						success = true;
-						*result = label;
-						break;
 					}
 				}
 			}
 		}
-	}
-	else
-	{
-		log_error("Failed to read the signature from '%s'", params.path->data);
+		else
+		{
+			log_error("Failed to read the signature from '%s'", params.path->data);
+		}
 	}
 
 	if(params.mime_type != NULL)
@@ -720,6 +721,12 @@ void label_tests(void)
 
 		params.path = CSTR("Tests\\Label\\match_signature_1");
 		params.mime_type = CSTR("def");
+		TEST(label_file_match(&exporter, params, &label), true);
+		TEST(label.type, LABEL_FILE);
+		TEST(label.minor_name, T("File 1"));
+
+		params.path = NO_PATH;
+		params.mime_type = CSTR("abc");
 		TEST(label_file_match(&exporter, params, &label), true);
 		TEST(label.type, LABEL_FILE);
 		TEST(label.minor_name, T("File 1"));

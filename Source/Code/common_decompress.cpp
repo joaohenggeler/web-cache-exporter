@@ -5,10 +5,10 @@
 
 static const size_t MIN_OUTPUT_SIZE = 500;
 
-static voidpf zlib_alloc(voidpf opaque, uInt num_items, uInt item_size)
+static voidpf zlib_alloc(voidpf opaque, uInt item_count, uInt item_size)
 {
 	Arena* arena = (Arena*) opaque;
-	void* result = arena_push_any(arena, num_items * item_size);
+	void* result = arena_push_any(arena, item_count * item_size);
 	return (result != NULL) ? (result) : (Z_NULL);
 }
 
@@ -37,7 +37,7 @@ static bool zlib_file_decompress(String* path, File_Writer* writer, bool tempora
 
 		const size_t MAGIC_COUNT = 2;
 		u8 magic[MAGIC_COUNT] = {};
-		file_read_first(path, magic, MAGIC_COUNT, temporary);
+		file_read_first_chunk(path, magic, MAGIC_COUNT, temporary);
 
 		// This assumes 0x78 is the first byte of the Zlib format (DEFLATE with a 32K window).
 		bool is_gzip_or_zlib = memory_is_equal(magic, "\x1F\x8B", MAGIC_COUNT)
@@ -242,7 +242,7 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 
 		const size_t MAGIC_COUNT = 3;
 		u8 magic[MAGIC_COUNT] = {};
-		file_read_first(path, magic, MAGIC_COUNT, temporary);
+		file_read_first_chunk(path, magic, MAGIC_COUNT, temporary);
 
 		if(!memory_is_equal(magic, "\x1F\x9D", 2))
 		{
@@ -263,10 +263,10 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 			goto error;
 		}
 
-		#define MAX_ENTRIES(num_bits) (1 << (num_bits))
+		#define MAX_ENTRIES(bit_count) (1 << (bit_count))
 
-		int current_num_bits = MIN_ALLOWED_COMPRESSION_BITS;
-		int current_max_entries = MAX_ENTRIES(current_num_bits);
+		int current_bit_count = MIN_ALLOWED_COMPRESSION_BITS;
+		int current_max_entries = MAX_ENTRIES(current_bit_count);
 
 		const int MIN_ALLOWED_DICTIONARY_ENTRIES = 256;
 		const int MAX_ALLOWED_DICTIONARY_ENTRIES = MAX_ENTRIES(max_compression_bits);
@@ -278,8 +278,8 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 		int current_index = NO_INDEX;
 		int previous_index = NO_INDEX;
 		int bit_offset = 0;
-		int previous_num_bits = current_num_bits;
-		int num_indexes_found_for_num_bits = 0;
+		int previous_bit_count = current_bit_count;
+		int indexes_found_for_bit_count = 0;
 
 		// Skip the file signature and allocate enough space to extract the entry index with BIT_SLICE.
 		reader.offset = MAGIC_COUNT;
@@ -342,8 +342,8 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 				\
 				if(dictionary->count >= current_max_entries) \
 				{ \
-					current_num_bits = MIN(current_num_bits + 1, max_compression_bits); \
-					current_max_entries = MAX_ENTRIES(current_num_bits); \
+					current_bit_count = MIN(current_bit_count + 1, max_compression_bits); \
+					current_max_entries = MAX_ENTRIES(current_bit_count); \
 				} \
 			} while(false)
 
@@ -393,19 +393,19 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 				size_t available_in = reader.size;
 				const u8* next_in = (u8*) reader.data;
 
-				s64 remaining_num_bits = available_in * CHAR_BIT;
-				ASSERT(remaining_num_bits >= current_num_bits, "Not enough data to decompress");
+				s64 remaining_bit_count = available_in * CHAR_BIT;
+				ASSERT(remaining_bit_count >= current_bit_count, "Not enough data to decompress");
 
 				bool is_last_chunk = (available_in < reader.capacity);
 				const u8* after_next_in = (u8*) advance(next_in, available_in);
 
 				while(true)
 				{
-					ASSERT(CHAR_BIT < current_num_bits && current_num_bits <= max_compression_bits, "Current number of bits is out of bounds");
+					ASSERT(CHAR_BIT < current_bit_count && current_bit_count <= max_compression_bits, "Current bit count is out of bounds");
 					ASSERT(0 <= bit_offset && bit_offset < CHAR_BIT, "Bit offset is out of bounds");
 
 					// Check if we need more input or if we reached the end.
-					if(!is_last_chunk && (remaining_num_bits < sizeof(u32) * CHAR_BIT))
+					if(!is_last_chunk && (remaining_bit_count < sizeof(u32) * CHAR_BIT))
 					{
 						// Continue reading the input if we don't have enough information
 						// to extract the next index. We need to make sure that the input
@@ -414,30 +414,30 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 						reader.offset -= ptr_diff(after_next_in, next_in);
 						break;
 					}
-					else if(is_last_chunk && remaining_num_bits < current_num_bits)
+					else if(is_last_chunk && remaining_bit_count < current_bit_count)
 					{
 						// Terminate the decoder.
 						break;
 					}
 
 					// Skip the extra alignment bits introduced by the ncompress tool as mentioned above.
-					if(previous_num_bits != current_num_bits)
+					if(previous_bit_count != current_bit_count)
 					{
 						// All the indexes of a given bit size N are aligned to N * CHAR_BIT.
-						int num_padding_bits = ROUND_UP_OFFSET(num_indexes_found_for_num_bits * previous_num_bits, CHAR_BIT * previous_num_bits);
-						next_in += (bit_offset + num_padding_bits) / CHAR_BIT;
-						bit_offset = (bit_offset + num_padding_bits) % CHAR_BIT;
-						remaining_num_bits -= num_padding_bits;
-						num_indexes_found_for_num_bits = 0;
+						int padding_bits = ROUND_UP_OFFSET(indexes_found_for_bit_count * previous_bit_count, CHAR_BIT * previous_bit_count);
+						next_in += (bit_offset + padding_bits) / CHAR_BIT;
+						bit_offset = (bit_offset + padding_bits) % CHAR_BIT;
+						remaining_bit_count -= padding_bits;
+						indexes_found_for_bit_count = 0;
 
 						// Due to the alignment, this should start at a byte boundary.
 						ASSERT(bit_offset == 0, "Misaligned bit offset");
 
-						previous_num_bits = current_num_bits;
+						previous_bit_count = current_bit_count;
 						continue;
 					}
 
-					previous_num_bits = current_num_bits;
+					previous_bit_count = current_bit_count;
 
 					// See: https://stackoverflow.com/a/4415180
 					#define BIT_SLICE(num, lsb_idx, msb_idx) ( ((num) >> (lsb_idx)) & ~(~0 << ((msb_idx) - (lsb_idx) + 1)) )
@@ -447,15 +447,15 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 					// the index is located between bits 8 and 23.
 					u32 next_bits = 0;
 					CopyMemory(&next_bits, next_in, sizeof(next_bits));
-					current_index = BIT_SLICE(next_bits, bit_offset, bit_offset + current_num_bits - 1);
+					current_index = BIT_SLICE(next_bits, bit_offset, bit_offset + current_bit_count - 1);
 
 					#undef BIT_SLICE
 
 					// Locate the index for the next iteration.
-					next_in += (bit_offset + current_num_bits) / CHAR_BIT;
-					bit_offset = (bit_offset + current_num_bits) % CHAR_BIT;
-					remaining_num_bits -= current_num_bits;
-					num_indexes_found_for_num_bits += 1;
+					next_in += (bit_offset + current_bit_count) / CHAR_BIT;
+					bit_offset = (bit_offset + current_bit_count) % CHAR_BIT;
+					remaining_bit_count -= current_bit_count;
+					indexes_found_for_bit_count += 1;
 
 					// One index over the limit is allowed by the LZW decoding algorithm.
 					if(current_index < 0 || current_index > dictionary->count)
@@ -482,8 +482,8 @@ static bool compress_file_decompress(String* path, File_Writer* writer, bool tem
 					if(block_mode && current_index == CLEAR_INDEX)
 					{
 						array_truncate(dictionary, INITIAL_DICTIONARY_ENTRIES);
-						current_num_bits = MIN_ALLOWED_COMPRESSION_BITS;
-						current_max_entries = MAX_ENTRIES(current_num_bits);
+						current_bit_count = MIN_ALLOWED_COMPRESSION_BITS;
+						current_max_entries = MAX_ENTRIES(current_bit_count);
 						current_index = NO_INDEX;
 						previous_index = NO_INDEX;
 						continue;

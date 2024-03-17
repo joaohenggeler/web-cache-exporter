@@ -31,6 +31,7 @@ static const TCHAR* CSV_COLUMNS[] =
 	T("Version"),
 
 	T("Found"),
+	T("Indexed"),
 	T("Input Path"),
 	T("Input Size"),
 
@@ -60,7 +61,7 @@ static const TCHAR* CSV_COLUMNS[] =
 	T("Xtra Copyright"),
 };
 
-_STATIC_ASSERT(_countof(CSV_COLUMNS) == NUM_CSV_COLUMNS);
+_STATIC_ASSERT(_countof(CSV_COLUMNS) == MAX_CSV_COLUMNS);
 
 bool csv_begin(Csv* csv, String* path, Array_View<Csv_Column> columns)
 {
